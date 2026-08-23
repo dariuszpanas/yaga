@@ -34,6 +34,8 @@ fixes use `fix/<topic>`.
 - Treat 100 comments, reviews, or reactions as incomplete and require a new PR. Require a new commit
   before 100 total visible statuses across all contexts or the per-SHA/context status ceiling.
 - Reserve `Codex Review` and `CI Gate` for classic statuses; workflow/job/check names must differ.
+  Audit every `statuses: write` and `pull-requests: write` path because the beta uses the shared
+  Actions identity for both statuses and PR conversation comments.
 - Preserve both authenticated `CI` and `YAGA Review Policy` completion wakes, deterministic
   later-completion election before writes (CI wins timestamp ties), the two-minute CI-first prepare
   wait, and exact workflow-path/event entry guards. Lifecycle completions on the `main` base branch

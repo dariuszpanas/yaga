@@ -250,29 +250,31 @@ def test_example_jobs_have_exact_least_privilege_permissions() -> None:
             "statuses",
         }
         assert "issues: read" in job
+
     for job in (owner, external):
         assert section_keys(job, "permissions", indent=4) == {
             "actions",
             "contents",
-            "issues",
             "pull-requests",
             "statuses",
         }
-        assert "issues: write" in job
+        assert "pull-requests: write" in job
     assert section_keys(authorization, "permissions", indent=4) == {
         "actions",
         "contents",
-        "issues",
         "pull-requests",
         "statuses",
     }
-    assert "issues: write" in authorization
+    assert "pull-requests: write" in authorization
     assert "statuses: read" in authorization
 
     for workflow in (lifecycle, publisher):
         assert "checks:" not in workflow
         assert "contents: write" not in workflow
-        assert "pull-requests: write" not in workflow
+        assert "issues: write" not in workflow
+    assert "pull-requests: write" not in lifecycle
+    for job in (prepare, observe, finalize):
+        assert "pull-requests: write" not in job
 
 
 def test_example_jobs_execute_only_pinned_closed_operations() -> None:
