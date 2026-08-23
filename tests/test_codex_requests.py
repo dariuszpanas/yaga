@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from yaga.codex.constants import MAX_PRIOR_REQUESTS
 from yaga.codex.requests import (
     AuthorizationComments,
     RequestComment,
@@ -247,6 +248,44 @@ def test_every_nonmatching_binding_is_stale(stale_identity: dict[str, object]) -
         ).request
         is None
     )
+
+
+def test_prior_request_history_is_exposed_for_the_same_pull_request() -> None:
+    prior = _key(head_sha="c" * 40, boundary_run_id=BOUNDARY_RUN_ID - 1)
+    state = find_authorization(
+        FakeRequestApi([_comment(comment_id=71, key=prior), _comment(comment_id=72)]),
+        key=_key(),
+    )
+
+    assert state.request == _parsed_comment(72, _key())
+    assert state.prior_requests == (_parsed_comment(71, prior),)
+
+
+def test_prior_request_history_is_bounded_and_unique_per_boundary() -> None:
+    duplicate = _key(head_sha="c" * 40, boundary_run_id=BOUNDARY_RUN_ID - 1)
+    with pytest.raises(GateError, match="multiple exact prior"):
+        find_authorization(
+            FakeRequestApi(
+                [
+                    _comment(comment_id=81, key=duplicate),
+                    _comment(comment_id=82, key=duplicate),
+                ]
+            ),
+            key=_key(),
+        )
+
+    comments = [
+        _comment(
+            comment_id=90 + index,
+            key=_key(
+                head_sha=f"{index + 1:040x}",
+                boundary_run_id=BOUNDARY_RUN_ID + index + 1,
+            ),
+        )
+        for index in range(MAX_PRIOR_REQUESTS + 1)
+    ]
+    with pytest.raises(GateError, match="bounded limit"):
+        find_authorization(FakeRequestApi(comments), key=_key())
 
 
 def test_duplicate_exact_requests_are_ambiguous() -> None:

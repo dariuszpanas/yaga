@@ -270,6 +270,7 @@ class FakeApi:
         reviews: list[dict[str, object]] | None = None,
         reactions: list[dict[str, object]] | None = None,
         statuses: list[dict[str, object]] | None = None,
+        statuses_by_head: dict[str, list[dict[str, object]]] | None = None,
         runs: list[dict[str, object]] | None = None,
         current_run: dict[str, object] | None = None,
         default_branch: str = BASE_REF,
@@ -281,6 +282,7 @@ class FakeApi:
         self.reviews = copy.deepcopy(reviews or [])
         self.reactions = copy.deepcopy(reactions or [])
         self.statuses = copy.deepcopy(statuses or [])
+        self.statuses_by_head = copy.deepcopy(statuses_by_head or {})
         self.current_run = copy.deepcopy(current_run or _run())
         self.runs = copy.deepcopy(runs or [self.current_run])
         self.default_branch = default_branch
@@ -329,15 +331,17 @@ class FakeApi:
             f"?per_page={constants.MAX_HEAD_ASSOCIATIONS}&page=1"
         ):
             return copy.deepcopy(self.associations)
-        statuses_prefix = (
-            f"/repos/{REPOSITORY}/commits/{HEAD}/statuses"
-            f"?per_page={constants.MAX_STATUS_PAGE_RECORDS}&page="
-        )
-        if path.startswith(statuses_prefix):
-            page = int(path.removeprefix(statuses_prefix))
-            start = (page - 1) * constants.MAX_STATUS_PAGE_RECORDS
-            ordered = list(reversed(self.statuses))
-            return copy.deepcopy(ordered[start : start + constants.MAX_STATUS_PAGE_RECORDS])
+        status_histories = {HEAD: self.statuses, **self.statuses_by_head}
+        for status_head, status_history in status_histories.items():
+            statuses_prefix = (
+                f"/repos/{REPOSITORY}/commits/{status_head}/statuses"
+                f"?per_page={constants.MAX_STATUS_PAGE_RECORDS}&page="
+            )
+            if path.startswith(statuses_prefix):
+                page = int(path.removeprefix(statuses_prefix))
+                start = (page - 1) * constants.MAX_STATUS_PAGE_RECORDS
+                ordered = list(reversed(status_history))
+                return copy.deepcopy(ordered[start : start + constants.MAX_STATUS_PAGE_RECORDS])
         commit_prefix = f"/repos/{REPOSITORY}/commits/"
         if path.startswith(commit_prefix) and "/" not in path.removeprefix(commit_prefix):
             prefix = path.removeprefix(commit_prefix)
