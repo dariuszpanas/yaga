@@ -1,8 +1,8 @@
 # Contributing
 
-YAGA (Yet Another Gate Action) is security-sensitive workflow infrastructure. Changes should be
-small, test-backed, and explicit about the event and permission boundary they affect. Its first gate
-is `codex-review`; generic infrastructure must not assume that it is the only possible gate.
+YAGA is security-sensitive workflow infrastructure. Keep changes small, test-backed, and explicit
+about the event, evidence, authorization, status, and permission boundary they affect. The first
+gate is `codex-review`; generic infrastructure must remain usable by later adapters.
 
 ## Development
 
@@ -13,56 +13,105 @@ uv sync --group dev
 uv run make ci
 ```
 
-The full gate requires Docker for the immutable actionlint container. Use `uv run ruff format .` to
-apply formatting. The action runtime uses only the Python standard library; build, test, type, and
-lint tools are development dependencies.
+The full gate uses Docker for the pinned actionlint container. Runtime code uses only the Python
+standard library; lint, type, test, and build tools are development dependencies.
 
 ## Action contract
 
-The `gate` input selects a gate implementation. Only `codex-review` is accepted today; add a new gate
-as a separate package with its own evidence grammar and tests instead of adding speculative generic
-configuration.
+The public inputs are exactly `gate`, `operation`, `github-token`, `prerequisite-workflow`,
+`lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`, and `job-timeout-minutes`.
+`operation` is closed to `invalidate`, `prepare`, `authorize`, `observe`, `request`, and `finalize`.
+Only `prepare` emits the closed `route` capability and `pull_request_number` used by the template;
+its routes are `skip`, `done`, `observe`, `owner`, `external`, and `approved`. Candidate identity
+never crosses a job output.
 
-The Codex gate has six internal orchestration modes:
+YAGA is pre-release; remove obsolete interfaces rather than adding compatibility shims. Provider
+identity, status names, polling cadence, and marker grammar are fixed policy rather than caller
+inputs. Add a future gate as a separate package with its own closed evidence grammar.
 
-| Mode | Responsibility |
-| --- | --- |
-| `invalidate-boundary` | Persist a pending boundary before any potentially stale success can be trusted. |
-| `repair-boundaries` | Reassert every detected missed boundary as pending, then emit bounded scheduled terminal work. |
-| `reconcile-boundary` | Validate a lifecycle boundary and reconcile its exact candidate. |
-| `resolve` | Read trusted wake-up evidence and emit a bounded candidate matrix without writing status. |
-| `reconcile-candidate` | Re-read and reconcile one head-serialized candidate from that matrix. |
-| `reconcile-repair-candidate` | Reconcile scheduled terminal work under the smaller fixed request budget. |
+## Consumer trust split
 
-`resolve` and `repair-boundaries` emit `eligible` and `candidates`. Boundary processing may emit
-`candidate`; modes that do not use an output leave it empty. Candidate JSON is a capability-like
-value, not proof by itself: scheduled repair must persist every observed unsafe boundary before
-terminal selection, then a terminal writer must revalidate the live pull request, unique head
-ownership, trusted boundary, and current status before publishing or restoring success.
+- The `pull_request_target` invalidator's native `Review Policy Boundary` check must be required.
+  It verifies exact live state and status capacity, then writes pending for `Codex Review` and
+  `CI Gate`. It excludes `closed`, executes no PR code, and posts no comment. Ordinary title/body
+  edits instead use the non-required native name `Review Policy Metadata`.
+- PR-controlled CI remains unprivileged and ends at `CI Prerequisites`. Its exact bounded run-name
+  is `YAGA CI <action> for #<pull-request> at base <full-base-SHA>`, and its pull-request triggers
+  are `opened`, `synchronize`, `reopened`, and `ready_for_review`. This PR-controlled result is an
+  untrusted quota-saving prerequisite/heuristic, not a security authority.
+- The `workflow_run` publisher accepts authenticated completions from both `CI` and
+  `YAGA Review Policy`, then resolves the exact current CI/lifecycle pair. It uses no upstream
+  artifact or cache. A CI-first `prepare` waits at most two minutes for lifecycle publication, and
+  a later lifecycle completion is a second reconcile wake. The later completion is elected before
+  any write, with CI winning an exact timestamp tie. Failed CI never requests Codex.
+- `prepare` may observe evidence but cannot comment. `request-owner` is direct.
+  `authorize-external` uses the literal protected environment and records a non-triggering approval
+  marker. The separately serialized `request-external` worker consumes that capability and never
+  cancels an in-flight request. `observe` never comments. `finalize` independently revalidates
+  source CI, live identity, authorization, Codex evidence, and status lineage.
+- Every job invokes the pinned action as its sole step with the narrow permissions in `examples/`.
 
-The three terminal reconcile modes require a declared `job-timeout-minutes` success window of at
-least 15 minutes. In the shipped workflows YAGA is the first and only job step, and that input equals
-the job's `timeout-minutes`. A custom workflow with preceding steps must leave their complete budget
-outside the declared YAGA window; the action cannot observe time consumed before its process starts.
+Consumers provide the immutable owner ID through required repository variable
+`YAGA_CODEX_OWNER_ID`. Precreate `codex-review-approval` with that owner as the sole required
+reviewer, prevent self-review, disable administrator bypass, store no secrets, and add environment
+variable `YAGA_CODEX_APPROVAL_MARKER=codex-review-approval:v1`. Required-reviewer protection is
+plan-limited: verify the public-repository supported plan or private/internal Enterprise scope and
+canary the wait before enabling it. Keep Codex automatic reviews enabled through the initial canary;
+disable them only after the YAGA request path succeeds, then repeat the owner and external canaries.
+The environment controls only YAGA: a direct human/app `@codex review` comment can still consume
+provider quota, although it cannot authorize an external-author result in YAGA.
 
-The token is accepted only through the `github-token` input and passed to Python via the environment.
-Callers must grant the minimum permissions for the selected mode. Unprivileged observer workflows
-must not receive write permissions or secrets.
+The publisher filters source branch `main` to avoid post-merge wakes. PR CI and lifecycle runs use
+the PR head branch; a fork head named `main` therefore fails closed and must be renamed. There are
+no schedule, issue-comment, review, merge-queue, or close triggers. A metadata-only edit has a
+unique concurrency group and cannot cancel an active boundary. Consumers with another default
+branch must replace both the lifecycle `branches: [main]` and publisher `branches-ignore: [main]`
+filters. Keep the `CI` and `YAGA Review Policy` display names in the publisher trigger synchronized
+with their authenticated paths.
 
 ## Design rules
 
-- A commit status is authoritative only for the exact pull request, head SHA, base SHA, and trusted
-  lifecycle boundary encoded by its publisher.
-- A newer boundary invalidates earlier success before serialized reconciliation begins.
-- Only exact connector identities and closed, tested outcome grammars can satisfy the gate.
-- A displayed reaction without a commit binding cannot prove review of a synchronized head.
-- Publisher reruns and scheduled repair are bounded and idempotent; operational uncertainty remains
-  pending instead of being reported as a review failure.
-- Workflows must stop cleanly for closed pull requests and must not request a post-merge review.
+- Treat event payloads, API responses, comments, reviews, reactions, statuses, and workflow runs as
+  untrusted until every required field is parsed and bounded.
+- Rely on the required native lifecycle check while validating live state and capacity before
+  lifecycle pending writes. Before comments and terminal statuses, revalidate exact current CI,
+  default branch, open/ready PR, head/base, unique ownership, lifecycle provenance, authorization,
+  exact evidence capability, and latest status lease.
+- Accept only exact connector identities and closed outcome grammars. Eyes is progress only. An
+  automatic reaction-only result is accepted only on an initial non-draft `opened` boundary. A
+  later reaction, including `ready_for_review`, requires the exact YAGA request and a strictly later
+  timestamp.
+- External authors require a YAGA marker created after environment approval even if an unsolicited
+  Codex result already exists. Existing evidence receives a non-triggering approval marker; only a
+  missing review receives `@codex review`. CI reruns reuse one lifecycle-bound request.
+- Ordinary metadata edits are no-ops; base edits and drafts revoke inherited success. Closure and a
+  post-merge `main` push start no publisher. An already-running job can still race its final live
+  read with a comment or status POST, so a marked request/status can land after close and the
+  request can consume quota. Treat this as a bounded residual, not a zero-post-close guarantee.
+- Fail closed on malformed, incomplete, ambiguous, stale, displaced, or over-budget state. Shared
+  heads require distinct commits. A comments, reviews, or reactions page with 100 records requires a
+  new PR; reaching the status-history ceiling requires a new commit.
+- Bound request counts, pagination, bodies, event files, descriptions, polling, and all
+  attacker-controlled strings. Never log the token or place it in arguments/outputs.
+- Reserve `Codex Review` and `CI Gate` for classic statuses. Audit all `statuses: write` and
+  `issues: write` workflows because the beta uses the shared Actions identity.
 
-## Pull requests
+Strict up-to-date `Review Policy Boundary`, `CI Prerequisites`, `Codex Review`, and `CI Gate`
+requirements plus required conversation resolution are consumer prerequisites. Merge queues are
+unsupported. Merge security also relies on `Maintainer Approval` and audited status/comment writers;
+the protected environment and owner ID secure quota authorization. This beta assumes GitHub
+delivers every configured lifecycle event, because there is no scheduled repair for a missed
+same-head transition.
 
-Use Conventional Commit subjects such as `feat(action): add candidate reconciliation`. Describe the
-security boundary, behavior, failure mode, validation performed, and any migration requirement in
-the retained commit and pull request. Fold review fixes and CI repairs into the logical commit they
-correct.
+## Testing and pull requests
+
+Keep generic transport/models/status primitives in `src/yaga/` and provider policy in
+`src/yaga/codex/`. Add focused tests for success, failed CI, direct/protected routing, unsolicited
+external outcomes, exact request idempotency, malformed/incomplete APIs, deadline reserves,
+draft/ready/base/close races, same-head ambiguity, run supersession, status lineage, and
+case-insensitive collisions. Repository-contract tests pin public inputs, outputs, permissions,
+triggers, fixed environment names, action SHA, and absence of legacy writers.
+
+Run `uv run make ci` before every push. Use Conventional Commit subjects. Preserve behavior,
+motivation, security boundary, failure mode, migration impact, and validation in the retained commit
+and PR. Fold review fixes and CI repairs into the logical commit they correct.

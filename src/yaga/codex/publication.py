@@ -1,48 +1,60 @@
-"""Perform fail-closed Codex commit-status publication and race repair."""
+"""Publish attempt-owned Codex statuses and validate exact live ownership."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from dataclasses import dataclass
 
-from yaga.codex.candidates import (
-    candidate_from_pull_request,
-    open_recovery_candidate,
-    same_candidate,
-)
 from yaga.codex.constants import (
+    CODEX_STATUS_CONTEXT,
     GITHUB_ACTIONS_LOGIN,
     GITHUB_ACTIONS_USER_ID,
-    MAX_OPEN_PULL_REQUESTS,
-    STATUS_CONTEXT,
-    SUCCESS_CLEANUP_MARGIN_SECONDS,
-    SUCCESS_WRITE_REQUEST_RESERVE,
-)
-from yaga.codex.models import Candidate
-from yaga.codex.provenance import (
-    ReviewBoundary,
-    latest_lifecycle_history,
-    newer_boundary,
-    newer_ineligible_transition,
-)
-from yaga.codex.statuses import (
-    UNCERTAIN_PENDING_DESCRIPTION,
-    boundary_description,
-    claimed_actions_boundary,
-    latest_status_context_page,
-    status_description,
-    trusted_actions_status,
-    uncertain_pending_status,
-    workflow_run_url,
+    MAX_HEAD_ASSOCIATIONS,
+    MAX_STATUS_DESCRIPTION_CHARS,
+    MAX_STATUS_PAGE_RECORDS,
+    MAX_STATUSES_PER_CONTEXT,
+    PENDING_DESCRIPTION,
 )
 from yaga.errors import GateError
-from yaga.github import (
-    RestApi,
-    load_default_branch,
-    load_pull_request,
-    parse_pull_request,
-    require_success_tail,
-)
-from yaga.models import PullRequest, positive_int, record
+from yaga.github import RestApi, load_pull_request
+from yaga.models import PullRequest, commit_sha, positive_int, record, repository_name
+from yaga.status import CommitStatus, parse_commit_status
+
+
+@dataclass(frozen=True)
+class StatusLease:
+    """Pending status uniquely owned by one workflow run attempt."""
+
+    status_id: int
+    head_sha: str
+    target_url: str
+    context: str = CODEX_STATUS_CONTEXT
+    description: str = PENDING_DESCRIPTION
+
+
+@dataclass(frozen=True)
+class _GateStatusHistory:
+    """Bounded case-insensitive gate-context history in GitHub's newest-first order."""
+
+    statuses: tuple[CommitStatus, ...]
+    visible_count: int
+
+
+def _status_description(value: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > MAX_STATUS_DESCRIPTION_CHARS
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        raise GateError("Codex review status description is invalid")
+    return value
+
+
+def _actions_status(value: object, *, label: str) -> CommitStatus:
+    status = parse_commit_status(value, label=label)
+    if status.creator_id != GITHUB_ACTIONS_USER_ID or status.creator_login != GITHUB_ACTIONS_LOGIN:
+        raise GateError(f"{label} has an unexpected creator")
+    return status
 
 
 def _publish_status(
@@ -51,608 +63,508 @@ def _publish_status(
     repository: str,
     head_sha: str,
     state: str,
-    description: str | None,
-    target_url: str | None,
-) -> int:
-    request_payload: dict[str, object] = {"state": state, "context": STATUS_CONTEXT}
-    if description is not None:
-        request_payload["description"] = status_description(description)
-    if target_url is not None:
-        request_payload["target_url"] = target_url
-    payload = record(
-        api.post(f"/repos/{repository}/statuses/{head_sha}", request_payload),
-        "Codex review status",
+    description: str,
+    target_url: str,
+    context: str = CODEX_STATUS_CONTEXT,
+) -> CommitStatus:
+    repository = repository_name(repository)
+    head_sha = commit_sha(head_sha, "Codex review status head")
+    description = _status_description(description)
+    if state not in {"error", "pending", "success"}:
+        raise GateError("Codex review publication state is invalid")
+    payload: dict[str, object] = {
+        "context": context,
+        "description": description,
+        "state": state,
+        "target_url": target_url,
+    }
+    status = _actions_status(
+        api.post(f"/repos/{repository}/statuses/{head_sha}", payload),
+        label="published Codex review status",
     )
-    status_id = positive_int(payload.get("id"), "Codex review status ID")
     if (
-        payload.get("state") != state
-        or payload.get("context") != STATUS_CONTEXT
-        or payload.get("description") != description
-        or payload.get("target_url") != target_url
+        status.state != state
+        or status.context != context
+        or status.description != description
+        or status.target_url != target_url
     ):
         raise GateError("GitHub returned a different Codex review status")
-    creator = record(payload.get("creator"), "Codex review status creator")
-    if creator.get("id") != GITHUB_ACTIONS_USER_ID or creator.get("login") != GITHUB_ACTIONS_LOGIN:
-        raise GateError("GitHub returned a Codex review status from an unexpected actor")
-    return status_id
+    return status
 
 
-def publish_pending_boundary(
-    api: RestApi,
-    *,
-    repository: str,
-    head_sha: str,
-    boundary: ReviewBoundary,
-    target_url: str | None,
-) -> int:
-    """Publish one already-validated boundary as pending."""
-    return _publish_status(
-        api,
-        repository=repository,
-        head_sha=head_sha,
-        state="pending",
-        description=boundary_description(boundary, state="pending"),
-        target_url=target_url,
-    )
-
-
-def publish_uncertain_pending(
+def publish_pending(
     api: RestApi,
     *,
     repository: str,
     head_sha: str,
     target_url: str,
-) -> int:
-    """Fail closed when scheduled repair cannot recover a lifecycle source."""
-    return _publish_status(
+    description: str = PENDING_DESCRIPTION,
+    context: str = CODEX_STATUS_CONTEXT,
+) -> StatusLease:
+    """Create the attempt-specific pending lease before evidence reads."""
+    status = _publish_status(
         api,
         repository=repository,
         head_sha=head_sha,
         state="pending",
-        description=UNCERTAIN_PENDING_DESCRIPTION,
+        description=description,
         target_url=target_url,
+        context=context,
     )
+    return StatusLease(status.status_id, head_sha, target_url, context, description)
 
 
-def ensure_uncertain_pending(
+def repair_pending_best_effort(
     api: RestApi,
     *,
     repository: str,
-    server_url: str,
-    candidate: Candidate,
-    reconciliation_run_id: int,
-) -> PullRequest | None:
-    """Persist a fail-closed pending status when no boundary can be proven."""
-    pull_request = open_recovery_candidate(api, repository=repository, candidate=candidate)
-    if pull_request is None or pull_request.base_ref != load_default_branch(api, repository):
-        return None
-    probe_error: GateError | None = None
+    lease: StatusLease,
+    target_url: str | None = None,
+    description: str | None = None,
+) -> bool:
+    """Attempt pending without a probe; report only an exactly echoed repair."""
     try:
-        latest = latest_status_context_page(
+        publish_pending(
             api,
             repository=repository,
-            head_sha=candidate.head_sha,
-        )
-    except GateError as error:
-        latest = None
-        probe_error = error
-    if uncertain_pending_status(
-        latest,
-        server_url=server_url,
-        repository=repository,
-    ):
-        return pull_request
-    confirmed = open_recovery_candidate(api, repository=repository, candidate=candidate)
-    if confirmed is None or confirmed.base_ref != load_default_branch(api, repository):
-        return None
-    publish_uncertain_pending(
-        api,
-        repository=repository,
-        head_sha=candidate.head_sha,
-        target_url=workflow_run_url(server_url, repository, reconciliation_run_id),
-    )
-    if probe_error is not None:
-        raise probe_error
-    return confirmed
-
-
-def _exact_live_default_candidate(
-    api: RestApi,
-    *,
-    repository: str,
-    candidate: Candidate,
-) -> PullRequest | None:
-    """Resolve one exact open candidate, including drafts, on the live default."""
-    pull_request = load_pull_request(api, repository, candidate.pull_request_number)
-    if pull_request.state != "open" or candidate_from_pull_request(pull_request) != candidate:
-        return None
-    if pull_request.base_ref != load_default_branch(api, repository):
-        return None
-    return pull_request
-
-
-def ensure_live_boundary_pending(
-    api: RestApi,
-    *,
-    repository: str,
-    server_url: str,
-    candidate: Candidate,
-    boundary: ReviewBoundary,
-) -> PullRequest | None:
-    """Persist a source pending for an exact live candidate, including drafts."""
-    pull_request = _exact_live_default_candidate(
-        api,
-        repository=repository,
-        candidate=candidate,
-    )
-    if pull_request is None:
-        return None
-    boundary_cache: dict[int, ReviewBoundary | None] = {boundary.workflow_run_id: boundary}
-    probe_error: GateError | None = None
-    try:
-        latest = latest_status_context_page(
-            api,
-            repository=repository,
-            head_sha=candidate.head_sha,
-        )
-    except GateError as error:
-        latest = None
-        probe_error = error
-    if latest is not None:
-        trusted = trusted_actions_status(
-            api,
-            latest,
-            server_url=server_url,
-            repository=repository,
-            head_sha=candidate.head_sha,
-            boundary_cache=boundary_cache,
-        )
-        if trusted == boundary and latest.state == "pending":
-            return pull_request
-    confirmed = _exact_live_default_candidate(
-        api,
-        repository=repository,
-        candidate=candidate,
-    )
-    if confirmed is None:
-        return None
-    publish_pending_boundary(
-        api,
-        repository=repository,
-        head_sha=candidate.head_sha,
-        boundary=boundary,
-        target_url=workflow_run_url(server_url, repository, boundary.workflow_run_id),
-    )
-    if probe_error is not None:
-        raise probe_error
-    return confirmed
-
-
-def ensure_live_uncertain_pending(
-    api: RestApi,
-    *,
-    repository: str,
-    server_url: str,
-    candidate: Candidate,
-    reconciliation_run_id: int,
-) -> PullRequest | None:
-    """Persist generic pending on an exact live head, including a draft."""
-    pull_request = _exact_live_default_candidate(
-        api,
-        repository=repository,
-        candidate=candidate,
-    )
-    if pull_request is None:
-        return None
-    probe_error: GateError | None = None
-    try:
-        latest = latest_status_context_page(
-            api,
-            repository=repository,
-            head_sha=candidate.head_sha,
-        )
-    except GateError as error:
-        latest = None
-        probe_error = error
-    if uncertain_pending_status(
-        latest,
-        server_url=server_url,
-        repository=repository,
-    ):
-        return pull_request
-    confirmed = _exact_live_default_candidate(
-        api,
-        repository=repository,
-        candidate=candidate,
-    )
-    if confirmed is None:
-        return None
-    publish_uncertain_pending(
-        api,
-        repository=repository,
-        head_sha=candidate.head_sha,
-        target_url=workflow_run_url(server_url, repository, reconciliation_run_id),
-    )
-    if probe_error is not None:
-        raise probe_error
-    return confirmed
-
-
-def ensure_pending_boundary(
-    api: RestApi,
-    *,
-    repository: str,
-    server_url: str,
-    candidate: Candidate,
-    boundary: ReviewBoundary,
-    boundary_cache: dict[int, ReviewBoundary | None],
-) -> PullRequest | None:
-    """Persist a trusted boundary as the physical pending status before ownership."""
-    if boundary.head_sha != candidate.head_sha:
-        raise GateError("recovery boundary identifies a different candidate head")
-    pull_request = open_recovery_candidate(api, repository=repository, candidate=candidate)
-    if pull_request is None:
-        return None
-    if pull_request.base_ref != load_default_branch(api, repository):
-        return None
-
-    boundary_cache[boundary.workflow_run_id] = boundary
-    probe_error: GateError | None = None
-    try:
-        latest = latest_status_context_page(
-            api,
-            repository=repository,
-            head_sha=candidate.head_sha,
-        )
-    except GateError as error:
-        latest = None
-        probe_error = error
-    if latest is not None:
-        trusted = trusted_actions_status(
-            api,
-            latest,
-            server_url=server_url,
-            repository=repository,
-            head_sha=candidate.head_sha,
-            boundary_cache=boundary_cache,
-        )
-        if trusted == boundary and latest.state == "pending":
-            return pull_request
-
-    confirmed = open_recovery_candidate(api, repository=repository, candidate=candidate)
-    if confirmed is None or confirmed.base_ref != load_default_branch(api, repository):
-        return None
-    _publish_status(
-        api,
-        repository=repository,
-        head_sha=candidate.head_sha,
-        state="pending",
-        description=boundary_description(boundary, state="pending"),
-        target_url=workflow_run_url(
-            server_url,
-            repository,
-            boundary.workflow_run_id,
-        ),
-    )
-    if probe_error is not None:
-        raise probe_error
-    return confirmed
-
-
-def hold_pending_for_lifecycle_history(
-    api: RestApi,
-    *,
-    repository: str,
-    server_url: str,
-    pull_request: PullRequest,
-    boundary: ReviewBoundary,
-    boundary_cache: dict[int, ReviewBoundary | None],
-) -> str | None:
-    """Recover a newer or incomplete lifecycle window before trusting success."""
-    candidate = candidate_from_pull_request(pull_request)
-    try:
-        history = latest_lifecycle_history(
-            api,
-            repository=repository,
-            head_sha=pull_request.head_sha,
-            not_before=pull_request.created_at,
-            pull_request_number=pull_request.number,
+            head_sha=lease.head_sha,
+            target_url=target_url or lease.target_url,
+            context=lease.context,
+            description=description or lease.description,
         )
     except GateError:
-        ensure_pending_boundary(
-            api,
-            repository=repository,
-            server_url=server_url,
-            candidate=candidate,
-            boundary=boundary,
-            boundary_cache=boundary_cache,
-        )
-        raise
-    if history.complete and boundary.workflow_run_id not in history.observed_run_ids:
-        ensure_pending_boundary(
-            api,
-            repository=repository,
-            server_url=server_url,
-            candidate=candidate,
-            boundary=boundary,
-            boundary_cache=boundary_cache,
-        )
-        raise GateError("Codex review lifecycle history omitted the status boundary")
-    if newer_ineligible_transition(history, boundary) is not None:
-        confirmed = ensure_pending_boundary(
-            api,
-            repository=repository,
-            server_url=server_url,
-            candidate=candidate,
-            boundary=boundary,
-            boundary_cache=boundary_cache,
-        )
-        return (
-            "pending: a newer close or draft transition has no review boundary"
-            if confirmed is not None
-            else "pending: pull request changed during lifecycle-history validation"
-        )
-
-    selected_boundary = history.source.boundary if history.source is not None else None
-    if not history.complete:
-        if selected_boundary is None and history.newest_source is not None:
-            selected_boundary = history.newest_source.boundary
-        if selected_boundary is None or newer_boundary(selected_boundary, boundary) == boundary:
-            selected_boundary = boundary
-    elif selected_boundary is None or newer_boundary(boundary, selected_boundary) == boundary:
-        return None
-
-    assert selected_boundary is not None
-    confirmed = ensure_pending_boundary(
-        api,
-        repository=repository,
-        server_url=server_url,
-        candidate=candidate,
-        boundary=selected_boundary,
-        boundary_cache=boundary_cache,
-    )
-    if confirmed is None:
-        return "pending: pull request changed during lifecycle-history validation"
-    if not history.complete:
-        return f"pending for {pull_request.head_sha}: lifecycle history exceeded the bounded window"
-    return "pending: a newer lifecycle boundary was recovered"
-
-
-def _bounded_post_success_ownership(
-    api: RestApi,
-    *,
-    repository: str,
-    head_sha: str,
-) -> tuple[int, PullRequest | None]:
-    """Resolve head ownership from one bounded open-PR page after success."""
-    payload = api.get(
-        f"/repos/{repository}/pulls?state=open&per_page={MAX_OPEN_PULL_REQUESTS + 1}&page=1"
-    )
-    if (
-        not isinstance(payload, list)
-        or len(payload) > MAX_OPEN_PULL_REQUESTS
-        or not all(isinstance(item, dict) for item in payload)
-    ):
-        raise GateError("post-success open pull request response is invalid or unbounded")
-    pull_requests = [
-        parse_pull_request(item, repository=repository)
-        for item in cast(list[dict[str, Any]], payload)
-    ]
-    numbers = [pull_request.number for pull_request in pull_requests]
-    if len(set(numbers)) != len(numbers):
-        raise GateError("post-success open pull request number is repeated")
-    owners = [
-        pull_request
-        for pull_request in pull_requests
-        if pull_request.state == "open" and pull_request.head_sha == head_sha
-    ]
-    return len(owners), owners[0] if len(owners) == 1 else None
-
-
-def _post_success_lifecycle_hold(
-    api: RestApi,
-    *,
-    repository: str,
-    server_url: str,
-    pull_request: PullRequest,
-    boundary: ReviewBoundary,
-    boundary_cache: dict[int, ReviewBoundary | None],
-    race_floor: ReviewBoundary | None,
-) -> bool:
-    """Use one bounded history read to restore lifecycle uncertainty pending."""
-    history = latest_lifecycle_history(
-        api,
-        repository=repository,
-        head_sha=pull_request.head_sha,
-        not_before=pull_request.created_at,
-        pull_request_number=pull_request.number,
-    )
-    for source in (history.source, history.newest_source):
-        if source is not None:
-            boundary_cache[source.boundary.workflow_run_id] = source.boundary
-    if history.complete and boundary.workflow_run_id not in history.observed_run_ids:
-        raise GateError("Codex review lifecycle history omitted the published boundary")
-    if newer_ineligible_transition(history, boundary) is not None:
-        publish_pending_boundary(
-            api,
-            repository=repository,
-            head_sha=pull_request.head_sha,
-            boundary=boundary,
-            target_url=workflow_run_url(server_url, repository, boundary.workflow_run_id),
-        )
-        return True
-    selected = history.source.boundary if history.source is not None else None
-    if history.newest_source is not None:
-        selected = (
-            history.newest_source.boundary
-            if selected is None
-            else newer_boundary(selected, history.newest_source.boundary)
-        )
-    if not history.complete:
-        selected = boundary if selected is None else newer_boundary(boundary, selected)
-        publish_pending_boundary(
-            api,
-            repository=repository,
-            head_sha=pull_request.head_sha,
-            boundary=selected,
-            target_url=workflow_run_url(server_url, repository, selected.workflow_run_id),
-        )
-        return True
-    comparison = race_floor or boundary
-    if selected is not None and newer_boundary(comparison, selected) != comparison:
-        publish_pending_boundary(
-            api,
-            repository=repository,
-            head_sha=pull_request.head_sha,
-            boundary=selected,
-            target_url=workflow_run_url(server_url, repository, selected.workflow_run_id),
-        )
-        return True
-    return False
-
-
-def _post_success_status_hold(
-    api: RestApi,
-    *,
-    repository: str,
-    server_url: str,
-    head_sha: str,
-    success_status_id: int,
-    boundary: ReviewBoundary,
-    target_url: str | None,
-    boundary_cache: dict[int, ReviewBoundary | None],
-    race_floor: ReviewBoundary | None,
-) -> bool:
-    """Inspect one physical status page and repair any post-success race."""
-    latest = latest_status_context_page(api, repository=repository, head_sha=head_sha)
-    if latest is None:
-        raise GateError("published Codex success is absent from the latest status page")
-    if latest.status_id == success_status_id and latest.state == "success":
         return False
-    if latest.state == "pending":
-        return True
-    claim = claimed_actions_boundary(
-        latest,
-        server_url=server_url,
-        repository=repository,
-        head_sha=head_sha,
-    )
-    trusted: ReviewBoundary | None = None
-    if claim is not None:
-        trusted = trusted_actions_status(
-            api,
-            latest,
-            server_url=server_url,
-            repository=repository,
-            head_sha=head_sha,
-            boundary_cache=boundary_cache,
-            source_validation_limit=len(boundary_cache) + 1,
-        )
-    if trusted == boundary and latest.state == "success":
-        return False
-    comparison = race_floor or boundary
-    restore = (
-        trusted
-        if trusted is not None and newer_boundary(comparison, trusted) != comparison
-        else boundary
-    )
-    publish_pending_boundary(
-        api,
-        repository=repository,
-        head_sha=head_sha,
-        boundary=restore,
-        target_url=(
-            latest.target_url
-            if restore == trusted and latest.target_url is not None
-            else target_url
-        ),
-    )
     return True
 
 
-def publish_success_with_pending_repair(
+def _gate_status_history(
     api: RestApi,
     *,
     repository: str,
-    server_url: str,
-    pull_request: PullRequest,
-    boundary: ReviewBoundary,
-    target_url: str | None,
-    boundary_cache: dict[int, ReviewBoundary | None],
-    race_floor: ReviewBoundary | None = None,
-) -> bool:
-    """Publish success, then repair lifecycle, ownership, or status races."""
-    head_sha = pull_request.head_sha
-    require_success_tail(
-        api,
-        SUCCESS_WRITE_REQUEST_RESERVE,
-        cleanup_margin_seconds=SUCCESS_CLEANUP_MARGIN_SECONDS,
+    head_sha: str,
+    context: str = CODEX_STATUS_CONTEXT,
+) -> _GateStatusHistory:
+    repository = repository_name(repository)
+    head_sha = commit_sha(head_sha, "Codex review status head")
+    payload = api.get(
+        f"/repos/{repository}/commits/{head_sha}/statuses?per_page={MAX_STATUS_PAGE_RECORDS}&page=1"
     )
+    if not isinstance(payload, list) or len(payload) >= MAX_STATUS_PAGE_RECORDS:
+        raise GateError("Codex review status page is incomplete or invalid")
+    statuses: list[CommitStatus] = []
+    seen_ids: set[int] = set()
+    previous_created_at = None
+    for index, item in enumerate(payload):
+        status = parse_commit_status(item, label=f"Codex review status {index}")
+        if status.status_id in seen_ids:
+            raise GateError("Codex review status page repeats a status")
+        if previous_created_at is not None and status.created_at > previous_created_at:
+            raise GateError("Codex review status page is not newest-first")
+        seen_ids.add(status.status_id)
+        previous_created_at = status.created_at
+        if status.context.casefold() == context.casefold():
+            statuses.append(status)
+    return _GateStatusHistory(tuple(statuses), len(payload))
+
+
+def ensure_status_capacity(
+    api: RestApi,
+    *,
+    repository: str,
+    head_sha: str,
+    contexts: tuple[str, ...],
+    reserve_per_context: int,
+) -> None:
+    """Fail before a lifecycle write when a SHA is too close to GitHub's cap."""
+    repository = repository_name(repository)
+    head_sha = commit_sha(head_sha, "Codex review status capacity head")
+    if (
+        not contexts
+        or len(set(contexts)) != len(contexts)
+        or any(not isinstance(context, str) or not context for context in contexts)
+    ):
+        raise GateError("Codex review status capacity contexts are invalid")
+    if (
+        isinstance(reserve_per_context, bool)
+        or not isinstance(reserve_per_context, int)
+        or not 1 <= reserve_per_context < MAX_STATUSES_PER_CONTEXT
+    ):
+        raise GateError("Codex review status capacity reserve is invalid")
+
+    counts = {context.casefold(): 0 for context in contexts}
+    seen_ids: set[int] = set()
+    previous_created_at = None
+    for page in range(1, MAX_STATUSES_PER_CONTEXT // MAX_STATUS_PAGE_RECORDS + 1):
+        payload = api.get(
+            f"/repos/{repository}/commits/{head_sha}/statuses"
+            f"?per_page={MAX_STATUS_PAGE_RECORDS}&page={page}"
+        )
+        if not isinstance(payload, list) or len(payload) > MAX_STATUS_PAGE_RECORDS:
+            raise GateError("Codex review status capacity page is invalid")
+        for index, item in enumerate(payload):
+            status = parse_commit_status(
+                item,
+                label=f"Codex review status capacity page {page} item {index}",
+            )
+            if status.status_id in seen_ids:
+                raise GateError("Codex review status capacity repeats a status")
+            if previous_created_at is not None and status.created_at > previous_created_at:
+                raise GateError("Codex review status capacity is not newest-first")
+            seen_ids.add(status.status_id)
+            previous_created_at = status.created_at
+            normalized = status.context.casefold()
+            if normalized in counts:
+                counts[normalized] += 1
+        if len(payload) < MAX_STATUS_PAGE_RECORDS:
+            break
+    else:
+        raise GateError("commit status history reached GitHub's per-SHA scan ceiling")
+
+    if any(count + reserve_per_context > MAX_STATUSES_PER_CONTEXT for count in counts.values()):
+        raise GateError("commit status history lacks capacity for a complete YAGA boundary")
+
+
+def status_history(
+    api: RestApi,
+    *,
+    repository: str,
+    head_sha: str,
+    context: str = CODEX_STATUS_CONTEXT,
+) -> tuple[CommitStatus, ...]:
+    """Return one bounded newest-first context history."""
+    return _gate_status_history(
+        api,
+        repository=repository,
+        head_sha=head_sha,
+        context=context,
+    ).statuses
+
+
+def latest_trusted_status(
+    api: RestApi,
+    *,
+    repository: str,
+    head_sha: str,
+    context: str = CODEX_STATUS_CONTEXT,
+) -> CommitStatus | None:
+    """Return the latest exact Actions-owned status, rejecting collisions."""
+    statuses = status_history(
+        api,
+        repository=repository,
+        head_sha=head_sha,
+        context=context,
+    )
+    if not statuses:
+        return None
+    latest = statuses[0]
+    if not _trusted_actions_status(latest, context=context):
+        raise GateError(f"latest {context} status is not trusted")
+    return latest
+
+
+def _trusted_actions_status(status: CommitStatus, *, context: str) -> bool:
+    return bool(
+        status.context == context
+        and status.creator_id == GITHUB_ACTIONS_USER_ID
+        and status.creator_login == GITHUB_ACTIONS_LOGIN
+    )
+
+
+def _status_matches_lease(status: CommitStatus, lease: StatusLease) -> bool:
+    return bool(
+        _trusted_actions_status(status, context=lease.context)
+        and status.status_id == lease.status_id
+        and status.state == "pending"
+        and status.target_url == lease.target_url
+        and status.description == lease.description
+    )
+
+
+def _status_matches_terminal(
+    status: CommitStatus,
+    *,
+    lease: StatusLease,
+    terminal_status: CommitStatus,
+) -> bool:
+    return bool(
+        terminal_status.state in {"error", "success"}
+        and _trusted_actions_status(status, context=lease.context)
+        and status.status_id == terminal_status.status_id
+        and status.state == terminal_status.state
+        and status.target_url == lease.target_url
+    )
+
+
+def lease_is_current(
+    api: RestApi,
+    *,
+    repository: str,
+    lease: StatusLease,
+) -> bool:
+    """Require this attempt's pending to be physically latest in the context."""
+    history = _gate_status_history(
+        api,
+        repository=repository,
+        head_sha=lease.head_sha,
+        context=lease.context,
+    )
+    return bool(history.statuses and _status_matches_lease(history.statuses[0], lease))
+
+
+def publish_terminal(
+    api: RestApi,
+    *,
+    repository: str,
+    lease: StatusLease,
+    state: str,
+    description: str,
+) -> CommitStatus | None:
+    """Publish only while this attempt still owns the latest pending lease."""
+    if state not in {"error", "success"}:
+        raise GateError("Codex review terminal state is invalid")
     try:
-        success_status_id = _publish_status(
+        history = _gate_status_history(
             api,
             repository=repository,
-            head_sha=head_sha,
-            state="success",
-            description=boundary_description(boundary, state="success"),
-            target_url=target_url,
+            head_sha=lease.head_sha,
+            context=lease.context,
         )
-
-        open_count, owner = _bounded_post_success_ownership(
-            api,
-            repository=repository,
-            head_sha=head_sha,
-        )
-        if open_count == 0:
-            # A merge or close can complete while the success response is in
-            # flight.  Do not leave a fresh pending status on a completed PR.
-            return False
-        if not same_candidate(pull_request, owner) or pull_request.base_ref != load_default_branch(
-            api, repository
-        ):
-            _publish_status(
-                api,
-                repository=repository,
-                head_sha=head_sha,
-                state="pending",
-                description=boundary_description(boundary, state="pending"),
-                target_url=target_url,
-            )
-            return True
-
-        if _post_success_lifecycle_hold(
-            api,
-            repository=repository,
-            server_url=server_url,
-            pull_request=pull_request,
-            boundary=boundary,
-            boundary_cache=boundary_cache,
-            race_floor=race_floor,
-        ):
-            return True
-        return _post_success_status_hold(
-            api,
-            repository=repository,
-            server_url=server_url,
-            head_sha=head_sha,
-            success_status_id=success_status_id,
-            boundary=boundary,
-            target_url=target_url,
-            boundary_cache=boundary_cache,
-            race_floor=race_floor,
-        )
-    except GateError as error:
-        try:
-            _publish_status(
-                api,
-                repository=repository,
-                head_sha=head_sha,
-                state="pending",
-                description=boundary_description(boundary, state="pending"),
-                target_url=target_url,
-            )
-        except GateError as repair_error:
-            raise GateError(
-                f"{error}; fail-closed pending repair also failed: {repair_error}"
-            ) from error
+    except GateError:
+        repair_pending_best_effort(api, repository=repository, lease=lease)
         raise
+    latest = history.statuses[0] if history.statuses else None
+    if latest is None or not _status_matches_lease(latest, lease):
+        # Preserve a newer canonical Actions-owned result. A missing, malformed,
+        # case-colliding, or same-ID mutation is uncertain and needs a fresh pending.
+        if (
+            latest is None
+            or not _trusted_actions_status(latest, context=lease.context)
+            or latest.status_id == lease.status_id
+        ):
+            repair_pending_best_effort(api, repository=repository, lease=lease)
+        return None
+    if history.visible_count > MAX_STATUS_PAGE_RECORDS - 2:
+        # Keep the current pending lease authoritative. A terminal must remain
+        # visible on a non-full page, with one final slot available for a
+        # best-effort pending repair after a later validation race.
+        raise GateError("commit status page lacks a terminal and repair slot")
+    try:
+        return _publish_status(
+            api,
+            repository=repository,
+            head_sha=lease.head_sha,
+            state=state,
+            description=description,
+            target_url=lease.target_url,
+            context=lease.context,
+        )
+    except GateError:
+        # The terminal POST may have been accepted even when its response was
+        # lost or malformed. Repair without first spending another read.
+        repair_pending_best_effort(api, repository=repository, lease=lease)
+        raise
+
+
+def terminal_is_current(
+    api: RestApi,
+    *,
+    repository: str,
+    lease: StatusLease,
+    terminal_status: CommitStatus,
+) -> bool:
+    """Require this terminal latest with the exact lease immediately before it."""
+    history = _gate_status_history(
+        api,
+        repository=repository,
+        head_sha=lease.head_sha,
+        context=lease.context,
+    )
+    if len(history.statuses) < 2:
+        return False
+    latest, predecessor = history.statuses[:2]
+    return bool(
+        _status_matches_terminal(
+            latest,
+            lease=lease,
+            terminal_status=terminal_status,
+        )
+        and _status_matches_lease(predecessor, lease)
+    )
+
+
+def terminal_has_pending_lineage(
+    api: RestApi,
+    *,
+    repository: str,
+    head_sha: str,
+    terminal_status: CommitStatus,
+    pending_description: str,
+) -> bool:
+    """Require the latest terminal to immediately follow its own pending lease."""
+    history = _gate_status_history(
+        api,
+        repository=repository,
+        head_sha=head_sha,
+        context=terminal_status.context,
+    )
+    if len(history.statuses) < 2:
+        return False
+    latest, predecessor = history.statuses[:2]
+    return bool(
+        latest == terminal_status
+        and latest.state in {"error", "success"}
+        and _trusted_actions_status(latest, context=terminal_status.context)
+        and latest.target_url is not None
+        and _trusted_actions_status(predecessor, context=terminal_status.context)
+        and predecessor.state == "pending"
+        and predecessor.target_url == latest.target_url
+        and predecessor.description == pending_description
+    )
+
+
+def restore_pending_after_race(
+    api: RestApi,
+    *,
+    repository: str,
+    lease: StatusLease,
+    terminal_status: CommitStatus,
+) -> bool:
+    """Repair an uncertain terminal without displacing a newer trusted result."""
+    try:
+        history = _gate_status_history(
+            api,
+            repository=repository,
+            head_sha=lease.head_sha,
+            context=lease.context,
+        )
+    except GateError:
+        return repair_pending_best_effort(api, repository=repository, lease=lease)
+
+    latest = history.statuses[0] if history.statuses else None
+    if latest is not None and _trusted_actions_status(latest, context=lease.context):
+        if latest.status_id != terminal_status.status_id:
+            return False
+        if not _status_matches_terminal(
+            latest,
+            lease=lease,
+            terminal_status=terminal_status,
+        ):
+            return repair_pending_best_effort(api, repository=repository, lease=lease)
+
+        target_url = lease.target_url
+        description = lease.description
+        if len(history.statuses) >= 2:
+            predecessor = history.statuses[1]
+            if (
+                _trusted_actions_status(predecessor, context=lease.context)
+                and predecessor.state == "pending"
+                and predecessor.status_id != lease.status_id
+                and predecessor.target_url is not None
+                and predecessor.description is not None
+            ):
+                target_url = predecessor.target_url
+                description = predecessor.description
+        return repair_pending_best_effort(
+            api,
+            repository=repository,
+            lease=lease,
+            target_url=target_url,
+            description=description,
+        )
+
+    # No visible gate status, or a case-colliding/untrusted writer, is not
+    # sufficient authority to preserve a possibly-successful physical tail.
+    return repair_pending_best_effort(api, repository=repository, lease=lease)
+
+
+def same_candidate(expected: PullRequest, actual: PullRequest) -> bool:
+    """Compare every event-bound pull-request identity field."""
+    return (
+        expected.number == actual.number
+        and expected.head_sha == actual.head_sha
+        and expected.head_ref == actual.head_ref
+        and expected.head_repository == actual.head_repository
+        and expected.base_sha == actual.base_sha
+        and expected.base_ref == actual.base_ref
+    )
+
+
+def load_exact_live_pull_request(
+    api: RestApi,
+    *,
+    repository: str,
+    expected: PullRequest,
+    default_branch: str,
+    require_ready: bool,
+) -> PullRequest | None:
+    """Return the unchanged live candidate, or ``None`` after a normal race."""
+    live = load_pull_request(api, repository, expected.number)
+    if (
+        not same_candidate(expected, live)
+        or live.state != "open"
+        or live.base_ref != default_branch
+        or (require_ready and live.draft)
+    ):
+        return None
+    return live
+
+
+def uniquely_owned(
+    api: RestApi,
+    *,
+    repository: str,
+    head_sha: str,
+    pull_request_number: int,
+) -> bool:
+    """Require one exact open PR owner without unbounded pagination."""
+    repository = repository_name(repository)
+    head_sha = commit_sha(head_sha, "Codex review head ownership")
+    pull_request_number = positive_int(pull_request_number, "Codex review pull request")
+    payload = api.get(
+        f"/repos/{repository}/commits/{head_sha}/pulls?per_page={MAX_HEAD_ASSOCIATIONS}&page=1"
+    )
+    if not isinstance(payload, list) or len(payload) > MAX_HEAD_ASSOCIATIONS:
+        raise GateError("Codex review head associations are invalid")
+    if len(payload) == MAX_HEAD_ASSOCIATIONS:
+        return False
+    open_numbers: list[int] = []
+    seen_numbers: set[int] = set()
+    for index, item in enumerate(payload):
+        association = record(item, f"Codex review head association {index}")
+        state = association.get("state")
+        if state not in {"closed", "open"}:
+            raise GateError("Codex review head association state is invalid")
+        number = positive_int(association.get("number"), "associated pull request number")
+        if number in seen_numbers:
+            raise GateError("Codex review head association is repeated")
+        seen_numbers.add(number)
+        head = record(association.get("head"), "associated pull request head")
+        associated_sha = commit_sha(head.get("sha"), "associated pull request head SHA")
+        if state == "open" and associated_sha == head_sha:
+            open_numbers.append(number)
+    return open_numbers == [pull_request_number]
+
+
+def load_exact_unique_ready_pull_request(
+    api: RestApi,
+    *,
+    repository: str,
+    expected: PullRequest,
+    default_branch: str,
+) -> PullRequest | None:
+    """Re-read exact ready state and unique SHA ownership."""
+    live = load_exact_live_pull_request(
+        api,
+        repository=repository,
+        expected=expected,
+        default_branch=default_branch,
+        require_ready=True,
+    )
+    if live is None or not uniquely_owned(
+        api,
+        repository=repository,
+        head_sha=expected.head_sha,
+        pull_request_number=expected.number,
+    ):
+        return None
+    return live

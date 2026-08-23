@@ -25,8 +25,8 @@ from yaga.models import (
 
 API_VERSION = "2022-11-28"
 USER_AGENT = "yaga-action"
-MAX_API_PAGES = 10
-MAX_API_RECORDS = 1_000
+MAX_API_PAGES = 1
+MAX_API_RECORDS = 100
 MAX_API_REQUESTS = 300
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_REQUEST_BODY_BYTES = 4_096
@@ -74,6 +74,7 @@ class GitHubRestApi:
         base_url: str = "https://api.github.com",
         timeout: float = 15.0,
         max_requests: int = MAX_API_REQUESTS,
+        request_deadline: float | None = None,
         success_deadline: float | None = None,
     ) -> None:
         if (
@@ -118,6 +119,13 @@ class GitHubRestApi:
             raise GateError("GitHub API request budget is invalid")
         self._max_requests = max_requests
         self._request_count = 0
+        if request_deadline is not None and (
+            isinstance(request_deadline, bool)
+            or not isinstance(request_deadline, (int, float))
+            or not math.isfinite(request_deadline)
+        ):
+            raise GateError("request deadline is invalid")
+        self._request_deadline = request_deadline
         if success_deadline is not None and (
             isinstance(success_deadline, bool)
             or not isinstance(success_deadline, (int, float))
@@ -129,6 +137,11 @@ class GitHubRestApi:
     def _consume_request_budget(self) -> None:
         if self._request_count >= self._max_requests:
             raise GateError("GitHub API request budget exhausted")
+        if (
+            self._request_deadline is not None
+            and time.monotonic() + self._timeout > self._request_deadline
+        ):
+            raise GateError("GitHub API request no longer fits the polling deadline")
         self._request_count += 1
 
     def require_success_tail(self, count: int, *, cleanup_margin_seconds: int) -> None:
@@ -218,7 +231,7 @@ class GitHubRestApi:
         return self._request_json(path, method="POST", payload=payload)
 
     def paginate(self, path: str) -> list[dict[str, Any]]:
-        """Read at most ten 100-record pages from one list endpoint."""
+        """Require one complete list page so policy scans have a fixed cost."""
         separator = "&" if "?" in path else "?"
         records: list[dict[str, Any]] = []
         for page in range(1, MAX_API_PAGES + 1):

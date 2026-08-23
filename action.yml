@@ -7,65 +7,71 @@ inputs:
     description: Gate implementation to run; currently only codex-review
     required: true
     default: codex-review
-  mode:
-    description: >-
-      Internal orchestration phase: invalidate-boundary, repair-boundaries,
-      reconcile-boundary, resolve, reconcile-candidate, or
-      reconcile-repair-candidate.
-    required: true
   github-token:
-    description: GitHub token with only the permissions required by the selected mode
+    description: >-
+      GitHub token with the documented per-operation Actions, contents,
+      issues, pull-request, and commit-status permissions
     required: true
-  candidate:
-    description: Exact gate candidate JSON; required for a reconcile mode
+  operation:
+    description: One of invalidate, prepare, authorize, observe, request, or finalize
+    required: true
+  prerequisite-workflow:
+    description: Authenticated unprivileged pull-request CI workflow path
+    required: false
+    default: .github/workflows/ci.yml
+  lifecycle-workflow:
+    description: Trusted pull_request_target lifecycle workflow path
+    required: false
+    default: .github/workflows/review-policy.yml
+  owner-id:
+    description: Immutable GitHub user ID allowed to request without environment approval
+    required: true
+  approval-marker:
+    description: >-
+      Environment-only marker required by authorize; set it to
+      codex-review-approval:v1 in the protected approval environment
     required: false
     default: ""
-  observer-workflow-path:
-    description: Repository-relative path of the unprivileged event observer workflow
-    required: false
-    default: .github/workflows/review-policy-event.yml
   request-timeout:
     description: Per-request GitHub REST timeout in seconds, from 1 through 30
     required: false
-    default: "15"
+    default: "5"
   job-timeout-minutes:
     description: >-
-      Usable YAGA window for terminal reconcile modes, from 15 through 360;
-      shipped action-only jobs set it equal to timeout-minutes
-    required: false
-    default: ""
+      Usable YAGA polling and finalization window, from 15 through 360;
+      set it equal to the action-only job's timeout-minutes
+    required: true
 
 outputs:
-  candidate:
-    description: Exact candidate JSON captured for a lifecycle boundary, or an empty string
-    value: ${{ steps.gate.outputs.candidate }}
-  candidates:
-    description: Bounded candidate array emitted by resolve or repair-boundaries, else empty
-    value: ${{ steps.gate.outputs.candidates }}
-  eligible:
-    description: Whether the selected operation emitted one or more eligible candidates
-    value: ${{ steps.gate.outputs.eligible }}
+  route:
+    description: Closed prepare route; skip, done, observe, owner, external, or approved
+    value: ${{ steps.yaga.outputs.route }}
+  pull_request_number:
+    description: Exact pull request number emitted by prepare for job concurrency
+    value: ${{ steps.yaga.outputs.pull_request_number }}
 
 runs:
   using: composite
   steps:
     - name: Run YAGA
-      id: gate
+      id: yaga
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        YAGA_CANDIDATE: ${{ inputs.candidate }}
         YAGA_GATE: ${{ inputs.gate }}
+        YAGA_APPROVAL_MARKER: ${{ inputs.approval-marker }}
+        YAGA_LIFECYCLE_WORKFLOW: ${{ inputs.lifecycle-workflow }}
         YAGA_JOB_TIMEOUT_MINUTES: ${{ inputs.job-timeout-minutes }}
-        YAGA_MODE: ${{ inputs.mode }}
-        YAGA_OBSERVER_WORKFLOW_PATH: ${{ inputs.observer-workflow-path }}
+        YAGA_OPERATION: ${{ inputs.operation }}
+        YAGA_OWNER_ID: ${{ inputs.owner-id }}
+        YAGA_PREREQUISITE_WORKFLOW: ${{ inputs.prerequisite-workflow }}
         YAGA_REQUEST_TIMEOUT: ${{ inputs.request-timeout }}
       run: |
         set -euo pipefail
         unset PYTHONHOME
         export PYTHONPATH="$GITHUB_ACTION_PATH/src"
         export PYTHONSAFEPATH=1
-        python -P -m yaga --gate "$YAGA_GATE" --mode "$YAGA_MODE"
+        python -P -m yaga --gate "$YAGA_GATE" --operation "$YAGA_OPERATION"
 
 branding:
   icon: shield
