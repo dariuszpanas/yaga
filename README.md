@@ -24,9 +24,10 @@ two trusted, write-capable default-branch workflows around ordinary unprivileged
 3. [`examples/codex-review.yml`](examples/codex-review.yml) wakes on a completed `CI` or
    `YAGA Review Policy` run. It re-fetches and authenticates the wake, resolves the exact current CI
    and lifecycle pair, requires a unique ready PR, and never reads artifacts or cache. Failed CI
-   publishes terminal errors without asking Codex. Successful CI either observes an existing
-   review or routes one bounded request. If CI completes first, `prepare` waits for the lifecycle
-   run for at most two minutes; a later lifecycle completion also provides a second reconcile wake.
+   publishes terminal errors without asking Codex. Successful CI routes one bounded request or
+   observes only a review already started by the exact current-boundary YAGA request. If CI
+   completes first, `prepare` waits for the lifecycle run for at most two minutes; a later lifecycle
+   completion also provides a second reconcile wake.
    Before any status write, YAGA deterministically elects only the later completion wake (CI wins an
    exact timestamp tie), so either queue order makes progress without two processors churning the
    same boundary.
@@ -73,22 +74,27 @@ Within that trusted mutex, YAGA posts at most one strictly marked quota-consumin
 lifecycle boundary. The marker binds the repository, PR, full head and base SHAs, lifecycle run,
 and authorizing CI run/attempt. YAGA lists the complete bounded comment history before and after its
 single POST and never blindly retries an ambiguous write. CI reruns reuse the existing boundary
-request.
+request. Immediately before that POST, YAGA revalidates the candidate and approval and re-reads the
+exact request plus admissible pending/outcome evidence. GitHub cannot make the last read and comment
+POST atomic, so another actor can still start a review in that final interval; disabling automatic
+reviews removes the normal provider-side source of that residual race.
 
-For the strongest quota policy, disable Codex automatic reviews and let YAGA request only after CI
-passes, but do so only after the rollout canary proves the new request path. During migration, an
-owner-authored PR may still reuse its automatic initial review. An external-author PR cannot pass
-YAGA from an unsolicited or automatic Codex result: it still needs an exact YAGA authorization
-marker created by the protected route. If Codex already has an outcome or eyes reaction when
-approval is granted, YAGA records a non-triggering approval marker instead of posting another
-`@codex review` and spending quota twice.
+Disable Codex automatic reviews and drain every existing Codex task before enabling YAGA's v2
+publisher. YAGA is then the sole legitimate automatic requester and asks only after CI passes.
+Canary both the owner request and protected-external approval plus request paths. Every accepted
+eyes reaction or outcome, including on `opened`, must follow the exact current-boundary
+Actions-owned YAGA request marker. Visible unsolicited connector activity fails closed without
+posting a duplicate YAGA request. External approval never reuses unsolicited evidence: it
+authorizes YAGA to create the exact request and nothing else.
 
 The environment protects only YAGA's token. OpenAI's public GitHub documentation does not describe
 a repository control that prevents a person or another app from directly posting `@codex review`.
-Such a comment may still consume provider quota, although YAGA refuses to treat it as
-external-author authorization. Only that protected route's exact YAGA marker authorizes an
-external-author result.
-Repository permissions and provider-side access controls remain necessary.
+Such a comment may still consume provider quota. If its activity is already visible, YAGA fails
+closed rather than spending quota on a second request. A direct request can still race YAGA's final
+read and comment POST, however, and Codex outcomes do not identify the triggering comment. The
+current request marker therefore supplies temporal correlation, not a native provider binding.
+Only that protected route's exact YAGA marker authorizes an external-author request. Repository
+permissions and provider-side access controls remain necessary.
 
 ## Action interface
 
@@ -115,17 +121,24 @@ YAGA accepts only exact Codex connector identities and these bounded outcomes:
 
 - a clean connector issue comment whose reviewed-commit marker resolves to the current head;
 - a formal connector findings review whose native `commit_id` and reviewed-commit marker identify
-  the current head;
-- the connector's `+1` reaction on the initial non-draft `opened` boundary; or
-- on a later boundary, a connector `+1` whose timestamp is strictly later than the exact current
-  YAGA request marker.
+  the current head; or
+- the connector's `+1` reaction.
 
-An eyes reaction is progress, not success. An unrequested `+1` on `ready_for_review`, synchronize,
-reopen, or base change is not bound to that candidate. A later PR-body reaction has no commit/base
-identifier of its own, so YAGA accepts it only when the exact request marker provides the binding
-and the timestamps establish ordering. A current bound eyes reaction or exact YAGA request selects
-the non-commenting `observe` path; a completed outcome always takes precedence over a stuck eyes
-reaction.
+Every outcome must be strictly later than the exact current-boundary Actions-owned YAGA request
+marker, including on the initial non-draft `opened` boundary. An eyes reaction is progress, not
+success, and selects the non-commenting `observe` path only when it is likewise bound to that exact
+request. Visible connector activity without the marker is an invariant violation: YAGA fails closed
+without posting a duplicate request, and external approval never converts or reuses that unsolicited
+evidence.
+
+A PR-body reaction has no commit/base identifier of its own, and even a reviewed-commit marker does
+not identify the triggering request. A delayed review of an older head can finish after a newer
+boundary, so the YAGA marker establishes temporal correlation rather than a native provider
+binding. Automatic reviews must be disabled and drained before activation, and no direct or other
+integration-triggered Codex review can overlap YAGA. YAGA also requires trusted successful status
+lineage for every older YAGA request before it can post or trust evidence for a newer boundary. If a
+head changes while its request is unresolved or timed out, open a fresh PR. A deployment that cannot
+prevent overlapping non-YAGA reviews must not enable this beta action.
 
 A formal findings review completes YAGA's evidence check. Consumers must also enable GitHub required
 conversation resolution so unresolved findings remain merge-blocking. Findings outside a resolvable
@@ -139,12 +152,12 @@ native `Review Policy Metadata` name, and use a unique concurrency group so they
 replace the required `Review Policy Boundary` check. Base-changing edits revoke success; push a new
 commit to obtain fresh CI. Draft transitions remain pending until ready.
 
-The publisher runs only after a completed CI or lifecycle workflow and filters source branch `main`.
-Both PR CI and `pull_request_target` lifecycle runs use the PR head branch, while a merge push uses
-`main`; this prevents the post-merge main-push wake that caused legacy review-request spam. A fork
-whose head branch is itself named `main` is also filtered and therefore fails closed with pending
-required statuses; rename that fork branch before retrying. There are no comment, review, schedule,
-merge-queue, or `closed` wakes.
+The publisher runs only after a completed CI or lifecycle workflow. Its entry job accepts the exact
+`.github/workflows/ci.yml` plus `pull_request` pair or the exact
+`.github/workflows/review-policy.yml` plus `pull_request_target` pair. The lifecycle completion may
+therefore run against the `main` base branch, while post-merge CI has event `push` and skips every
+publisher job before YAGA runs. Fork head branches named `main` remain eligible. There are no
+comment, review, schedule, merge-queue, or `closed` wakes.
 A delayed invalidator re-reads the exact live PR before writing and therefore skips a PR that is
 already closed. Closure cannot start a new publisher run, but it can race an already-running
 worker's final live read and subsequent comment or status POST because GitHub REST provides no
@@ -158,8 +171,9 @@ terminal-error request/time tail remains. Commit-status writes are not transacti
 can leave pending. A newer CI/lifecycle run supersedes older attempts, and every request or
 terminal write revalidates the live open PR as closely as GitHub REST permits. YAGA also reserves
 status slots before each lifecycle boundary. Comments, reviews, and reactions each use one complete
-page; 100 or more records is treated as incomplete and fails closed, so continue on a new PR.
-Commit-status reads likewise require a complete page with fewer than 100 visible statuses across
+page; 100 or more records is treated as incomplete and fails closed. More than eight older YAGA
+request boundaries also fail closed, so continue on a new PR. Commit-status reads likewise require
+a complete page with fewer than 100 visible statuses across
 all contexts, and terminal publication reserves the last two visible slots for its write and one
 repair. Push a new commit before that page fills or before the longer per-context status ceiling is
 approached; either condition otherwise leaves the gate pending and requires a new head SHA.
@@ -194,16 +208,14 @@ Before rollout:
    set and `YAGA CI <action> for #<pull-request> at base <full-base-SHA>` run-name. Keep the source
    workflow display names `CI` and `YAGA Review Policy` synchronized with the publisher's
    `workflows` trigger, keep their file paths synchronized with `prerequisite-workflow` and
-   `lifecycle-workflow`, and install both templates at their configured paths. For a default
-   branch other than `main`, replace both `branches: [main]` in the lifecycle workflow and
-   `branches-ignore: [main]` in the publisher.
-4. Pin the audited YAGA SHA and canary failed CI, initial reaction evidence, protected external
-   approval, owner/external requests, timeout/rerun, metadata and lifecycle transitions, close, and
-   merge. Confirm a merge creates no publisher run. Keep automatic reviews enabled during this
-   initial canary.
-5. Require `Review Policy Boundary`, `CI Prerequisites`, `Codex Review`, and `CI Gate` only after an
-   exact canary head succeeds. Then disable Codex automatic reviews and repeat the owner and
-   protected-external request canaries before enabling the policy for normal contributor traffic.
+   `lifecycle-workflow`, and install both templates at their configured paths. For a default branch
+   other than `main`, replace `branches: [main]` in the lifecycle workflow.
+4. Freeze new PRs, reach zero open PRs, disable automatic reviews, and drain every existing Codex
+   task before enabling the publisher. Pin the audited YAGA SHA, then open fresh canaries for failed
+   CI, the owner request, protected-external approval plus request, timeout/rerun, metadata and
+   lifecycle transitions, close, and merge. Confirm the post-merge publisher run skips every job.
+5. Require `Review Policy Boundary`, `CI Prerequisites`, `Codex Review`, and `CI Gate` only after the
+   exact canary heads succeed and before normal contributor traffic.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development details and [SECURITY.md](SECURITY.md) for
 private vulnerability reporting and the beta trust boundary.

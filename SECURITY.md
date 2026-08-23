@@ -39,8 +39,9 @@ no environment secrets, and define the environment variable
 `YAGA_CODEX_APPROVAL_MARKER=codex-review-approval:v1`. Required-reviewer environments are available
 for public repositories on supported GitHub plans and for private/internal repositories on GitHub
 Enterprise, subject to GitHub's current rules. Verify that support and protection in a preflight and
-canary before relying on it. Disable Codex automatic reviews only after that canary proves YAGA's
-request path, then repeat owner and protected-external request canaries.
+canary before relying on it. Disable Codex automatic reviews before enabling the v2 publisher, then
+prove the owner request and protected-external approval plus request paths before allowing normal
+contributor traffic.
 
 The cancel-stale per-PR `authorize-external` job records only a non-triggering approval marker. A
 separate PR-serialized request worker does not cancel an in-flight run and may post `@codex review`
@@ -49,10 +50,10 @@ boundary without allowing cancellation to duplicate a request.
 
 The environment protects only YAGA's request token. It cannot stop a person or other integration
 from directly posting `@codex review`; provider-side execution may still consume quota. YAGA does
-not count that unsolicited outcome as authorization for an external-author PR. Only the protected
-route's exact marker authorizes an external-author result. If evidence already exists, that route
-posts a non-triggering approval marker instead of another request. Repository comment permissions
-and provider access remain outside this action.
+not accept that unsolicited activity as pending or successful evidence. When it is visible, YAGA
+fails closed without posting a duplicate request. Only the protected route's exact approval marker
+authorizes YAGA to request review for an external-author PR; external approval never reuses
+unsolicited evidence. Repository comment permissions and provider access remain outside this action.
 
 The beta template uses the repository `GITHUB_TOKEN`. Commit statuses and marked request comments
 therefore carry the shared GitHub Actions identity, not a dedicated YAGA App. Consumers must keep
@@ -69,22 +70,38 @@ before/after validation, reserves a terminal-error polling tail and lifecycle st
 never blindly retries an ambiguous request POST. GitHub or runner failure can still leave pending.
 Recover by rerunning current CI or, near the status ceiling, pushing a new commit.
 
+Immediately before its request POST, YAGA revalidates the candidate and approval and re-reads the
+exact request plus admissible pending/outcome evidence. The final read and POST are not atomic, so
+another actor can still start a review in that interval. Disabling automatic reviews removes the
+normal provider-side source of that residual duplicate-request race; repository comment permissions
+and provider access remain separate controls. Codex outcomes do not identify their triggering
+comment, so a direct human/app request in that interval can consume quota and later look temporally
+correlated with YAGA's marker. The action cannot eliminate that provider-side ambiguity.
+
 Comments, reviews, and reactions are each accepted only from one complete page. A page containing
-100 records is ambiguous and fails closed; recovery requires a new PR. Commit-status history also
+100 records is ambiguous and fails closed. More than eight older YAGA request boundaries also fail
+closed; recovery from either request-history condition requires a new PR. Commit-status history
 requires fewer than 100 visible records across every context and reserves two remaining visible
 slots before terminal publication, independently of GitHub's longer per-SHA/context ceiling.
 Recovery from either status bound requires a new commit.
 
-An initial reaction-only success is accepted only for a non-draft `opened` boundary. On every later
-boundary, including `ready_for_review`, a reaction is accepted only when it is strictly later than
-the exact current YAGA request marker. Unrequested later reactions do not bind to the candidate.
+Every accepted eyes reaction or outcome, including on `opened`, must be strictly later than the
+exact current-boundary Actions-owned YAGA request marker. The `observe` route is available only for
+that already-posted exact request. Visible unsolicited connector activity fails closed without a
+duplicate YAGA request. A PR-body reaction has no commit/base identity, and reviewed-commit evidence
+still does not identify its triggering comment, so the marker supplies temporal correlation rather
+than a native provider binding. Disable and drain automatic reviews before activation, and prevent
+direct or integration-triggered reviews from overlapping YAGA. A repository that cannot enforce
+that invariant must not enable this beta action. YAGA refuses a newer evidence/request path unless
+every older YAGA request has trusted successful status lineage. If a head changes while its request
+is unresolved or timed out, recovery requires a fresh PR.
 
-Closure has no trigger and a merge push to `main` is filtered, so neither starts a new publisher.
-A delayed invalidator reads the exact live PR and skips one already closed. An already-running
-worker can still race its final live read with a subsequent comment or status POST; GitHub REST
-cannot make those operations transactional. A marked review request or status may therefore land
-after closure, and the request may consume provider quota. Compensating validation limits this
-window but cannot guarantee zero post-close writes.
+Closure has no publisher trigger. A post-merge CI completion has event `push`, so every publisher
+job skips before YAGA runs. A delayed invalidator reads the exact live PR and skips one already
+closed. An already-running worker can still race its final live read with a subsequent comment or
+status POST; GitHub REST cannot make those operations transactional. A marked review request or
+status may therefore land after closure, and the request may consume provider quota. Compensating
+validation limits this window but cannot guarantee zero post-close writes.
 
 The beta trust model also assumes GitHub delivers each configured lifecycle event. A missed
 same-head reopen or other lifecycle event can leave an older green result visible because no new

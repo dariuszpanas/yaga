@@ -7,15 +7,16 @@ on:
   workflow_run:
     workflows: [CI, "YAGA Review Policy"]
     types: [completed]
-    branches-ignore: [main]
 
 permissions: {}
 
 jobs:
   prepare:
     if: >-
-      github.event.workflow_run.event == 'pull_request' ||
-      github.event.workflow_run.event == 'pull_request_target'
+      (github.event.workflow_run.path == '.github/workflows/ci.yml' &&
+      github.event.workflow_run.event == 'pull_request') ||
+      (github.event.workflow_run.path == '.github/workflows/review-policy.yml' &&
+      github.event.workflow_run.event == 'pull_request_target')
     name: Prepare Codex Review
     permissions:
       actions: read

@@ -7,7 +7,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from yaga.codex.constants import GITHUB_ACTIONS_LOGIN, GITHUB_ACTIONS_USER_ID
+from yaga.codex.constants import (
+    GITHUB_ACTIONS_LOGIN,
+    GITHUB_ACTIONS_USER_ID,
+    MAX_PRIOR_REQUESTS,
+)
 from yaga.errors import GateError
 from yaga.github import MAX_API_RECORDS, RestApi
 from yaga.models import actor_is, commit_sha, positive_int, record, repository_name, timestamp
@@ -149,6 +153,7 @@ class AuthorizationComments:
 
     request: RequestComment | None = None
     approval: RequestComment | None = None
+    prior_requests: tuple[RequestComment, ...] = ()
 
     @property
     def any(self) -> RequestComment | None:
@@ -252,6 +257,13 @@ def _same_boundary(left: RequestKey, right: RequestKey) -> bool:
     )
 
 
+def _same_pull_request(left: RequestKey, right: RequestKey) -> bool:
+    return (left.repository, left.pull_request_number) == (
+        right.repository,
+        right.pull_request_number,
+    )
+
+
 def find_authorization(api: RestApi, *, key: RequestKey) -> AuthorizationComments:
     """Find each bound marker in one complete bounded comment history."""
     if not isinstance(key, RequestKey):
@@ -261,6 +273,7 @@ def find_authorization(api: RestApi, *, key: RequestKey) -> AuthorizationComment
         raise GateError("Codex authorization comment history is truncated or invalid")
     seen_ids: set[int] = set()
     matches: dict[str, RequestComment] = {}
+    prior_requests: list[RequestComment] = []
     for index, item in enumerate(payload):
         comment_id, comment = _authorization_comment(
             item,
@@ -271,7 +284,15 @@ def find_authorization(api: RestApi, *, key: RequestKey) -> AuthorizationComment
         seen_ids.add(comment_id)
         # A CI rerun may carry a newer source run attempt, but the lifecycle
         # candidate is still entitled to at most one marker of each kind.
-        if comment is None or not _same_boundary(comment.key, key):
+        if comment is None:
+            continue
+        if not _same_boundary(comment.key, key):
+            if comment.kind == "request" and _same_pull_request(comment.key, key):
+                if any(_same_boundary(existing.key, comment.key) for existing in prior_requests):
+                    raise GateError("multiple exact prior Codex request markers exist")
+                prior_requests.append(comment)
+                if len(prior_requests) > MAX_PRIOR_REQUESTS:
+                    raise GateError("Codex prior request history exceeds its bounded limit")
             continue
         if comment.kind in matches:
             raise GateError(f"multiple exact Codex {comment.kind} markers exist for this boundary")
@@ -279,6 +300,7 @@ def find_authorization(api: RestApi, *, key: RequestKey) -> AuthorizationComment
     return AuthorizationComments(
         request=matches.get("request"),
         approval=matches.get("approval"),
+        prior_requests=tuple(prior_requests),
     )
 
 

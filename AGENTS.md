@@ -25,9 +25,9 @@ fixes use `fix/<topic>`.
 - Require repository variable `YAGA_CODEX_OWNER_ID`. The environment must have that owner as sole
   required reviewer, prevent self-review, disable admin bypass, store no secrets, and provide
   `YAGA_CODEX_APPROVAL_MARKER=codex-review-approval:v1`. Verify plan support and canary behavior.
-- Accept an unrequested reaction-only result only for an initial non-draft `opened` boundary. Every
-  later reaction, including `ready_for_review`, requires the exact request and a strictly later
-  timestamp.
+- Require the exact current-boundary Actions-owned YAGA request before every accepted eyes reaction
+  or outcome, including `opened`, with evidence strictly later than the request. Visible unsolicited
+  connector activity fails closed without a duplicate request, and `observe` requires that request.
 - Fail closed on malformed, incomplete, ambiguous, stale, displaced, or over-budget evidence.
 - Bound pagination, responses, request bodies, event files, descriptions, polling, and all
   attacker-controlled strings.
@@ -36,9 +36,14 @@ fixes use `fix/<topic>`.
 - Reserve `Codex Review` and `CI Gate` for classic statuses; workflow/job/check names must differ.
 - Preserve both authenticated `CI` and `YAGA Review Policy` completion wakes, deterministic
   later-completion election before writes (CI wins timestamp ties), the two-minute CI-first prepare
-  wait, and the `main` branch filter that prevents a post-merge publisher wake.
-- Keep automatic reviews enabled through the initial canary; disable them only after YAGA's request
-  path succeeds, then repeat owner and protected-external canaries.
+  wait, and exact workflow-path/event entry guards. Lifecycle completions on the `main` base branch
+  must run, while post-merge `push` completions skip every publisher job before YAGA runs.
+- Disable automatic reviews before enabling the v2 publisher. Prove the owner request and
+  protected-external approval plus request paths before normal contributor traffic. Freeze new PRs,
+  reach zero open PRs, and drain existing Codex tasks before activation; all evidence correlation
+  also requires preventing overlapping direct or integration-triggered reviews and trusted success
+  lineage for every older YAGA request.
+- External approval authorizes only the exact YAGA request and never reuses unsolicited evidence.
 - Ordinary metadata edits use non-required `Review Policy Metadata`; real lifecycle events use
   required `Review Policy Boundary`. The beta assumes GitHub delivers those configured events.
 - Never promise zero post-close writes: close can race the last live read and a comment/status POST.

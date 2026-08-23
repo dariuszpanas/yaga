@@ -169,7 +169,7 @@ def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> Non
     assert 'workflows: [CI, "YAGA Review Policy"]' in publisher
     assert "format('YAGA review wake from {0} run #{1}'" in publisher
     assert "types: [completed]" in publisher
-    assert "branches-ignore: [main]" in publisher
+    assert "branches-ignore:" not in publisher
     for unsupported in (
         "pull_request_target:",
         "issue_comment:",
@@ -196,7 +196,9 @@ def test_examples_have_closed_routing_and_literal_external_approval() -> None:
     external = workflow_job(publisher, "request-external")
     finalize = workflow_job(publisher, "finalize")
 
-    assert "github.event.workflow_run.event == 'pull_request' ||" in prepare
+    assert "github.event.workflow_run.path == '.github/workflows/ci.yml'" in prepare
+    assert "github.event.workflow_run.event == 'pull_request'" in prepare
+    assert "github.event.workflow_run.path == '.github/workflows/review-policy.yml'" in prepare
     assert "github.event.workflow_run.event == 'pull_request_target'" in prepare
     assert "route: ${{ steps.prepare.outputs.route }}" in prepare
     assert "pull_request_number: ${{ steps.prepare.outputs.pull_request_number }}" in prepare
@@ -319,7 +321,11 @@ def test_examples_serialize_exact_boundaries_without_post_close_or_main_push_wak
     for job_name in ("observe", "request-owner", "request-external"):
         assert "cancel-in-progress: false" in workflow_job(publisher, job_name)
     assert "closed" not in lifecycle
-    assert "branches-ignore: [main]" in publisher
+    prepare = workflow_job(publisher, "prepare")
+    assert "github.event.workflow_run.path == '.github/workflows/ci.yml'" in prepare
+    assert "github.event.workflow_run.event == 'pull_request'" in prepare
+    assert "github.event.workflow_run.path == '.github/workflows/review-policy.yml'" in prepare
+    assert "github.event.workflow_run.event == 'pull_request_target'" in prepare
 
 
 def test_docs_define_bounded_polling_and_explicit_rerun_recovery() -> None:
@@ -329,7 +335,7 @@ def test_docs_define_bounded_polling_and_explicit_rerun_recovery() -> None:
     assert "Polling is bounded" in readme
     assert "rerun CI" in readme
     assert "There is no scheduled repair" in readme
-    assert "no schedule, issue-comment" in contributing
+    assert re.search(r"no\s+schedule, issue-comment", contributing)
     assert "job-timeout-minutes" in contributing
     assert "sole step" in contributing
 
@@ -365,11 +371,39 @@ def test_docs_define_the_single_quota_guarded_review_request() -> None:
 
     assert "posts at most one strictly marked quota-consuming request" in readme
     assert "codex-review-approval" in readme
-    assert "Only that protected route's exact YAGA marker authorizes" in readme
-    assert re.search(r"Only the protected\s+route's exact marker authorizes", security)
-    assert "disable Codex automatic reviews" in readme
-    assert "An eyes reaction is progress, not success" in readme
+    assert (
+        "Only that protected route's exact YAGA marker authorizes an external-author request"
+        in (readme)
+    )
+    assert re.search(
+        r"Only the protected route's exact approval marker\s+authorizes YAGA to request review",
+        security,
+    )
+    assert "Disable Codex automatic reviews" in readme
+    assert "drain every existing Codex task" in readme
+    assert re.search(r"An eyes reaction is progress, not\s+success", readme)
+    assert re.search(
+        r"Every outcome must be strictly later than the exact current-boundary Actions-owned YAGA "
+        r"request\s+marker, including on the initial non-draft `opened` boundary",
+        readme,
+    )
+    assert re.search(
+        r"`observe` route is available only for\s+that already-posted exact request", security
+    )
+    assert re.search(
+        r"Visible unsolicited connector activity fails closed without\s+(?:posting )?a duplicate "
+        r"YAGA request",
+        readme,
+    )
+    assert "External approval never reuses unsolicited evidence" in readme
+    assert "delayed review of an older head" in readme
+    assert "no direct or other\nintegration-triggered Codex review can overlap YAGA" in readme
+    assert "trusted successful status\nlineage for every older YAGA request" in readme
+    assert "More than eight older YAGA\nrequest boundaries also fail closed" in readme
+    assert "must not enable this beta action" in readme
     assert "directly posting `@codex review`" in readme
+    assert "temporal correlation, not a native provider binding" in readme
+    assert "initial reaction-only success is accepted" not in security.casefold()
 
 
 def test_docs_explain_the_delayed_invalidator_close_boundary() -> None:
@@ -380,7 +414,7 @@ def test_docs_explain_the_delayed_invalidator_close_boundary() -> None:
     assert "skips a PR that is\nalready closed" in readme
     assert re.search(r"race an already-running\s+worker's final live read", readme)
     assert "does not\nguarantee zero post-close writes" in readme
-    assert "Treat this as a bounded residual" in contributing
+    assert re.search(r"Treat this as a\s+bounded residual", contributing)
     assert "cannot guarantee zero post-close writes" in security
 
 

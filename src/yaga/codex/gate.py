@@ -15,11 +15,12 @@ from yaga.codex.boundary import (
 )
 from yaga.codex.candidate import LiveCandidate, load_live_candidate
 from yaga.codex.constants import (
-    AUTOMATIC_REACTION_ACTIONS,
     CI_FAILURE_DESCRIPTION,
     CI_STATUS_CONTEXT,
     CODEX_STATUS_CONTEXT,
     ERROR_WRITE_REQUEST_RESERVE,
+    GITHUB_ACTIONS_LOGIN,
+    GITHUB_ACTIONS_USER_ID,
     LIFECYCLE_STATUS_SLOT_RESERVE,
     POLL_INTERVAL_SECONDS,
     POLL_ITERATION_REQUEST_RESERVE,
@@ -44,6 +45,7 @@ from yaga.codex.publication import (
     publish_pending,
     publish_terminal,
     restore_pending_after_race,
+    status_history,
     terminal_has_pending_lineage,
     terminal_is_current,
     uniquely_owned,
@@ -69,6 +71,14 @@ class GateResult:
     message: str
     exit_code: int
     route: str = "skip"
+
+
+class _RequestAlreadyCoveredError(Exception):
+    """Stop the one request POST when its exact marker appears at the last read."""
+
+
+class _UnsolicitedCodexActivityError(Exception):
+    """Stop the request POST when connector activity lacks a YAGA request."""
 
 
 def invalidate(
@@ -292,15 +302,17 @@ def _current_outcome(
     candidate: LiveCandidate,
     reaction_request: RequestComment | None = None,
 ) -> CodexOutcome | None:
-    reaction_not_before = _reaction_not_before(candidate, reaction_request)
+    evidence_not_before = _evidence_not_before(candidate, reaction_request)
+    if evidence_not_before is None:
+        return None
     try:
         return select_codex_outcome(
             api,
             repository=repository,
             pull_request=candidate.pull_request,
-            not_before=candidate.boundary.occurred_at,
-            allow_clean_reaction=reaction_not_before is not None,
-            clean_reaction_not_before=reaction_not_before,
+            not_before=evidence_not_before,
+            allow_clean_reaction=True,
+            clean_reaction_not_before=evidence_not_before + timedelta(seconds=1),
         )
     except CodexReviewRequiredError:
         return None
@@ -316,47 +328,140 @@ def _outcome_capability_is_current(
 ) -> bool:
     if outcome is None:
         return False
-    reaction_not_before = _reaction_not_before(candidate, reaction_request)
+    evidence_not_before = _evidence_not_before(candidate, reaction_request)
+    if evidence_not_before is None:
+        return False
     return validate_codex_outcome(
         api,
         repository=repository,
         pull_request=candidate.pull_request,
-        not_before=candidate.boundary.occurred_at,
-        allow_clean_reaction=reaction_not_before is not None,
+        not_before=evidence_not_before,
+        allow_clean_reaction=True,
         outcome=outcome,
-        clean_reaction_not_before=reaction_not_before,
+        clean_reaction_not_before=evidence_not_before + timedelta(seconds=1),
     )
 
 
-def _reaction_not_before(
+def _evidence_not_before(
     candidate: LiveCandidate,
     request: RequestComment | None,
 ) -> datetime | None:
-    if candidate.boundary.action in AUTOMATIC_REACTION_ACTIONS:
-        return candidate.boundary.occurred_at
     if request is None or request.kind != "request" or request.created_at is None:
         return None
-    # GitHub evidence timestamps have one-second resolution. For post-open
-    # requests, equality cannot prove that the reaction followed the request.
-    return max(candidate.boundary.occurred_at, request.created_at + timedelta(seconds=1))
+    return max(candidate.boundary.occurred_at, request.created_at)
 
 
-def _reaction_request_is_current(
+def _request_capability_is_current(
     api: RestApi,
     *,
     key: RequestKey | None,
-    candidate: LiveCandidate,
-    outcome: CodexOutcome | None,
     request: RequestComment | None,
 ) -> bool:
-    if outcome is None or outcome.kind != "clean automatic reaction":
-        return True
-    if candidate.boundary.action in AUTOMATIC_REACTION_ACTIONS:
-        return True
-    return _authorization_capability_is_current(
+    if key is None or request is None or request.kind != "request":
+        return False
+    try:
+        return validate_authorization(api, key=key, comment=request)
+    except GateError:
+        return False
+
+
+def _unsolicited_activity_is_visible(
+    api: RestApi,
+    *,
+    repository: str,
+    candidate: LiveCandidate,
+) -> bool:
+    """Detect current-bound connector activity without trusting it as evidence."""
+    boundary = candidate.boundary.occurred_at
+    if has_codex_pending_reaction(
         api,
-        key=key,
-        authorization=request,
+        repository=repository,
+        pull_request=candidate.pull_request,
+        not_before=boundary,
+    ):
+        return True
+    try:
+        select_codex_outcome(
+            api,
+            repository=repository,
+            pull_request=candidate.pull_request,
+            # Outcome selectors use a strict comparison. Include evidence in
+            # the boundary second because its ordering is ambiguous and must
+            # suppress a duplicate request.
+            not_before=boundary - timedelta(seconds=1),
+            allow_clean_reaction=True,
+            clean_reaction_not_before=boundary,
+        )
+    except CodexReviewRequiredError:
+        return False
+    return True
+
+
+def _prior_requests_are_settled(
+    api: RestApi,
+    *,
+    repository: str,
+    requests: tuple[RequestComment, ...],
+) -> bool:
+    """Require trusted successful lineage for every older YAGA request."""
+    for request in requests:
+        created_at = request.created_at
+        if created_at is None:
+            raise GateError("prior Codex request timestamp is missing")
+        history = status_history(
+            api,
+            repository=repository,
+            head_sha=request.key.head_sha,
+            context=CODEX_STATUS_CONTEXT,
+        )
+        settled = False
+        for index, terminal in enumerate(history[:-1]):
+            predecessor = history[index + 1]
+            parsed = parse_boundary_description(terminal, head_sha=request.key.head_sha)
+            if parsed is None or parsed[1] != "Codex passed":
+                continue
+            boundary = parsed[0]
+            actions_owned = (
+                terminal.context == CODEX_STATUS_CONTEXT
+                and predecessor.context == CODEX_STATUS_CONTEXT
+                and terminal.creator_id == GITHUB_ACTIONS_USER_ID
+                and terminal.creator_login == GITHUB_ACTIONS_LOGIN
+                and predecessor.creator_id == GITHUB_ACTIONS_USER_ID
+                and predecessor.creator_login == GITHUB_ACTIONS_LOGIN
+            )
+            if (
+                terminal.state == "success"
+                and terminal.created_at > created_at
+                and terminal.target_url is not None
+                and boundary.run_id == request.key.boundary_run_id
+                and boundary.pull_request_number == request.key.pull_request_number
+                and boundary.head_sha == request.key.head_sha
+                and boundary.base_sha == request.key.base_sha
+                and actions_owned
+                and predecessor.state == "pending"
+                and predecessor.target_url == terminal.target_url
+                and predecessor.description == boundary_description(boundary, "Codex pending")
+            ):
+                settled = True
+                break
+        if not settled:
+            return False
+    return True
+
+
+def _request_history_is_settled(
+    api: RestApi,
+    *,
+    repository: str,
+    key: RequestKey | None,
+) -> bool:
+    """Re-read the current key and reject newly visible unsettled requests."""
+    if key is None:
+        return False
+    return _prior_requests_are_settled(
+        api,
+        repository=repository,
+        requests=find_authorization(api, key=key).prior_requests,
     )
 
 
@@ -369,6 +474,23 @@ def _authorization_capability_is_current(
     if authorization is None:
         return True
     return key is not None and validate_authorization(api, key=key, comment=authorization)
+
+
+def _request_follows_authorization(
+    request: RequestComment | None,
+    authorization: RequestComment | None,
+) -> bool:
+    """Require an external request to be strictly later than its approval."""
+    if authorization is None:
+        return True
+    return bool(
+        authorization.kind == "approval"
+        and authorization.created_at is not None
+        and request is not None
+        and request.kind == "request"
+        and request.created_at is not None
+        and request.created_at > authorization.created_at
+    )
 
 
 def _codex_status_capability_is_current(
@@ -412,7 +534,7 @@ def _settle_codex(
     request_key: RequestKey | None = None,
 ) -> bool:
     if success:
-        if outcome is None or (authorization is not None and request_key is None):
+        if outcome is None or request_key is None:
             raise GateError("Codex success capabilities are incomplete")
         require_success_tail(
             api,
@@ -437,17 +559,21 @@ def _settle_codex(
             outcome=outcome,
             reaction_request=reaction_request,
         )
-        or not _reaction_request_is_current(
+        or not _request_capability_is_current(
             api,
             key=request_key,
-            candidate=candidate,
-            outcome=outcome,
             request=reaction_request,
         )
         or not _authorization_capability_is_current(
             api,
             key=request_key,
             authorization=authorization,
+        )
+        or not _request_follows_authorization(reaction_request, authorization)
+        or not _request_history_is_settled(
+            api,
+            repository=repository,
+            key=request_key,
         )
     ):
         return False
@@ -500,17 +626,21 @@ def _settle_codex(
                 outcome=outcome,
                 reaction_request=reaction_request,
             )
-            or not _reaction_request_is_current(
+            or not _request_capability_is_current(
                 api,
                 key=request_key,
-                candidate=candidate,
-                outcome=outcome,
                 request=reaction_request,
             )
             or not _authorization_capability_is_current(
                 api,
                 key=request_key,
                 authorization=authorization,
+            )
+            or not _request_follows_authorization(reaction_request, authorization)
+            or not _request_history_is_settled(
+                api,
+                repository=repository,
+                key=request_key,
             )
         ):
             restore_pending_after_race(
@@ -561,11 +691,7 @@ def _settle_ci(
     request_key: RequestKey | None = None,
 ) -> bool:
     if success:
-        if (
-            codex_status is None
-            or outcome is None
-            or (authorization is not None and request_key is None)
-        ):
+        if codex_status is None or outcome is None or request_key is None:
             raise GateError("CI success capabilities are incomplete")
         require_success_tail(
             api,
@@ -611,17 +737,21 @@ def _settle_ci(
             outcome=outcome,
             reaction_request=reaction_request,
         )
-        or not _reaction_request_is_current(
+        or not _request_capability_is_current(
             api,
             key=request_key,
-            candidate=candidate,
-            outcome=outcome,
             request=reaction_request,
         )
         or not _authorization_capability_is_current(
             api,
             key=request_key,
             authorization=authorization,
+        )
+        or not _request_follows_authorization(reaction_request, authorization)
+        or not _request_history_is_settled(
+            api,
+            repository=repository,
+            key=request_key,
         )
     ):
         return False
@@ -680,17 +810,21 @@ def _settle_ci(
                 outcome=outcome,
                 reaction_request=reaction_request,
             )
-            or not _reaction_request_is_current(
+            or not _request_capability_is_current(
                 api,
                 key=request_key,
-                candidate=candidate,
-                outcome=outcome,
                 request=reaction_request,
             )
             or not _authorization_capability_is_current(
                 api,
                 key=request_key,
                 authorization=authorization,
+            )
+            or not _request_follows_authorization(reaction_request, authorization)
+            or not _request_history_is_settled(
+                api,
+                repository=repository,
+                key=request_key,
             )
         ):
             restore_pending_after_race(
@@ -823,6 +957,55 @@ def prepare(
     owner_authored = candidate.author_id == direct_author_id
     authorization = None if owner_authored else authorizations.approval
     reaction_request = authorizations.request
+    reaction_history_is_settled = _prior_requests_are_settled(
+        api,
+        repository=repository,
+        requests=authorizations.prior_requests,
+    )
+
+    def fail_closed(message: str) -> GateResult:
+        _settle_codex(
+            api,
+            repository=repository,
+            source=source,
+            candidate=candidate,
+            lifecycle_workflow=lifecycle_workflow,
+            server_url=server_url,
+            lease=lease,
+            success=False,
+        )
+        _settle_ci(
+            api,
+            repository=repository,
+            source=source,
+            candidate=candidate,
+            lifecycle_workflow=lifecycle_workflow,
+            server_url=server_url,
+            target_url=target_url,
+            success=False,
+        )
+        return GateResult(message, 1)
+
+    if not reaction_history_is_settled:
+        return fail_closed(
+            "Codex Review blocked because an earlier YAGA request has no trusted success; "
+            "open a fresh PR"
+        )
+    if reaction_request is None and _unsolicited_activity_is_visible(
+        api,
+        repository=repository,
+        candidate=candidate,
+    ):
+        return fail_closed(
+            "Codex Review blocked because connector activity has no exact YAGA request"
+        )
+    if reaction_request is not None and not _request_follows_authorization(
+        reaction_request,
+        authorization,
+    ):
+        return fail_closed(
+            "Codex Review blocked because its request does not follow protected approval"
+        )
     outcome = _current_outcome(
         api,
         repository=repository,
@@ -847,25 +1030,19 @@ def prepare(
             return GateResult("success: Codex already reviewed the exact head", 0, "done")
         return GateResult("skipped: candidate changed while publishing success", 0)
 
-    pending_not_before = _reaction_not_before(candidate, reaction_request)
-    pending = bool(
-        pending_not_before is not None
-        and has_codex_pending_reaction(
-            api,
-            repository=repository,
-            pull_request=candidate.pull_request,
-            not_before=pending_not_before,
-        )
-    )
-    if owner_authored and (authorizations.request is not None or pending):
+    if owner_authored and reaction_request is not None:
         return GateResult("pending: Codex review is already in flight", 0, "observe")
     if not owner_authored and authorizations.approval is None:
+        if reaction_request is not None:
+            return fail_closed(
+                "Codex Review blocked because the exact YAGA request lacks protected approval"
+            )
         return GateResult(
             "pending: maintainer approval is required before requesting Codex",
             0,
             "external",
         )
-    if not owner_authored and (authorizations.request is not None or pending):
+    if not owner_authored and reaction_request is not None:
         return GateResult("pending: Codex review is already in flight", 0, "observe")
     route = "owner" if owner_authored else "approved"
     return GateResult("pending: a bounded Codex review request is needed", 0, route)
@@ -970,32 +1147,73 @@ def review(
     )
     authorization = None if owner_authored else authorizations.approval
     reaction_request = authorizations.request
+    reaction_history_is_settled = _prior_requests_are_settled(
+        api,
+        repository=repository,
+        requests=authorizations.prior_requests,
+    )
     if not owner_authored and authorization is None:
         raise GateError("external Codex review request lacks protected approval")
-    if allow_request:
-        pending_not_before = _reaction_not_before(candidate, reaction_request)
-        pending = bool(
-            pending_not_before is not None
-            and has_codex_pending_reaction(
-                api,
-                repository=repository,
-                pull_request=candidate.pull_request,
-                not_before=pending_not_before,
-            )
-        )
-        outcome = _current_outcome(
+    if not reaction_history_is_settled:
+        _settle_codex(
             api,
             repository=repository,
+            source=source,
             candidate=candidate,
-            reaction_request=reaction_request,
+            lifecycle_workflow=lifecycle_workflow,
+            server_url=server_url,
+            lease=lease,
+            success=False,
         )
-        # External authors require the separate marker created only after the
-        # protected environment job. An unsolicited direct comment or automatic
-        # review is not sufficient authority.
-        requested_kind: str | None = None
-        if authorizations.request is None and not pending and outcome is None:
-            requested_kind = "request"
-        if requested_kind is not None:
+        return GateResult(
+            "Codex Review blocked because an earlier YAGA request has no trusted success; "
+            "open a fresh PR",
+            1,
+        )
+    if reaction_request is None and _unsolicited_activity_is_visible(
+        api,
+        repository=repository,
+        candidate=candidate,
+    ):
+        _settle_codex(
+            api,
+            repository=repository,
+            source=source,
+            candidate=candidate,
+            lifecycle_workflow=lifecycle_workflow,
+            server_url=server_url,
+            lease=lease,
+            success=False,
+        )
+        return GateResult(
+            "Codex Review blocked because connector activity has no exact YAGA request",
+            1,
+        )
+    if not allow_request and reaction_request is None:
+        _settle_codex(
+            api,
+            repository=repository,
+            source=source,
+            candidate=candidate,
+            lifecycle_workflow=lifecycle_workflow,
+            server_url=server_url,
+            lease=lease,
+            success=False,
+        )
+        return GateResult("Codex Review blocked because its exact YAGA request is missing", 1)
+    if allow_request and reaction_request is None:
+        if not _revalidate(
+            api,
+            repository=repository,
+            source=source,
+            candidate=candidate,
+            lifecycle_workflow=lifecycle_workflow,
+            server_url=server_url,
+            lease=lease,
+        ):
+            return GateResult("skipped: candidate changed before Codex authorization", 0)
+
+        def request_is_still_needed() -> bool:
             if not _revalidate(
                 api,
                 repository=repository,
@@ -1005,23 +1223,84 @@ def review(
                 server_url=server_url,
                 lease=lease,
             ):
-                return GateResult("skipped: candidate changed before Codex authorization", 0)
-            created = ensure_authorization(
+                return False
+            latest_authorizations = find_authorization(api, key=key)
+            if not _prior_requests_are_settled(
+                api,
+                repository=repository,
+                requests=latest_authorizations.prior_requests,
+            ):
+                return False
+            if not owner_authored:
+                latest_approval = latest_authorizations.approval
+                if latest_approval is None or not _authorization_capability_is_current(
+                    api,
+                    key=key,
+                    authorization=latest_approval,
+                ):
+                    return False
+            if latest_authorizations.request is not None:
+                raise _RequestAlreadyCoveredError
+            if _unsolicited_activity_is_visible(
+                api,
+                repository=repository,
+                candidate=candidate,
+            ):
+                raise _UnsolicitedCodexActivityError
+            return True
+
+        try:
+            reaction_request = ensure_authorization(
                 api,
                 key=key,
-                kind=requested_kind,
-                before_post=lambda: _revalidate(
-                    api,
-                    repository=repository,
-                    source=source,
-                    candidate=candidate,
-                    lifecycle_workflow=lifecycle_workflow,
-                    server_url=server_url,
-                    lease=lease,
-                ),
+                kind="request",
+                before_post=request_is_still_needed,
             )
-            if created.kind == "request":
-                reaction_request = created
+        except _RequestAlreadyCoveredError:
+            reaction_request = find_authorization(api, key=key).request
+        except _UnsolicitedCodexActivityError:
+            _settle_codex(
+                api,
+                repository=repository,
+                source=source,
+                candidate=candidate,
+                lifecycle_workflow=lifecycle_workflow,
+                server_url=server_url,
+                lease=lease,
+                success=False,
+            )
+            return GateResult(
+                "Codex Review blocked because connector activity appeared before its request",
+                1,
+            )
+
+    if reaction_request is None:
+        _settle_codex(
+            api,
+            repository=repository,
+            source=source,
+            candidate=candidate,
+            lifecycle_workflow=lifecycle_workflow,
+            server_url=server_url,
+            lease=lease,
+            success=False,
+        )
+        return GateResult("Codex Review blocked because its exact YAGA request disappeared", 1)
+    if not _request_follows_authorization(reaction_request, authorization):
+        _settle_codex(
+            api,
+            repository=repository,
+            source=source,
+            candidate=candidate,
+            lifecycle_workflow=lifecycle_workflow,
+            server_url=server_url,
+            lease=lease,
+            success=False,
+        )
+        return GateResult(
+            "Codex Review blocked because its request does not follow protected approval",
+            1,
+        )
 
     while True:
         try:
@@ -1146,6 +1425,11 @@ def finalize(
     authorizations = find_authorization(api, key=key)
     authorization = None if owner_authored else authorizations.approval
     reaction_request = authorizations.request
+    reaction_history_is_settled = _prior_requests_are_settled(
+        api,
+        repository=repository,
+        requests=authorizations.prior_requests,
+    )
     outcome = (
         _current_outcome(
             api,
@@ -1156,6 +1440,9 @@ def finalize(
         if source.conclusion == "success"
         and codex is not None
         and codex.state == "success"
+        and reaction_request is not None
+        and _request_follows_authorization(reaction_request, authorization)
+        and reaction_history_is_settled
         and parsed is not None
         and parsed[1] == "Codex passed"
         and same_boundary(parsed[0], candidate.boundary)
@@ -1167,6 +1454,9 @@ def finalize(
         source.conclusion == "success"
         and codex is not None
         and codex.state == "success"
+        and reaction_request is not None
+        and _request_follows_authorization(reaction_request, authorization)
+        and reaction_history_is_settled
         and parsed is not None
         and parsed[1] == "Codex passed"
         and same_boundary(parsed[0], candidate.boundary)

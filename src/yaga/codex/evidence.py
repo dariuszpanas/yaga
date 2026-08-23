@@ -249,8 +249,7 @@ def _exact_head_outcomes(
             if content != "+1":
                 continue
             created_at = timestamp(reaction.get("created_at"), "Codex review reaction creation")
-            # The caller admits initial-open reactions at the boundary. For a
-            # later YAGA request it advances this threshold by one second, so
+            # The YAGA gate advances the request threshold by one second so
             # same-second ordering ambiguity fails closed.
             if created_at >= reaction_not_before:
                 outcomes.append(
