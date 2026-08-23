@@ -1,0 +1,72 @@
+name: YAGA
+description: Publish conservative, exact-candidate GitHub status gates
+author: Dariusz Panas
+
+inputs:
+  gate:
+    description: Gate implementation to run; currently only codex-review
+    required: true
+    default: codex-review
+  mode:
+    description: >-
+      Internal orchestration phase: invalidate-boundary, repair-boundaries,
+      reconcile-boundary, resolve, reconcile-candidate, or
+      reconcile-repair-candidate.
+    required: true
+  github-token:
+    description: GitHub token with only the permissions required by the selected mode
+    required: true
+  candidate:
+    description: Exact gate candidate JSON; required for a reconcile mode
+    required: false
+    default: ""
+  observer-workflow-path:
+    description: Repository-relative path of the unprivileged event observer workflow
+    required: false
+    default: .github/workflows/review-policy-event.yml
+  request-timeout:
+    description: Per-request GitHub REST timeout in seconds, from 1 through 30
+    required: false
+    default: "15"
+  job-timeout-minutes:
+    description: >-
+      Usable YAGA window for terminal reconcile modes, from 15 through 360;
+      shipped action-only jobs set it equal to timeout-minutes
+    required: false
+    default: ""
+
+outputs:
+  candidate:
+    description: Exact candidate JSON captured for a lifecycle boundary, or an empty string
+    value: ${{ steps.gate.outputs.candidate }}
+  candidates:
+    description: Bounded candidate array emitted by resolve or repair-boundaries, else empty
+    value: ${{ steps.gate.outputs.candidates }}
+  eligible:
+    description: Whether the selected operation emitted one or more eligible candidates
+    value: ${{ steps.gate.outputs.eligible }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run YAGA
+      id: gate
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        YAGA_CANDIDATE: ${{ inputs.candidate }}
+        YAGA_GATE: ${{ inputs.gate }}
+        YAGA_JOB_TIMEOUT_MINUTES: ${{ inputs.job-timeout-minutes }}
+        YAGA_MODE: ${{ inputs.mode }}
+        YAGA_OBSERVER_WORKFLOW_PATH: ${{ inputs.observer-workflow-path }}
+        YAGA_REQUEST_TIMEOUT: ${{ inputs.request-timeout }}
+      run: |
+        set -euo pipefail
+        unset PYTHONHOME
+        export PYTHONPATH="$GITHUB_ACTION_PATH/src"
+        export PYTHONSAFEPATH=1
+        python -P -m yaga --gate "$YAGA_GATE" --mode "$YAGA_MODE"
+
+branding:
+  icon: shield
+  color: green
