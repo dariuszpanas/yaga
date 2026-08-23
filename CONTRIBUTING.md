@@ -106,7 +106,7 @@ display names in the publisher trigger synchronized with their authenticated pat
 - Bound request counts, pagination, bodies, event files, descriptions, polling, and all
   attacker-controlled strings. Never log the token or place it in arguments/outputs.
 - Reserve `Codex Review` and `CI Gate` for classic statuses. Audit all `statuses: write` and
-  `issues: write` workflows because the beta uses the shared Actions identity.
+  `pull-requests: write` workflows because the beta uses the shared Actions identity.
 
 Strict up-to-date `Review Policy Boundary`, `CI Prerequisites`, `Codex Review`, and `CI Gate`
 requirements plus required conversation resolution are consumer prerequisites. Merge queues are

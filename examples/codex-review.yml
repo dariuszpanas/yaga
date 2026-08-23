@@ -83,8 +83,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-      issues: write
-      pull-requests: read
+      pull-requests: write
       statuses: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -115,8 +114,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-      issues: write
-      pull-requests: read
+      pull-requests: write
       statuses: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -150,8 +148,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-      issues: write
-      pull-requests: read
+      pull-requests: write
       statuses: write
     runs-on: ubuntu-latest
     timeout-minutes: 15

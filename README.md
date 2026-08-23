@@ -188,9 +188,10 @@ publishes classic `CI Gate` after review succeeds.
 Merge queues are unsupported because YAGA has no `merge_group` trigger or combined-head contract.
 
 The beta writer is the shared GitHub Actions integration, not a dedicated YAGA GitHub App. Audit
-every default-branch workflow and integration with `statuses: write` or `issues: write`, reserve
-every case-insensitive `Codex Review` alias and every `CI Gate` alias, and keep repository Actions
-defaults read-only.
+every default-branch workflow and integration with `statuses: write` or `pull-requests: write`,
+reserve every case-insensitive `Codex Review` alias and every `CI Gate` alias, and keep repository
+Actions defaults read-only. The three comment-writing jobs use `pull-requests: write`; live GitHub
+Actions evidence showed that `issues: write` alone received HTTP 403 for the PR conversation route.
 A same-named Actions check cannot replace a classic status: when GitHub requires both, both must
 pass. A collision can still create ambiguity or denial of service. A dedicated App selected as the
 expected status source is future hardening.
