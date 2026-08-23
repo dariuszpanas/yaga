@@ -2,14 +2,16 @@
 set -euo pipefail
 
 test "$#" -eq 7
-test "$*" = '-P -m yaga --gate codex-review --mode resolve'
+test "$*" = '-P -m yaga --gate codex-review --operation invalidate'
 test "${GITHUB_TOKEN:-}" = not-used
 test "${PYTHONSAFEPATH:-}" = 1
 test "$(realpath -- "${PYTHONPATH:-}")" = "$(realpath -- "$GITHUB_WORKSPACE/src")"
-test -z "${YAGA_CANDIDATE:-}"
 test "${YAGA_GATE:-}" = codex-review
-test "${YAGA_MODE:-}" = resolve
-test "${YAGA_OBSERVER_WORKFLOW_PATH:-}" = .github/workflows/review-policy-event.yml
-test "${YAGA_REQUEST_TIMEOUT:-}" = 15
-
-printf 'candidate=\ncandidates=[]\neligible=false\n' >> "$GITHUB_OUTPUT"
+test "${YAGA_APPROVAL_MARKER+x}" = x
+test -z "${YAGA_APPROVAL_MARKER:-}"
+test "${YAGA_JOB_TIMEOUT_MINUTES:-}" = 15
+test "${YAGA_LIFECYCLE_WORKFLOW:-}" = .github/workflows/review-policy.yml
+test "${YAGA_OPERATION:-}" = invalidate
+test "${YAGA_OWNER_ID:-}" = 15094983
+test "${YAGA_PREREQUISITE_WORKFLOW:-}" = .github/workflows/ci.yml
+test "${YAGA_REQUEST_TIMEOUT:-}" = 5

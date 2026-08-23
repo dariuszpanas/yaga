@@ -220,18 +220,14 @@ class PagingApi(github.GitHubRestApi):
         return self.pages[len(self.paths) - 1]
 
 
-def test_rest_pagination_is_bounded_and_requests_explicit_pages() -> None:
-    api = PagingApi([[{"id": index} for index in range(100)], [{"id": 101}]])
+def test_rest_pagination_requires_one_complete_explicit_page() -> None:
+    api = PagingApi([[{"id": index} for index in range(99)]])
 
-    assert len(api.paginate("/example?state=open")) == 101
-    assert api.paths == [
-        "/example?state=open&per_page=100&page=1",
-        "/example?state=open&per_page=100&page=2",
-    ]
+    assert len(api.paginate("/example?state=open")) == 99
+    assert api.paths == ["/example?state=open&per_page=100&page=1"]
 
-    full_pages = [[{"id": index} for index in range(100)] for _ in range(10)]
     with pytest.raises(GateError, match="page limit"):
-        PagingApi(full_pages).paginate("/example")
+        PagingApi([[{"id": index} for index in range(100)]]).paginate("/example")
     with pytest.raises(GateError, match="invalid page"):
         PagingApi([{"not": "a list"}]).paginate("/example")
 

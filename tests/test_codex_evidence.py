@@ -5,16 +5,36 @@ from __future__ import annotations
 import pytest
 
 from tests.codex_support import (
+    BOUNDARY_AT,
     CONNECTOR_USER,
     HEAD,
+    PULL_REQUEST,
+    REPOSITORY,
     FakeApi,
     _clean_body,
     _clean_comment,
     _clean_footer,
     _formal_body,
-    _publish,
+    _pull_request,
+    _reaction,
+    _review,
 )
 from yaga.codex import constants, evidence
+from yaga.github import parse_pull_request
+
+
+def _check(api: FakeApi) -> str:
+    return evidence.check_codex_outcome_policy(
+        api,
+        repository=REPOSITORY,
+        pull_request=parse_pull_request(
+            _pull_request(),
+            repository=REPOSITORY,
+            expected_number=PULL_REQUEST,
+        ),
+        not_before=BOUNDARY_AT,
+        allow_clean_reaction=False,
+    )
 
 
 @pytest.mark.parametrize(
@@ -119,11 +139,10 @@ def test_clean_policy_requires_exact_connector_id_and_login(
 ) -> None:
     api = FakeApi(comments=[_clean_comment(user=user)])
     if expected:
-        assert "clean comment" in _publish(api)
-        assert [payload["state"] for _, payload in api.posts] == ["success"]
+        assert "clean comment" in _check(api)
     else:
-        assert _publish(api).startswith("pending for ")
-        assert api.posts == []
+        with pytest.raises(evidence.CodexReviewRequiredError):
+            _check(api)
 
 
 @pytest.mark.parametrize(
@@ -140,5 +159,68 @@ def test_clean_policy_requires_exact_connector_id_and_login(
 def test_clean_policy_requires_exact_connector_app(app: object) -> None:
     api = FakeApi(comments=[_clean_comment(app=app)])
 
-    assert _publish(api).startswith("pending for ")
-    assert api.posts == []
+    with pytest.raises(evidence.CodexReviewRequiredError):
+        _check(api)
+
+
+def test_selected_clean_comment_capability_detects_a_later_edit() -> None:
+    api = FakeApi(comments=[_clean_comment(comment_id=5_001)])
+    pull_request = parse_pull_request(
+        _pull_request(), repository=REPOSITORY, expected_number=PULL_REQUEST
+    )
+    outcome = evidence.select_codex_outcome(
+        api,
+        repository=REPOSITORY,
+        pull_request=pull_request,
+        not_before=BOUNDARY_AT,
+        allow_clean_reaction=False,
+    )
+    assert evidence.validate_codex_outcome(
+        api,
+        repository=REPOSITORY,
+        pull_request=pull_request,
+        not_before=BOUNDARY_AT,
+        allow_clean_reaction=False,
+        outcome=outcome,
+    )
+
+    api.comments[0]["body"] = "Codex Review: edited"
+    assert not evidence.validate_codex_outcome(
+        api,
+        repository=REPOSITORY,
+        pull_request=pull_request,
+        not_before=BOUNDARY_AT,
+        allow_clean_reaction=False,
+        outcome=outcome,
+    )
+
+
+@pytest.mark.parametrize(
+    ("api", "allow_reaction"),
+    [
+        (FakeApi(reviews=[_review(review_id=6_001)]), False),
+        (FakeApi(reactions=[_reaction(reaction_id=7_001)]), True),
+    ],
+)
+def test_formal_review_and_reaction_capabilities_revalidate_exact_resources(
+    api: FakeApi,
+    allow_reaction: bool,
+) -> None:
+    pull_request = parse_pull_request(
+        _pull_request(), repository=REPOSITORY, expected_number=PULL_REQUEST
+    )
+    outcome = evidence.select_codex_outcome(
+        api,
+        repository=REPOSITORY,
+        pull_request=pull_request,
+        not_before=BOUNDARY_AT,
+        allow_clean_reaction=allow_reaction,
+    )
+    assert evidence.validate_codex_outcome(
+        api,
+        repository=REPOSITORY,
+        pull_request=pull_request,
+        not_before=BOUNDARY_AT,
+        allow_clean_reaction=allow_reaction,
+        outcome=outcome,
+    )

@@ -2,25 +2,39 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
-from yaga.codex.constants import (
-    DEFAULT_OBSERVER_WORKFLOW_PATH,
-    MAX_OPEN_PULL_REQUESTS,
-    MAX_SCHEDULE_CANDIDATES,
-    MAX_SCHEDULE_RECONCILE_REQUESTS,
-    SCHEDULE_INTERVAL_MINUTES,
-    SOURCE_TITLE_KEYS,
-)
-
 ROOT = Path(__file__).parents[1]
 FULL_SHA = re.compile(r"dariuszpanas/yaga@([0-9a-f]{40})(?:\s|$)")
+RESERVED_STATUS_NAMES = {"codex review", "ci gate"}
 
 
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def section_keys(document: str, section: str, *, indent: int = 0) -> set[str]:
+    """Return literal mapping keys immediately below a simple YAML section."""
+    prefix = " " * indent
+    lines = document.splitlines()
+    marker = f"{prefix}{section}:"
+    try:
+        start = lines.index(marker) + 1
+    except ValueError as error:
+        raise AssertionError(section) from error
+    child_prefix = " " * (indent + 2)
+    keys: set[str] = set()
+    for line in lines[start:]:
+        if line.strip() and len(line) - len(line.lstrip()) <= indent:
+            break
+        match = re.fullmatch(
+            rf"{re.escape(child_prefix)}([a-z][a-z0-9_-]*):.*",
+            line,
+        )
+        if match is not None:
+            keys.add(match.group(1))
+    return keys
 
 
 def normalized_literal_name(line: str) -> str | None:
@@ -36,7 +50,7 @@ def normalized_literal_name(line: str) -> str | None:
 
 def workflow_job(workflow: str, job: str) -> str:
     match = re.search(
-        rf"^  {re.escape(job)}:\n(?P<body>.*?)(?=^  [a-z][a-z-]*:\n|\Z)",
+        rf"^  {re.escape(job)}:\n(?P<body>.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)",
         workflow,
         re.MULTILINE | re.DOTALL,
     )
@@ -44,155 +58,333 @@ def workflow_job(workflow: str, job: str) -> str:
     return match.group("body")
 
 
-def test_action_keeps_the_status_identity_inside_the_gate_adapter() -> None:
+def test_action_has_one_closed_direct_publisher_interface() -> None:
     action = read("action.yml")
+    smoke = read("scripts/composite_smoke_python")
 
-    assert "status-context:" not in action
-    assert "CODEX_REVIEW_STATUS_CONTEXT" not in action
-    assert "YAGA_CANDIDATE" in action
-    assert "YAGA_OBSERVER_WORKFLOW_PATH" in action
-    assert "publisher-workflow-path" not in action
-    assert "YAGA_PUBLISHER_WORKFLOW_PATH" not in action
+    assert section_keys(action, "inputs") == {
+        "gate",
+        "approval-marker",
+        "github-token",
+        "job-timeout-minutes",
+        "lifecycle-workflow",
+        "operation",
+        "owner-id",
+        "prerequisite-workflow",
+        "request-timeout",
+    }
+    assert section_keys(action, "outputs") == {"pull_request_number", "route"}
+    for legacy in (
+        "mode:",
+        "candidate:",
+        "observer-workflow-path:",
+        "poll-interval:",
+        "poll-timeout:",
+        "status-context:",
+    ):
+        assert legacy not in action
 
-
-def test_observer_is_read_only_and_records_close_without_codex_publication() -> None:
-    observer = read("examples/review-policy-event.yml")
-
-    assert "permissions: {}" in observer
-    assert "contents: read" not in observer
-    assert "statuses: write" not in observer
-    assert "actions/checkout" not in observer
-    assert "upload-artifact" not in observer
-    assert "closed" in observer
-
-
-def test_observer_schema_and_publisher_references_are_one_protocol() -> None:
-    observer = read("examples/review-policy-event.yml")
-    publisher = read("examples/codex-review.yml")
-    action = read("action.yml")
-
-    assert observer.startswith("name: Review Policy Event\n")
-    assert set(re.findall(r'"([a-z_]+)":', observer)) == SOURCE_TITLE_KEYS
-    assert (
-        "  pull_request_target:\n"
-        "    types: [opened, synchronize, reopened, edited, ready_for_review, "
-        "converted_to_draft, closed]\n"
-    ) in observer
-    assert "  pull_request_review:\n    types: [submitted, edited, dismissed]\n" in observer
-    assert "workflows: [Review Policy Event]" in publisher
-    assert (
-        publisher.count(f"github.event.workflow_run.path == '{DEFAULT_OBSERVER_WORKFLOW_PATH}'")
-        == 2
-    )
-    assert publisher.count(f"observer-workflow-path: {DEFAULT_OBSERVER_WORKFLOW_PATH}") == 6
-    assert f"default: {DEFAULT_OBSERVER_WORKFLOW_PATH}" in action
-    assert observer.index('  "action":"${{ github.event.action }}",') < observer.index(
-        '  "base_ref":${{ toJSON(github.event.pull_request.base.ref) }},'
-    )
-
-
-def test_closed_guard_survives_truncation_and_escaped_base_ref_spoofing() -> None:
-    token = '"action":"closed"'
-    closed_title = json.dumps(
-        {"v": 1, "action": "closed", "base_ref": "x" * 255},
-        separators=(",", ":"),
-    )
-    spoofed_title = json.dumps(
-        {"v": 1, "action": "opened", "base_ref": token + "x" * 255},
-        separators=(",", ":"),
-    )
-
-    assert token in closed_title[:64]
-    assert token not in spoofed_title
-    assert token not in spoofed_title[:64]
-
-
-def test_readme_requires_strict_currency_and_documents_reaction_limitations() -> None:
-    readme = read("README.md")
-
-    assert "requires `Codex Review` to be an up-to-date/strict required status" in readme
-    assert "it is not a substitute for strict branch" in readme
-    assert "draft-to-ready review that produces only a `+1` reaction stays" in readme
-    assert "also treats it as a defensive runtime no-op" in readme
-    assert "A `converted_to_draft` transition instead persists pending" in readme
-    assert "required conversation resolution is a v1 deployment prerequisite" in readme
-
-
-def test_publisher_executes_only_pinned_yaga_code() -> None:
-    publisher = read("examples/codex-review.yml")
-    references = FULL_SHA.findall(publisher)
-
-    assert references
-    assert set(references) == {"0" * 40}
-    assert "pull_request_target:" not in publisher
-    assert "actions/checkout" not in publisher
-    assert "checks: write" not in publisher
-    assert "statuses: write" in publisher
-    assert "queue:" not in publisher
-    assert '!contains(github.event.workflow_run.display_title, \'"action":"closed"\')' in publisher
-    assert (
-        publisher.count(
-            "    concurrency:\n"
-            "      group: yaga-codex-review-${{ github.event.workflow_run.head_sha }}\n"
-        )
-        == 1
-    )
-    assert (
-        publisher.count(
-            "    concurrency:\n      group: yaga-codex-review-${{ matrix.candidate.head }}\n"
-        )
-        == 2
-    )
-    assert (
-        "    concurrency:\n      group: yaga-codex-review-repair-${{ github.repository }}\n"
-    ) in publisher
-
-
-def test_terminal_jobs_pin_the_declared_window_and_run_only_yaga() -> None:
-    publisher = read("examples/codex-review.yml")
-    action = read("action.yml")
-
-    assert "job-timeout-minutes:" in action
+    assert "YAGA_GATE" in action
+    assert "YAGA_APPROVAL_MARKER" in action
+    assert "YAGA_OPERATION" in action
     assert "YAGA_JOB_TIMEOUT_MINUTES" in action
-    for job in ("lifecycle", "reconcile", "reconcile-repair"):
-        block = workflow_job(publisher, job)
-        assert len(re.findall(r"^    timeout-minutes: 15$", block, re.MULTILINE)) == 1
-        assert len(re.findall(r"^          job-timeout-minutes: 15$", block, re.MULTILINE)) == 1
-        assert block.count("\n      - uses: dariuszpanas/yaga@") == 1
-        assert "\n      - name:" not in block
+    assert "YAGA_REQUEST_TIMEOUT" in action
+    assert "YAGA_MODE" not in action
+    assert "YAGA_CANDIDATE" not in action
+    assert "YAGA_OBSERVER" not in action
+    assert 'python -P -m yaga --gate "$YAGA_GATE" --operation "$YAGA_OPERATION"' in action
+    assert 'test "${YAGA_REQUEST_TIMEOUT:-}" = 5' in smoke
+    assert 'test -z "${YAGA_APPROVAL_MARKER:-}"' in smoke
+
+    owner = re.search(
+        r"^  owner-id:\n(?P<body>.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)",
+        action,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert owner is not None
+    assert "required: true" in owner.group("body")
+    assert "default:" not in owner.group("body")
 
 
-def test_scheduled_repair_stays_below_the_public_repository_rate_limit() -> None:
-    # One repair pass reads repository + open-PR state, scans history/status,
-    # revalidates the default once, then re-reads and writes every unsafe PR.
-    repair_requests = 3 + 4 * MAX_OPEN_PULL_REQUESTS
-    terminal_requests = MAX_SCHEDULE_CANDIDATES * MAX_SCHEDULE_RECONCILE_REQUESTS
-    passes_per_hour = 60 // SCHEDULE_INTERVAL_MINUTES
-    scheduled_requests_per_hour = passes_per_hour * (repair_requests + terminal_requests)
+def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:
+    ci = read(".github/workflows/ci.yml")
+    readme = read("README.md")
+    contributing = read("CONTRIBUTING.md")
 
-    assert repair_requests == 163
-    assert scheduled_requests_per_hour == 710
-    assert scheduled_requests_per_hour <= 800
+    assert "pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]" in ci
+    assert "github.event_name == 'pull_request'" in ci
+    assert "github.event.action" in ci
+    assert "github.event.pull_request.number" in ci
+    assert "github.event.pull_request.base.sha" in ci
+    assert "YAGA CI {0} for #{1} at base {2}" in ci
+    assert "name: CI Prerequisites" in workflow_job(ci, "gate")
+    assert "name: CI Gate" not in ci
+    for document in (readme, contributing):
+        assert "YAGA CI <action> for #<pull-request> at base <full-base-SHA>" in document
+        assert "ready_for_review" in document
 
 
-def test_v1_requires_strict_status_and_rejects_merge_queue_claims() -> None:
+def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> None:
+    lifecycle = read("examples/review-policy.yml")
+    publisher = read("examples/codex-review.yml")
+
+    assert {path.name for path in (ROOT / "examples").glob("*.yml")} == {
+        "codex-review.yml",
+        "review-policy.yml",
+    }
+    assert lifecycle.startswith("name: YAGA Review Policy\n")
+    assert "github.event.action == 'edited' && github.event.changes.base == null" in lifecycle
+    assert "YAGA metadata edit for #{0}" in lifecycle
+    assert "YAGA {0} boundary for #{1}" in lifecycle
+    assert section_keys(lifecycle, "jobs") == {"invalidate"}
+    invalidator = workflow_job(lifecycle, "invalidate")
+    assert "'Review Policy Metadata' || 'Review Policy Boundary'" in invalidator
+    assert "github.event.action == 'edited' && github.event.changes.base == null" in invalidator
+    assert "pull_request_target:" in lifecycle
+    assert "branches: [main]" in lifecycle
+    assert (
+        "types: [opened, synchronize, reopened, edited, ready_for_review, converted_to_draft]"
+    ) in lifecycle
+    for unsupported in (
+        "workflow_run:",
+        "issue_comment:",
+        "pull_request_review:",
+        "schedule:",
+        "workflow_dispatch:",
+        "merge_group:",
+        "closed",
+    ):
+        assert unsupported not in lifecycle
+
+    assert publisher.startswith("name: YAGA Codex Review Publisher\n")
+    assert section_keys(publisher, "jobs") == {
+        "prepare",
+        "observe",
+        "request-owner",
+        "authorize-external",
+        "request-external",
+        "finalize",
+    }
+    assert "workflow_run:" in publisher
+    assert 'workflows: [CI, "YAGA Review Policy"]' in publisher
+    assert "format('YAGA review wake from {0} run #{1}'" in publisher
+    assert "types: [completed]" in publisher
+    assert "branches-ignore: [main]" in publisher
+    for unsupported in (
+        "pull_request_target:",
+        "issue_comment:",
+        "pull_request_review:",
+        "schedule:",
+        "workflow_dispatch:",
+        "merge_group:",
+    ):
+        assert unsupported not in publisher
+
+    combined = lifecycle + publisher
+    assert "toJSON(" not in combined
+    assert "fromJSON(" not in combined
+    assert '"action"' not in combined
+    assert not (ROOT / "examples" / "review-policy-event.yml").exists()
+
+
+def test_examples_have_closed_routing_and_literal_external_approval() -> None:
+    publisher = read("examples/codex-review.yml")
+    prepare = workflow_job(publisher, "prepare")
+    observe = workflow_job(publisher, "observe")
+    owner = workflow_job(publisher, "request-owner")
+    authorization = workflow_job(publisher, "authorize-external")
+    external = workflow_job(publisher, "request-external")
+    finalize = workflow_job(publisher, "finalize")
+
+    assert "github.event.workflow_run.event == 'pull_request' ||" in prepare
+    assert "github.event.workflow_run.event == 'pull_request_target'" in prepare
+    assert "route: ${{ steps.prepare.outputs.route }}" in prepare
+    assert "pull_request_number: ${{ steps.prepare.outputs.pull_request_number }}" in prepare
+    assert "if: needs.prepare.outputs.route == 'observe'" in observe
+    assert "if: needs.prepare.outputs.route == 'owner'" in owner
+    assert "if: needs.prepare.outputs.route == 'external'" in authorization
+    assert "needs.prepare.outputs.route == 'approved'" in external
+    assert "needs.authorize-external.result == 'success'" in external
+    assert "environment:" not in owner
+    assert (
+        "environment:\n      name: codex-review-approval\n      deployment: false" in authorization
+    )
+    assert "environment:" not in external
+    assert "operation: authorize" in authorization
+    assert "approval-marker: ${{ vars.YAGA_CODEX_APPROVAL_MARKER }}" in authorization
+    assert (
+        "needs: [prepare, observe, request-owner, authorize-external, request-external]" in finalize
+    )
+    assert "always()" in finalize
+    assert "needs.prepare.result == 'success'" in finalize
+    assert "needs.prepare.outputs.route != 'skip'" in finalize
+
+
+def test_example_jobs_have_exact_least_privilege_permissions() -> None:
+    lifecycle = read("examples/review-policy.yml")
+    publisher = read("examples/codex-review.yml")
+    invalidate = workflow_job(lifecycle, "invalidate")
+    prepare = workflow_job(publisher, "prepare")
+    observe = workflow_job(publisher, "observe")
+    owner = workflow_job(publisher, "request-owner")
+    authorization = workflow_job(publisher, "authorize-external")
+    external = workflow_job(publisher, "request-external")
+    finalize = workflow_job(publisher, "finalize")
+
+    assert "permissions: {}" in lifecycle
+    assert "permissions: {}" in publisher
+    assert section_keys(invalidate, "permissions", indent=4) == {
+        "actions",
+        "contents",
+        "pull-requests",
+        "statuses",
+    }
+    for job in (prepare, observe, finalize):
+        assert section_keys(job, "permissions", indent=4) == {
+            "actions",
+            "contents",
+            "issues",
+            "pull-requests",
+            "statuses",
+        }
+        assert "issues: read" in job
+    for job in (owner, external):
+        assert section_keys(job, "permissions", indent=4) == {
+            "actions",
+            "contents",
+            "issues",
+            "pull-requests",
+            "statuses",
+        }
+        assert "issues: write" in job
+    assert section_keys(authorization, "permissions", indent=4) == {
+        "actions",
+        "contents",
+        "issues",
+        "pull-requests",
+        "statuses",
+    }
+    assert "issues: write" in authorization
+    assert "statuses: read" in authorization
+
+    for workflow in (lifecycle, publisher):
+        assert "checks:" not in workflow
+        assert "contents: write" not in workflow
+        assert "pull-requests: write" not in workflow
+
+
+def test_example_jobs_execute_only_pinned_closed_operations() -> None:
+    lifecycle = read("examples/review-policy.yml")
+    publisher = read("examples/codex-review.yml")
+    jobs = {
+        "invalidate": (workflow_job(lifecycle, "invalidate"), "invalidate"),
+        "prepare": (workflow_job(publisher, "prepare"), "prepare"),
+        "observe": (workflow_job(publisher, "observe"), "observe"),
+        "request-owner": (workflow_job(publisher, "request-owner"), "request"),
+        "authorize-external": (workflow_job(publisher, "authorize-external"), "authorize"),
+        "request-external": (workflow_job(publisher, "request-external"), "request"),
+        "finalize": (workflow_job(publisher, "finalize"), "finalize"),
+    }
+
+    for job, operation in jobs.values():
+        assert FULL_SHA.findall(job) == ["0" * 40]
+        assert len(re.findall(r"^      - name:", job, re.MULTILINE)) == 1
+        assert job.count("\n        uses: dariuszpanas/yaga@") == 1
+        assert f"operation: {operation}" in job
+        assert "prerequisite-workflow: .github/workflows/ci.yml" in job
+        assert "lifecycle-workflow: .github/workflows/review-policy.yml" in job
+        assert "owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }}" in job
+        assert "\n        run:" not in job
+        assert "actions/checkout" not in job
+        assert "upload-artifact" not in job
+        assert "download-artifact" not in job
+        assert "cache" not in job.casefold()
+        assert len(re.findall(r"^    timeout-minutes: 15$", job, re.MULTILINE)) == 1
+        assert len(re.findall(r"^          job-timeout-minutes: 15$", job, re.MULTILINE)) == 1
+        assert "mode:" not in job
+        assert "candidate:" not in job
+
+
+def test_examples_serialize_exact_boundaries_without_post_close_or_main_push_wakes() -> None:
+    lifecycle = read("examples/review-policy.yml")
+    publisher = read("examples/codex-review.yml")
+
+    assert "yaga-review-policy-${{ github.event.pull_request.number }}-${{" in lifecycle
+    assert "github.run_id || 'boundary'" in lifecycle
+    assert "yaga-codex-approval-${{ github.repository_id }}-${{" in publisher
+    assert "yaga-codex-worker-${{ github.repository_id }}-${{" in publisher
+    assert "cancel-in-progress: true" in lifecycle
+    authorization = workflow_job(publisher, "authorize-external")
+    assert "cancel-in-progress: true" in authorization
+    for job_name in ("observe", "request-owner", "request-external"):
+        assert "cancel-in-progress: false" in workflow_job(publisher, job_name)
+    assert "closed" not in lifecycle
+    assert "branches-ignore: [main]" in publisher
+
+
+def test_docs_define_bounded_polling_and_explicit_rerun_recovery() -> None:
+    readme = read("README.md")
+    contributing = read("CONTRIBUTING.md")
+
+    assert "Polling is bounded" in readme
+    assert "rerun CI" in readme
+    assert "There is no scheduled repair" in readme
+    assert "no schedule, issue-comment" in contributing
+    assert "job-timeout-minutes" in contributing
+    assert "sole step" in contributing
+
+
+def test_docs_require_strict_status_threads_and_reject_merge_queues() -> None:
     readme = read("README.md")
 
-    assert "requires `Codex Review` to be an up-to-date/strict required status" in readme
-    assert "Merge queues are unsupported in v1" in readme
-    assert "merge queue" not in readme.replace("Merge queues are unsupported in v1", "")
+    assert "Require strict, up-to-date" in readme
+    assert "required conversation resolution" in readme
+    assert "Review Policy Boundary" in readme
+    assert "CI Prerequisites" in readme
+    assert "Merge queues are unsupported" in readme
+    assert "no `merge_group` trigger" in readme
 
 
-def test_action_does_not_import_from_the_caller_working_tree() -> None:
-    action = read("action.yml")
+def test_docs_explain_direct_writer_authority_and_audit_limit() -> None:
+    readme = read("README.md")
+    security = read("SECURITY.md")
 
-    assert 'export PYTHONPATH="$GITHUB_ACTION_PATH/src"' in action
-    assert "PYTHONPATH:+" not in action
-    assert "export PYTHONSAFEPATH=1" in action
-    assert "python -P -m yaga" in action
+    assert "classic commit status" in readme
+    assert re.search(r"both must\s+pass", readme)
+    assert "shared GitHub Actions integration" in readme
+    assert "statuses: write" in readme
+    assert re.search(r"reserve\s+every\s+case-insensitive `Codex Review` alias", readme)
+    assert "dedicated YAGA GitHub App" in readme
+    assert "same-repository workflow remains" in security
+    assert "Commit-status publication is not transactional" in security
 
 
-def test_workflow_job_names_do_not_impersonate_the_commit_status() -> None:
+def test_docs_define_the_single_quota_guarded_review_request() -> None:
+    readme = read("README.md")
+    security = read("SECURITY.md")
+
+    assert "posts at most one strictly marked quota-consuming request" in readme
+    assert "codex-review-approval" in readme
+    assert "Only that protected route's exact YAGA marker authorizes" in readme
+    assert re.search(r"Only the protected\s+route's exact marker authorizes", security)
+    assert "disable Codex automatic reviews" in readme
+    assert "An eyes reaction is progress, not success" in readme
+    assert "directly posting `@codex review`" in readme
+
+
+def test_docs_explain_the_delayed_invalidator_close_boundary() -> None:
+    readme = read("README.md")
+    contributing = read("CONTRIBUTING.md")
+    security = read("SECURITY.md")
+
+    assert "skips a PR that is\nalready closed" in readme
+    assert re.search(r"race an already-running\s+worker's final live read", readme)
+    assert "does not\nguarantee zero post-close writes" in readme
+    assert "Treat this as a bounded residual" in contributing
+    assert "cannot guarantee zero post-close writes" in security
+
+
+def test_workflow_job_and_step_names_do_not_impersonate_the_commit_status() -> None:
     assert normalized_literal_name('    name: " cOdEx   ReVieW "') == "codex review"
     workflows = [
         *(ROOT / "examples").glob("*.yml"),
@@ -205,15 +397,7 @@ def test_workflow_job_names_do_not_impersonate_the_commit_status() -> None:
             for line in workflow.read_text(encoding="utf-8").splitlines()
             if (normalized := normalized_literal_name(line)) is not None
         }
-        assert "codex review" not in names, workflow
-
-
-def test_readme_reserves_case_insensitive_status_and_check_aliases() -> None:
-    readme = read("README.md")
-
-    assert "status contexts case-insensitively" in readme
-    assert re.search(r"reserve\s+every\s+case-insensitive alias", readme)
-    assert "reject colliding workflow, job, or check names" in readme
+        assert not RESERVED_STATUS_NAMES.intersection(names), workflow
 
 
 def test_ci_actions_are_pinned_to_full_commit_shas() -> None:
@@ -225,5 +409,6 @@ def test_ci_actions_are_pinned_to_full_commit_shas() -> None:
         assert reference == "./" or re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", reference)
 
     assert "Exercise the composite action manifest and wiring" in ci
-    assert "Require the composite smoke outputs" in ci
+    assert "mode: resolve" not in ci
+    assert "steps.action_smoke.outputs" not in ci
     assert "continue-on-error" not in ci

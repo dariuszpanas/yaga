@@ -1,7 +1,13 @@
 name: CI
+run-name: >-
+  ${{ github.event_name == 'pull_request' &&
+  format('YAGA CI {0} for #{1} at base {2}', github.event.action,
+  github.event.pull_request.number, github.event.pull_request.base.sha) ||
+  format('CI {0} on {1}', github.event_name, github.ref_name) }}
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -39,18 +45,14 @@ jobs:
         uses: ./
         with:
           gate: codex-review
-          mode: resolve
+          operation: invalidate
           github-token: not-used
-      - name: Require the composite smoke outputs
+          owner-id: "15094983"
+          job-timeout-minutes: 15
+      - name: Require the composite smoke outcome
         env:
-          ACTION_CANDIDATE: ${{ steps.action_smoke.outputs.candidate }}
-          ACTION_CANDIDATES: ${{ steps.action_smoke.outputs.candidates }}
-          ACTION_ELIGIBLE: ${{ steps.action_smoke.outputs.eligible }}
           ACTION_OUTCOME: ${{ steps.action_smoke.outcome }}
         run: |
-          test -z "$ACTION_CANDIDATE"
-          test "$ACTION_CANDIDATES" = '[]'
-          test "$ACTION_ELIGIBLE" = false
           test "$ACTION_OUTCOME" = success
 
   test:
@@ -73,7 +75,7 @@ jobs:
       - run: uv run --frozen --python ${{ matrix.python-version }} pytest
 
   gate:
-    name: CI Gate
+    name: CI Prerequisites
     if: always()
     needs: [check, test]
     runs-on: ubuntu-latest

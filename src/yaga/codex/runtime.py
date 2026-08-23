@@ -1,19 +1,28 @@
-"""Composite-action runtime for the authoritative Codex review gate."""
+"""Composite-action runtime for YAGA's split trusted operations."""
 
 from __future__ import annotations
 
-import json
 import os
 import time
+import urllib.parse
 from pathlib import Path
 
-from yaga.codex import publisher, resolver, scheduler
 from yaga.codex.constants import (
-    MAX_SCHEDULE_RECONCILE_REQUESTS,
-    MAX_TERMINAL_JOB_TIMEOUT_MINUTES,
-    MIN_TERMINAL_JOB_TIMEOUT_MINUTES,
+    LIFECYCLE_WAIT_SECONDS,
+    MAX_AUTHORIZATION_REQUESTS,
+    MAX_FINALIZATION_REQUESTS,
+    MAX_INVALIDATION_REQUESTS,
+    MAX_JOB_TIMEOUT_MINUTES,
+    MAX_POLL_REQUESTS,
+    MAX_PREPARATION_REQUESTS,
+    MIN_JOB_TIMEOUT_MINUTES,
+    POLL_WINDOW_SECONDS,
+    SUCCESS_CLEANUP_MARGIN_SECONDS,
+    SUCCESS_WRITE_REQUEST_RESERVE,
 )
-from yaga.codex.models import Candidate
+from yaga.codex.events import parse_event_boundary
+from yaga.codex.gate import authorize, finalize, invalidate, prepare, review
+from yaga.codex.runs import load_source_from_wake
 from yaga.errors import GateError
 from yaga.github import MAX_API_REQUESTS, GitHubRestApi
 from yaga.models import (
@@ -21,16 +30,20 @@ from yaga.models import (
     positive_int,
     read_json_object,
     record,
-    ref_name,
     repository_name,
     request_timeout,
     workflow_path,
 )
 
-MAX_OUTPUT_BYTES = 512 * 1024
-TERMINAL_MODES = frozenset(
-    {"reconcile-boundary", "reconcile-candidate", "reconcile-repair-candidate"}
-)
+OPERATIONS = frozenset({"authorize", "finalize", "invalidate", "observe", "prepare", "request"})
+APPROVAL_ENVIRONMENT_MARKER = "codex-review-approval:v1"
+
+
+def operation_name(value: object) -> str:
+    """Accept only a deliberately implemented action operation."""
+    if not isinstance(value, str) or value not in OPERATIONS:
+        raise GateError("operation is invalid")
+    return value
 
 
 def _required_environment(name: str) -> str:
@@ -40,15 +53,65 @@ def _required_environment(name: str) -> str:
     return value
 
 
-def _validate_workflow_context(repository: str, event: dict[str, object]) -> str:
-    observer = workflow_path(
-        _required_environment("YAGA_OBSERVER_WORKFLOW_PATH"),
-        "Codex review observer workflow path",
+def _environment_positive_int(name: str, label: str) -> int:
+    value = _required_environment(name)
+    if not value.isascii() or not value.isdigit():
+        raise GateError(f"{label} must be a bounded positive integer")
+    return positive_int(int(value), label)
+
+
+def _job_timeout_minutes() -> int:
+    value = _required_environment("YAGA_JOB_TIMEOUT_MINUTES")
+    if not value.isascii() or not value.isdigit():
+        raise GateError("YAGA job timeout must be a bounded positive integer")
+    minutes = positive_int(int(value), "YAGA job timeout")
+    if not MIN_JOB_TIMEOUT_MINUTES <= minutes <= MAX_JOB_TIMEOUT_MINUTES:
+        raise GateError(
+            "YAGA job timeout must be between "
+            f"{MIN_JOB_TIMEOUT_MINUTES} and {MAX_JOB_TIMEOUT_MINUTES} minutes"
+        )
+    return minutes
+
+
+def _server_url() -> str:
+    value = bounded_text(
+        _required_environment("GITHUB_SERVER_URL"),
+        "GitHub server URL",
+        max_bytes=2_048,
     )
-    event_repository = record(event.get("repository"), "GitHub event repository")
-    if event_repository.get("full_name") != repository:
-        raise GateError("GitHub event belongs to another repository")
-    default_branch = ref_name(event_repository.get("default_branch"), "default branch")
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        port = parsed.port
+    except ValueError as error:
+        raise GateError("GitHub server URL is invalid") from error
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or (port is not None and not 1 <= port <= 65_535)
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise GateError("GitHub server URL is invalid")
+    return value.rstrip("/")
+
+
+def _attempt_url(server_url: str, repository: str, run_id: int, attempt: int) -> str:
+    return f"{server_url}/{repository}/actions/runs/{run_id}/attempts/{attempt}"
+
+
+def _default_branch(event: dict[str, object]) -> str:
+    repository = event.get("repository")
+    if not isinstance(repository, dict):
+        raise GateError("GitHub event repository is invalid")
+    value = repository.get("default_branch")
+    return bounded_text(value, "default branch", max_bytes=255)
+
+
+def _trusted_workflow_path(repository: str, default_branch: str) -> str:
     workflow_ref = bounded_text(
         _required_environment("GITHUB_WORKFLOW_REF"),
         "GitHub workflow ref",
@@ -57,35 +120,33 @@ def _validate_workflow_context(repository: str, event: dict[str, object]) -> str
     prefix = f"{repository}/"
     suffix = f"@refs/heads/{default_branch}"
     if not workflow_ref.startswith(prefix) or not workflow_ref.endswith(suffix):
-        raise GateError("the publisher is not running from the default branch")
-    publisher_path = workflow_path(
-        workflow_ref[len(prefix) : -len(suffix)],
-        "Codex review publisher workflow path",
-    )
-    if publisher_path == observer:
-        raise GateError("observer and publisher workflows must be separate")
+        raise GateError("YAGA is not running from the repository default branch")
+    workflow = workflow_path(workflow_ref[len(prefix) : -len(suffix)], "YAGA workflow path")
     if _required_environment("GITHUB_REF") != f"refs/heads/{default_branch}":
-        raise GateError("the publisher ref is not the default branch")
-    return observer
+        raise GateError("YAGA ref is not the repository default branch")
+    return workflow
 
 
-def _write_outputs(**values: str) -> None:
+def _write_outputs(route: str, *, pull_request_number: int | None = None) -> None:
+    if route not in {"approved", "done", "external", "observe", "owner", "skip"}:
+        raise GateError("YAGA route is invalid")
     output_path = _required_environment("GITHUB_OUTPUT")
-    payload = "".join(f"{name}={value}\n" for name, value in values.items())
-    if len(payload.encode("utf-8")) > MAX_OUTPUT_BYTES:
-        raise GateError("YAGA outputs exceeded the byte limit")
     try:
-        with Path(output_path).open("a", encoding="utf-8", newline="\n") as output:
-            output.write(payload)
+        with Path(output_path).open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write(f"route={route}\n")
+            if pull_request_number is not None:
+                stream.write(
+                    "pull_request_number="
+                    f"{positive_int(pull_request_number, 'pull request output')}\n"
+                )
     except OSError as error:
         raise GateError("GITHUB_OUTPUT could not be written") from error
 
 
-def _common(
-    *,
-    max_requests: int,
-    success_deadline: float | None,
-) -> tuple[GitHubRestApi, str, str, str, dict[str, object]]:
+def run_action() -> int:
+    """Execute one closed YAGA operation from trusted GitHub context."""
+    started_at = time.monotonic()
+    operation = operation_name(_required_environment("YAGA_OPERATION"))
     repository = repository_name(_required_environment("GITHUB_REPOSITORY"))
     event_name = bounded_text(
         _required_environment("GITHUB_EVENT_NAME"),
@@ -96,135 +157,137 @@ def _common(
         _required_environment("GITHUB_EVENT_PATH"),
         label="GitHub event payload",
     )
-    _validate_workflow_context(repository, event)
-    server_url = bounded_text(
-        _required_environment("GITHUB_SERVER_URL"),
-        "GitHub server URL",
-        max_bytes=2_048,
-    )
+    default_branch = _default_branch(event)
+    _trusted_workflow_path(repository, default_branch)
+    server_url = _server_url()
+    run_id = _environment_positive_int("GITHUB_RUN_ID", "YAGA workflow run ID")
+    run_attempt = _environment_positive_int("GITHUB_RUN_ATTEMPT", "YAGA workflow run attempt")
+    target_url = _attempt_url(server_url, repository, run_id, run_attempt)
     timeout = request_timeout(_required_environment("YAGA_REQUEST_TIMEOUT"))
+    job_deadline = started_at + _job_timeout_minutes() * 60
+    poll_deadline = min(
+        started_at + POLL_WINDOW_SECONDS,
+        job_deadline - SUCCESS_WRITE_REQUEST_RESERVE * timeout - SUCCESS_CLEANUP_MARGIN_SECONDS,
+    )
+    if poll_deadline <= started_at:
+        raise GateError("YAGA job timeout leaves no bounded polling window")
+    operation_budgets = {
+        "authorize": MAX_AUTHORIZATION_REQUESTS,
+        "finalize": MAX_FINALIZATION_REQUESTS,
+        "invalidate": MAX_INVALIDATION_REQUESTS,
+        "observe": MAX_POLL_REQUESTS,
+        "prepare": MAX_PREPARATION_REQUESTS,
+        "request": MAX_POLL_REQUESTS,
+    }
     api = GitHubRestApi(
         _required_environment("GITHUB_TOKEN"),
         base_url=os.environ.get("GITHUB_API_URL", "https://api.github.com"),
         timeout=timeout,
-        max_requests=max_requests,
-        success_deadline=success_deadline,
+        max_requests=min(operation_budgets[operation], MAX_API_REQUESTS),
+        request_deadline=job_deadline - 15,
+        success_deadline=job_deadline,
     )
-    return api, repository, server_url, event_name, event
 
-
-def _candidate_input() -> Candidate:
-    return Candidate.from_json(_required_environment("YAGA_CANDIDATE"))
-
-
-def _environment_positive_int(name: str, label: str) -> int:
-    value = _required_environment(name)
-    if not value.isascii() or not value.isdigit():
-        raise GateError(f"{label} must be a bounded positive integer")
-    return positive_int(int(value), label)
-
-
-def _success_deadline(mode: str, *, started_at: float) -> float | None:
-    """Return the declared terminal-job deadline used for success admission."""
-    if mode not in TERMINAL_MODES:
-        return None
-    value = os.environ.get("YAGA_JOB_TIMEOUT_MINUTES", "")
-    if not value.isascii() or not value.isdigit():
-        raise GateError("terminal job timeout must be a bounded positive integer")
-    minutes = positive_int(int(value), "terminal job timeout")
-    if not MIN_TERMINAL_JOB_TIMEOUT_MINUTES <= minutes <= MAX_TERMINAL_JOB_TIMEOUT_MINUTES:
-        raise GateError(
-            "terminal job timeout must be between "
-            f"{MIN_TERMINAL_JOB_TIMEOUT_MINUTES} and "
-            f"{MAX_TERMINAL_JOB_TIMEOUT_MINUTES} minutes"
-        )
-    return started_at + minutes * 60
-
-
-def run_action(mode: str) -> int:
-    """Execute one closed orchestration mode and write compact action outputs."""
-    started_at = time.monotonic()
-    request_budget = (
-        MAX_SCHEDULE_RECONCILE_REQUESTS
-        if mode == "reconcile-repair-candidate"
-        else MAX_API_REQUESTS
-    )
-    api, repository, server_url, event_name, event = _common(
-        max_requests=request_budget,
-        success_deadline=_success_deadline(mode, started_at=started_at),
-    )
-    candidate_output = ""
-    candidates_output = "[]"
-    eligible = False
-
-    if mode == "invalidate-boundary":
-        candidate = publisher.invalidate_lifecycle_event(
-            api,
-            repository=repository,
-            server_url=server_url,
-            event_name=event_name,
-            event=event,
-        )
-        if candidate is not None:
-            candidate_output = candidate.to_json()
-            eligible = True
-    elif mode == "reconcile-boundary":
-        candidate = _candidate_input()
-        result = publisher.reconcile_lifecycle_event(
-            api,
-            repository=repository,
-            server_url=server_url,
-            event_name=event_name,
-            event=event,
-            expected_candidate=candidate,
-            reconciliation_run_id=_environment_positive_int(
-                "GITHUB_RUN_ID", "GitHub workflow run ID"
-            ),
-        )
-        print(f"Codex review publication: {result}")
-    elif mode == "resolve":
-        candidates = resolver.resolve_event_candidates(
+    if operation == "invalidate":
+        # Parse locally before the required native lifecycle job performs its
+        # exact live-state and capacity checks.
+        parse_event_boundary(repository=repository, event_name=event_name, event=event)
+        result = invalidate(
             api,
             repository=repository,
             event_name=event_name,
             event=event,
+            run_id=run_id,
+            run_attempt=run_attempt,
+            target_url=target_url,
         )
-        candidates_output = json.dumps(candidates, separators=(",", ":"))
-        eligible = bool(candidates)
-    elif mode == "repair-boundaries":
-        if event_name != "schedule":
-            raise GateError("scheduled boundary repair requires a schedule event")
-        candidates = scheduler.repair_scheduled_boundaries(
-            api,
-            repository=repository,
-            server_url=server_url,
-            repair_run_id=_environment_positive_int("GITHUB_RUN_ID", "GitHub workflow run ID"),
-        )
-        candidates_output = json.dumps(
-            [candidate.to_payload() for candidate in candidates],
-            separators=(",", ":"),
-        )
-        eligible = bool(candidates)
-    elif mode in {"reconcile-candidate", "reconcile-repair-candidate"}:
-        if mode == "reconcile-repair-candidate" and event_name != "schedule":
-            raise GateError("scheduled candidate reconciliation requires a schedule event")
-        candidate = _candidate_input()
-        result = publisher.reconcile_candidate(
-            api,
-            repository=repository,
-            server_url=server_url,
-            candidate=candidate,
-            reconciliation_run_id=_environment_positive_int(
-                "GITHUB_RUN_ID", "GitHub workflow run ID"
-            ),
-        )
-        print(f"Codex review publication: {result}")
     else:
-        raise GateError("action mode is invalid")
-
+        prerequisite = workflow_path(
+            _required_environment("YAGA_PREREQUISITE_WORKFLOW"),
+            "prerequisite workflow",
+        )
+        lifecycle = workflow_path(
+            _required_environment("YAGA_LIFECYCLE_WORKFLOW"),
+            "lifecycle workflow",
+        )
+        source = load_source_from_wake(
+            api,
+            repository=repository,
+            event_name=event_name,
+            event=event,
+            prerequisite_workflow=prerequisite,
+            lifecycle_workflow=lifecycle,
+        )
+        if source is None:
+            _write_outputs("skip")
+            print(f"YAGA {operation}: skipped: paired CI and lifecycle are not both complete")
+            return 0
+        if operation == "prepare":
+            result = prepare(
+                api,
+                repository=repository,
+                source=source,
+                lifecycle_workflow=lifecycle,
+                wake_workflow=workflow_path(
+                    record(event.get("workflow_run"), "workflow event run").get("path"),
+                    "publisher wake workflow",
+                ),
+                server_url=server_url,
+                target_url=target_url,
+                direct_author_id=_environment_positive_int(
+                    "YAGA_OWNER_ID",
+                    "direct review author ID",
+                ),
+                lifecycle_deadline=min(
+                    started_at + LIFECYCLE_WAIT_SECONDS,
+                    poll_deadline,
+                ),
+            )
+        elif operation == "authorize":
+            if _required_environment("YAGA_APPROVAL_MARKER") != APPROVAL_ENVIRONMENT_MARKER:
+                raise GateError("protected approval environment marker is invalid")
+            result = authorize(
+                api,
+                repository=repository,
+                source=source,
+                lifecycle_workflow=lifecycle,
+                server_url=server_url,
+                direct_author_id=_environment_positive_int(
+                    "YAGA_OWNER_ID",
+                    "direct review author ID",
+                ),
+            )
+        elif operation in {"observe", "request"}:
+            result = review(
+                api,
+                repository=repository,
+                source=source,
+                lifecycle_workflow=lifecycle,
+                server_url=server_url,
+                target_url=target_url,
+                allow_request=operation == "request",
+                direct_author_id=_environment_positive_int(
+                    "YAGA_OWNER_ID",
+                    "direct review author ID",
+                ),
+                poll_deadline=poll_deadline,
+            )
+        else:
+            result = finalize(
+                api,
+                repository=repository,
+                source=source,
+                lifecycle_workflow=lifecycle,
+                server_url=server_url,
+                target_url=target_url,
+                direct_author_id=_environment_positive_int(
+                    "YAGA_OWNER_ID",
+                    "direct review author ID",
+                ),
+            )
     _write_outputs(
-        candidate=candidate_output,
-        candidates=candidates_output,
-        eligible="true" if eligible else "false",
+        result.route,
+        pull_request_number=source.pull_request_number if operation == "prepare" else None,
     )
-    return 0
+    print(f"YAGA {operation}: {result.message}")
+    return result.exit_code

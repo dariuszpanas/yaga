@@ -59,6 +59,7 @@ class CodexOutcome:
     occurred_at: datetime
     database_id: int
     kind: str
+    reviewed_commit: str
 
 
 class CodexReviewRequiredError(GateError):
@@ -155,6 +156,7 @@ def _exact_head_outcomes(
     pull_request: PullRequest,
     not_before: datetime,
     allow_clean_reaction: bool,
+    clean_reaction_not_before: datetime | None = None,
 ) -> list[CodexOutcome]:
     outcomes: list[CodexOutcome] = []
     resolved_prefixes: dict[str, bool] = {}
@@ -185,7 +187,7 @@ def _exact_head_outcomes(
             )
         ):
             continue
-        outcomes.append(CodexOutcome(created_at, comment_id, "clean comment"))
+        outcomes.append(CodexOutcome(created_at, comment_id, "clean comment", reviewed_commit))
 
     review_ids: set[int] = set()
     reviews = api.paginate(f"/repos/{repository}/pulls/{pull_request.number}/reviews")
@@ -221,9 +223,12 @@ def _exact_head_outcomes(
             )
         ):
             continue
-        outcomes.append(CodexOutcome(submitted_at, review_id, "findings review"))
+        outcomes.append(CodexOutcome(submitted_at, review_id, "findings review", reviewed_commit))
 
     if allow_clean_reaction:
+        reaction_not_before = clean_reaction_not_before or not_before
+        if reaction_not_before < not_before:
+            raise GateError("Codex reaction boundary predates the candidate boundary")
         reaction_ids: set[int] = set()
         reactions = api.paginate(f"/repos/{repository}/issues/{pull_request.number}/reactions")
         for index, item in enumerate(reactions):
@@ -244,12 +249,39 @@ def _exact_head_outcomes(
             if content != "+1":
                 continue
             created_at = timestamp(reaction.get("created_at"), "Codex review reaction creation")
-            # `allow_clean_reaction` is restricted to the initial ready `opened`
-            # boundary. The PR cannot have a connector reaction before it exists,
-            # so equality at GitHub's one-second timestamp resolution is safe.
-            if created_at >= not_before:
-                outcomes.append(CodexOutcome(created_at, reaction_id, "clean automatic reaction"))
+            # The caller admits initial-open reactions at the boundary. For a
+            # later YAGA request it advances this threshold by one second, so
+            # same-second ordering ambiguity fails closed.
+            if created_at >= reaction_not_before:
+                outcomes.append(
+                    CodexOutcome(
+                        created_at, reaction_id, "clean automatic reaction", pull_request.head_sha
+                    )
+                )
     return outcomes
+
+
+def select_codex_outcome(
+    api: RestApi,
+    *,
+    repository: str,
+    pull_request: PullRequest,
+    not_before: datetime,
+    allow_clean_reaction: bool,
+    clean_reaction_not_before: datetime | None = None,
+) -> CodexOutcome:
+    """Select the newest exact-head outcome as a revalidation capability."""
+    outcomes = _exact_head_outcomes(
+        api,
+        repository=repository,
+        pull_request=pull_request,
+        not_before=not_before,
+        allow_clean_reaction=allow_clean_reaction,
+        clean_reaction_not_before=clean_reaction_not_before,
+    )
+    if not outcomes:
+        raise CodexReviewRequiredError("current head and base need a trusted Codex review outcome")
+    return max(outcomes, key=lambda item: (item.occurred_at, item.database_id, item.kind))
 
 
 def check_codex_outcome_policy(
@@ -259,19 +291,157 @@ def check_codex_outcome_policy(
     pull_request: PullRequest,
     not_before: datetime,
     allow_clean_reaction: bool,
+    clean_reaction_not_before: datetime | None = None,
 ) -> str:
     """Require a trusted connector outcome after one recorded candidate boundary."""
-    outcomes = _exact_head_outcomes(
+    latest = select_codex_outcome(
         api,
         repository=repository,
         pull_request=pull_request,
         not_before=not_before,
         allow_clean_reaction=allow_clean_reaction,
+        clean_reaction_not_before=clean_reaction_not_before,
     )
-    if not outcomes:
-        raise CodexReviewRequiredError("current head and base need a trusted Codex review outcome")
-    latest = max(outcomes, key=lambda item: (item.occurred_at, item.database_id, item.kind))
     return f"trusted exact-head Codex {latest.kind} is current"
+
+
+def validate_codex_outcome(
+    api: RestApi,
+    *,
+    repository: str,
+    pull_request: PullRequest,
+    not_before: datetime,
+    allow_clean_reaction: bool,
+    outcome: CodexOutcome,
+    clean_reaction_not_before: datetime | None = None,
+) -> bool:
+    """Revalidate one selected outcome without rescanning unrelated resources."""
+    if not isinstance(outcome, CodexOutcome):
+        raise GateError("Codex outcome capability is invalid")
+    resolved_prefixes: dict[str, bool] = {}
+    if outcome.kind == "clean comment":
+        comment = record(
+            api.get(f"/repos/{repository}/issues/comments/{outcome.database_id}"),
+            "current Codex outcome comment",
+        )
+        if positive_int(comment.get("id"), "current Codex outcome comment ID") != (
+            outcome.database_id
+        ) or not _is_connector_issue_comment(comment):
+            return False
+        created_at = timestamp(comment.get("created_at"), "current Codex outcome creation")
+        updated_at = timestamp(comment.get("updated_at"), "current Codex outcome update")
+        reviewed_commit = _clean_reviewed_commit(comment.get("body"))
+        return bool(
+            created_at == outcome.occurred_at
+            and updated_at >= created_at
+            and created_at > not_before
+            and reviewed_commit == outcome.reviewed_commit
+            and _prefix_resolves_to_head(
+                api,
+                repository=repository,
+                prefix=outcome.reviewed_commit,
+                head_sha=pull_request.head_sha,
+                cache=resolved_prefixes,
+            )
+        )
+    if outcome.kind == "findings review":
+        review = record(
+            api.get(
+                f"/repos/{repository}/pulls/{pull_request.number}/reviews/{outcome.database_id}"
+            ),
+            "current Codex outcome review",
+        )
+        if positive_int(
+            review.get("id"), "current Codex outcome review ID"
+        ) != outcome.database_id or not actor_is(
+            review,
+            user_id=CODEX_CONNECTOR_USER_ID,
+            user_login=CODEX_CONNECTOR_LOGIN,
+        ):
+            return False
+        submitted_at = timestamp(review.get("submitted_at"), "current Codex outcome submission")
+        reviewed_commit = _formal_reviewed_commit(review.get("body"))
+        return bool(
+            review.get("state") == "COMMENTED"
+            and commit_sha(review.get("commit_id"), "current Codex outcome commit")
+            == pull_request.head_sha
+            and submitted_at == outcome.occurred_at
+            and submitted_at > not_before
+            and reviewed_commit == outcome.reviewed_commit
+            and _prefix_resolves_to_head(
+                api,
+                repository=repository,
+                prefix=outcome.reviewed_commit,
+                head_sha=pull_request.head_sha,
+                cache=resolved_prefixes,
+            )
+        )
+    if outcome.kind == "clean automatic reaction":
+        if not allow_clean_reaction or outcome.reviewed_commit != pull_request.head_sha:
+            return False
+        reaction_not_before = clean_reaction_not_before or not_before
+        if reaction_not_before < not_before:
+            raise GateError("Codex reaction boundary predates the candidate boundary")
+        reactions = api.paginate(f"/repos/{repository}/issues/{pull_request.number}/reactions")
+        matches = []
+        for index, item in enumerate(reactions):
+            reaction = record(item, f"current Codex outcome reaction {index}")
+            if positive_int(reaction.get("id"), "current Codex outcome reaction ID") == (
+                outcome.database_id
+            ):
+                matches.append(reaction)
+        if len(matches) != 1:
+            return False
+        reaction = matches[0]
+        return bool(
+            actor_is(
+                reaction,
+                user_id=CODEX_CONNECTOR_USER_ID,
+                user_login=CODEX_CONNECTOR_LOGIN,
+            )
+            and reaction.get("content") == "+1"
+            and timestamp(reaction.get("created_at"), "current Codex outcome reaction creation")
+            == outcome.occurred_at
+            and outcome.occurred_at >= reaction_not_before
+        )
+    raise GateError("Codex outcome capability kind is invalid")
+
+
+def has_codex_pending_reaction(
+    api: RestApi,
+    *,
+    repository: str,
+    pull_request: PullRequest,
+    not_before: datetime,
+) -> bool:
+    """Recognize a current-bound connector eyes reaction without trusting it as success."""
+    reaction_ids: set[int] = set()
+    reactions = api.paginate(f"/repos/{repository}/issues/{pull_request.number}/reactions")
+    for index, item in enumerate(reactions):
+        reaction = record(item, f"Codex pending reaction {index}")
+        reaction_id = positive_int(reaction.get("id"), "Codex pending reaction ID")
+        if reaction_id in reaction_ids:
+            raise GateError("Codex pending reaction ID is repeated")
+        reaction_ids.add(reaction_id)
+        if not actor_is(
+            reaction,
+            user_id=CODEX_CONNECTOR_USER_ID,
+            user_login=CODEX_CONNECTOR_LOGIN,
+        ):
+            continue
+        content = reaction.get("content")
+        if content not in REACTION_CONTENTS:
+            raise GateError("Codex pending reaction content is invalid")
+        if (
+            content == "eyes"
+            and timestamp(
+                reaction.get("created_at"),
+                "Codex pending reaction creation",
+            )
+            >= not_before
+        ):
+            return True
+    return False
 
 
 def connector_actor(value: object, label: str) -> None:
