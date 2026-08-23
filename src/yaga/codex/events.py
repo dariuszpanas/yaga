@@ -90,9 +90,9 @@ def parse_event_boundary(
     draft = payload.get("draft")
     if state not in {"closed", "open"} or not isinstance(draft, bool):
         raise GateError("pull request event state is invalid")
-    if action == "closed":
-        if state != "closed":
-            raise GateError("closed pull request event has an invalid state")
+    if action == "closed" and state != "closed":
+        raise GateError("closed pull request event has an invalid state")
+    if state == "closed" and action in {"closed", "edited"}:
         return EventBoundary(
             action,
             "closed",
