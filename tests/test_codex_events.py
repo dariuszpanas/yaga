@@ -64,6 +64,62 @@ def test_closed_deleted_fork_is_a_defensive_noop_without_parsing_head() -> None:
     assert parsed.pull_request is None
 
 
+@pytest.mark.parametrize("merged", [False, True])
+@pytest.mark.parametrize("base_changed", [False, True])
+def test_closed_metadata_edit_is_a_defensive_noop(
+    *,
+    merged: bool,
+    base_changed: bool,
+) -> None:
+    closed = _pull_request(state="closed")
+    closed["merged"] = merged
+
+    parsed = _parse(
+        _event(
+            action="edited",
+            pull_request=closed,
+            base_changed=base_changed,
+        )
+    )
+
+    assert parsed.disposition == "closed"
+    assert parsed.pull_request is None
+
+
+def test_closed_payload_still_requires_a_valid_action_and_matching_identity() -> None:
+    closed = _pull_request(state="closed")
+
+    with pytest.raises(GateError, match="action is invalid"):
+        _parse(_event(action="labeled", pull_request=closed))
+
+    wrong_number = _event(action="edited", pull_request=closed)
+    wrong_number["number"] = PULL_REQUEST + 1
+    with pytest.raises(GateError, match="different pull request"):
+        _parse(wrong_number)
+
+
+@pytest.mark.parametrize(
+    ("action", "draft"),
+    [
+        ("converted_to_draft", True),
+        ("opened", False),
+        ("ready_for_review", False),
+        ("reopened", False),
+        ("synchronize", False),
+    ],
+)
+def test_closed_payload_rejects_active_and_draft_actions(action: str, draft: bool) -> None:
+    closed = _pull_request(state="closed", draft=draft)
+
+    with pytest.raises(GateError, match="active pull request event is not open"):
+        _parse(_event(action=action, pull_request=closed))
+
+
+def test_closed_action_cannot_claim_an_open_pull_request() -> None:
+    with pytest.raises(GateError, match="closed pull request event has an invalid state"):
+        _parse(_event(action="closed"))
+
+
 def test_active_deleted_fork_can_publish_pending_before_full_parse_fails() -> None:
     event = _event()
     pull_request = event["pull_request"]
