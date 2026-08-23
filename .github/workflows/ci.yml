@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          version: "0.9.18"
+      - run: uv sync --frozen --group dev --python 3.12
+      - run: uv run --frozen --python 3.12 ruff check .
+      - run: uv run --frozen --python 3.12 ruff format --check .
+      - run: uv run --frozen --python 3.12 ty check
+      - run: uv run --frozen --python 3.12 python scripts/run_actionlint.py
+      - run: bash -n scripts/composite_smoke_python
+      - run: uv run --frozen --python 3.12 python scripts/check_build.py
+      - name: Install the composite smoke interpreter
+        run: |
+          install -D --mode=0755 \
+            scripts/composite_smoke_python \
+            "$RUNNER_TEMP/yaga-smoke-bin/python"
+          echo "$RUNNER_TEMP/yaga-smoke-bin" >> "$GITHUB_PATH"
+      - name: Exercise the composite action manifest and wiring
+        id: action_smoke
+        uses: ./
+        with:
+          gate: codex-review
+          mode: resolve
+          github-token: not-used
+      - name: Require the composite smoke outputs
+        env:
+          ACTION_CANDIDATE: ${{ steps.action_smoke.outputs.candidate }}
+          ACTION_CANDIDATES: ${{ steps.action_smoke.outputs.candidates }}
+          ACTION_ELIGIBLE: ${{ steps.action_smoke.outputs.eligible }}
+          ACTION_OUTCOME: ${{ steps.action_smoke.outcome }}
+        run: |
+          test -z "$ACTION_CANDIDATE"
+          test "$ACTION_CANDIDATES" = '[]'
+          test "$ACTION_ELIGIBLE" = false
+          test "$ACTION_OUTCOME" = success
+
+  test:
+    name: Python ${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          version: "0.9.18"
+      - run: uv sync --frozen --group dev --python ${{ matrix.python-version }}
+      - run: uv run --frozen --python ${{ matrix.python-version }} pytest
+
+  gate:
+    name: CI Gate
+    if: always()
+    needs: [check, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require the complete blocking matrix
+        env:
+          CHECK_RESULT: ${{ needs.check.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          set -euo pipefail
+          [[ "$CHECK_RESULT" == success ]]
+          [[ "$TEST_RESULT" == success ]]

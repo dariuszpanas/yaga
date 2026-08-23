@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+test "$#" -eq 7
+test "$*" = '-P -m yaga --gate codex-review --mode resolve'
+test "${GITHUB_TOKEN:-}" = not-used
+test "${PYTHONSAFEPATH:-}" = 1
+test "$(realpath -- "${PYTHONPATH:-}")" = "$(realpath -- "$GITHUB_WORKSPACE/src")"
+test -z "${YAGA_CANDIDATE:-}"
+test "${YAGA_GATE:-}" = codex-review
+test "${YAGA_MODE:-}" = resolve
+test "${YAGA_OBSERVER_WORKFLOW_PATH:-}" = .github/workflows/review-policy-event.yml
+test "${YAGA_REQUEST_TIMEOUT:-}" = 15
+
+printf 'candidate=\ncandidates=[]\neligible=false\n' >> "$GITHUB_OUTPUT"

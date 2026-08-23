@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yaga-gate-action"
+version = "0.1.0"
+description = "Conservative, reusable GitHub status gates"
+readme = "README.md"
+license = "BSD-3-Clause"
+requires-python = ">=3.12"
+authors = [
+    { name = "Dariusz Panas" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = []
+
+[tool.uv]
+required-version = "==0.9.18"
+
+[project.urls]
+Repository = "https://github.com/dariuszpanas/yaga"
+Issues = "https://github.com/dariuszpanas/yaga/issues"
+
+[project.scripts]
+yaga = "yaga.cli:main"
+
+[dependency-groups]
+dev = [
+    "hatchling==1.32.0",
+    "pytest>=8.3",
+    "ruff>=0.14.13",
+    "ty>=0.0.12",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yaga"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "A",
+    "B",
+    "C4",
+    "E",
+    "F",
+    "I",
+    "N",
+    "PIE",
+    "UP",
+    "W",
+]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["yaga"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
