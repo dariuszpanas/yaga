@@ -129,6 +129,21 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   `size.blob` then `size.total` ordering, 50,000-entry and 64 MiB caps, and shallow support only when
   all selected objects exist. Reject legacy graft overlays before resolution and recheck after
   enumeration. Keep it out of both Action graphs and repository-plan v1.
+- Keep `path check` installed-only and require an explicit versioned policy plus exact commit-ish;
+  only `--repo` may default to `.`. Never infer HEAD, discover policy, fetch, parse events, inspect
+  the worktree/index/untracked state, read tracked content, or recurse into gitlinks. Schema v1
+  requires exactly one of the frozen `windows-compatible-v1` profile or a nonempty unique exact
+  rule list. Preserve the closed `windows-characters`, `windows-trailing`, `windows-reserved`, and
+  `ascii-case-collision` rules, ASCII-only case normalization, and stable `path.windows-character`,
+  `path.windows-trailing`, `path.windows-reserved`, and `path.ascii-case-collision` diagnostics.
+  Do not add ignore patterns or imply compatibility with every Windows or filesystem configuration.
+  Resolve one commit and tree, then strictly parse bounded recursive full-tree NUL-delimited names.
+  Preserve policy-relevant Git path characters until checking, but reject malformed UTF-8, absolute
+  or structurally invalid paths, duplicate leaves, and inconsistent leaf topology. Keep the
+  4,096-byte, 64-component, 50,000-entry, 64 MiB, 30-second, 10,000,000-work-unit, 256-stored-
+  diagnostic, and exact-count boundaries. Reject legacy graft overlays before resolution and
+  recheck after enumeration. Shallow repositories are allowed when selected objects exist. Keep
+  the provider out of both Action graphs and repository-plan v1.
 - The installed CLI may use the locked Typer dependency. The write-capable root Action may not
   import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
   the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the

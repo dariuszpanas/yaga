@@ -30,8 +30,8 @@ with project and Python environment leakage removed.
 
 ## CLI and commit policy contract
 
-The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `repo`,
-`size`, `tree`, `workflow`, and `gate`.
+The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `path`,
+`repo`, `size`, `tree`, `workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
@@ -171,6 +171,28 @@ stored blobs. Keep strict mode/type/identity/size/path parsing, 50,000-entry and
 and shallow-checkout support only when selected objects are present. Reject legacy graft overlays
 before revision resolution and recheck after blob enumeration. Bound displayed findings while
 retaining exact totals, and keep the provider outside both Action graphs and repository-plan v1.
+
+Committed-path portability policy lives under `src/yaga/paths/` and remains installed-only.
+`path check` requires one explicit versioned policy and one explicit commit-ish; only `--repo` may
+default to `.`. Never infer `HEAD`, discover policy, fetch, parse events, read tracked content, or
+inspect the worktree, index, or untracked set. Schema v1 selects exactly one frozen
+`windows-compatible-v1` profile or a unique nonempty exact rule list. Keep the closed
+`windows-characters`, `windows-trailing`, `windows-reserved`, and `ascii-case-collision` rules and
+their stable diagnostic codes. The case rule is deliberately ASCII-only and must catch both leaf
+aliases and file-versus-directory prefix aliases without treating harmless directory-casing
+variants as findings. Do not add ignore patterns, Unicode normalization, host-dependent checks, or
+claims of universal Windows compatibility without a new policy version.
+
+Resolve exactly one commit and tree through the shared bounded Git runtime, then enumerate every
+leaf name with recursive full-tree NUL-delimited `ls-tree`. Preserve characters that the lexical
+policy is meant to diagnose; reject malformed UTF-8, absolute or structurally invalid paths,
+duplicate leaves, and inconsistent leaf topology. Regular and executable files, symlinks, and
+gitlinks are all named leaves, and gitlinks are never traversed. Preserve the 4,096-byte,
+64-component, 50,000-entry, 64 MiB, 30-second, and shared 10,000,000-work-unit ceilings. Store at
+most the first 256 canonical diagnostics while keeping exact totals and per-code counts. Reject
+legacy graft overlays before revision resolution and recheck after enumeration; shallow history is
+allowed when the selected objects exist. Keep this provider outside both Action import graphs and
+repository-plan v1.
 
 Workflow reference policy lives under `src/yaga/workflows/` and remains installed-CLI-only. Parse
 untrusted YAML through the bounded pure-Python `SafeLoader` composition boundary without
