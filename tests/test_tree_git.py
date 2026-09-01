@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from yaga.errors import GitError, InputError
+from yaga.git import GitRepository, ProcessResult
 from yaga.trees import git as tree_git
 
 
@@ -171,203 +170,17 @@ def test_revision_requires_one_safe_exact_commitish(revision: str, tmp_path: Pat
         tree_git.read_tree_paths(tmp_path, revision)
 
 
-def test_missing_repository_git_and_revision_fail_closed(
+def test_missing_repository_and_revision_fail_closed(
     repository: tuple[Path, str],
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path, _ = repository
     with pytest.raises(InputError, match="cannot be resolved safely"):
         tree_git.read_tree_paths(tmp_path / "missing", "HEAD")
 
-    with monkeypatch.context() as context:
-        context.setattr(tree_git.shutil, "which", lambda _name: None)
-        with pytest.raises(GitError, match="git executable was not found"):
-            tree_git.read_tree_paths(path, "HEAD")
-
     with pytest.raises(GitError, match="could not resolve") as raised:
         tree_git.read_tree_paths(path, "missing-ref")
     assert "\n" not in str(raised.value)
-
-
-def test_git_executable_must_be_absolute_regular_and_outside_repository(
-    repository: tuple[Path, str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path, _ = repository
-    with monkeypatch.context() as context:
-        context.setattr(tree_git.shutil, "which", lambda _name: "tools/git")
-        with pytest.raises(GitError, match="path must be absolute"):
-            tree_git.read_tree_paths(path, "HEAD")
-
-    repository_git = path / "tools" / "git"
-    repository_git.parent.mkdir()
-    repository_git.write_bytes(b"untrusted")
-    with monkeypatch.context() as context:
-        context.setattr(tree_git.shutil, "which", lambda _name: str(repository_git.resolve()))
-        with pytest.raises(GitError, match="inside the repository"):
-            tree_git.read_tree_paths(path, "HEAD")
-
-    with monkeypatch.context() as context:
-        context.setattr(tree_git.shutil, "which", lambda _name: str(path.parent.resolve()))
-        with pytest.raises(GitError, match="not a regular file"):
-            tree_git.read_tree_paths(path, "HEAD")
-
-
-def test_git_executable_inside_enclosing_repository_is_rejected_from_subdirectory(
-    repository: tuple[Path, str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path, _ = repository
-    subdirectory = path / "src"
-    repository_git = path / "tools" / "git"
-    repository_git.parent.mkdir()
-    repository_git.write_bytes(b"untrusted")
-
-    monkeypatch.setattr(tree_git.shutil, "which", lambda _name: str(repository_git.resolve()))
-
-    with pytest.raises(GitError, match="inside the repository"):
-        tree_git.read_tree_paths(subdirectory, "HEAD")
-
-
-def test_git_executable_inside_configless_bare_repository_is_rejected_from_subdirectory(
-    repository: tuple[Path, str],
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path, _ = repository
-    bare = tmp_path.with_name(f"{tmp_path.name}-configless-bare.git")
-    subprocess.run(
-        ["git", "clone", "--quiet", "--bare", str(path), str(bare)],
-        check=True,
-        capture_output=True,
-    )
-    (bare / "config").unlink()
-    subdirectory = bare / "objects"
-    assert Path(git(subdirectory, "rev-parse", "--absolute-git-dir")).resolve() == bare.resolve()
-    repository_git = bare / "config.saved"
-    repository_git.write_bytes(b"untrusted")
-
-    monkeypatch.setattr(tree_git.shutil, "which", lambda _name: str(repository_git.resolve()))
-
-    with pytest.raises(GitError, match="inside the repository"):
-        tree_git.read_tree_paths(subdirectory, "HEAD")
-
-
-def test_git_executable_inside_separate_git_directory_is_rejected(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    worktree = tmp_path / "worktree"
-    metadata = tmp_path / "separate-metadata"
-    subprocess.run(
-        [
-            "git",
-            "init",
-            "--quiet",
-            "--initial-branch=main",
-            f"--separate-git-dir={metadata}",
-            str(worktree),
-        ],
-        check=True,
-        capture_output=True,
-    )
-    repository_git = metadata / "repository-git.exe"
-    repository_git.write_bytes(b"untrusted")
-
-    monkeypatch.setattr(tree_git.shutil, "which", lambda _name: str(repository_git.resolve()))
-
-    with pytest.raises(GitError, match="inside the repository"):
-        tree_git.read_tree_paths(worktree, "HEAD")
-
-
-def test_git_executable_inside_linked_worktree_common_directory_is_rejected(
-    repository: tuple[Path, str],
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path, _ = repository
-    linked_worktree = tmp_path.with_name(f"{tmp_path.name}-linked-worktree")
-    subprocess.run(
-        ["git", "-C", str(path), "worktree", "add", "--quiet", "--detach", str(linked_worktree)],
-        check=True,
-        capture_output=True,
-    )
-    repository_git = path / ".git" / "repository-git.exe"
-    repository_git.write_bytes(b"untrusted")
-
-    monkeypatch.setattr(tree_git.shutil, "which", lambda _name: str(repository_git.resolve()))
-
-    with pytest.raises(GitError, match="inside the repository"):
-        tree_git.read_tree_paths(linked_worktree, "HEAD")
-
-
-def test_git_metadata_pointer_is_bounded_and_single_line(tmp_path: Path) -> None:
-    marker = tmp_path / ".git"
-    marker.write_bytes(b"x" * (tree_git._MAX_GIT_METADATA_BYTES + 1))
-
-    with pytest.raises(InputError, match="exceeds"):
-        tree_git.read_tree_paths(tmp_path, "HEAD")
-
-    marker.write_text("gitdir: metadata\nsecond-line\n", encoding="utf-8")
-
-    with pytest.raises(InputError, match="one bounded path"):
-        tree_git.read_tree_paths(tmp_path, "HEAD")
-
-
-def test_git_executable_inside_alternate_object_database_is_rejected(
-    repository: tuple[Path, str],
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path, _ = repository
-    shared = tmp_path.with_name(f"{tmp_path.name}-shared")
-    subprocess.run(
-        ["git", "clone", "--quiet", "--shared", str(path), str(shared)],
-        check=True,
-        capture_output=True,
-    )
-    repository_git = path / ".git" / "objects" / "repository-git.exe"
-    repository_git.write_bytes(b"untrusted")
-
-    monkeypatch.setattr(tree_git.shutil, "which", lambda _name: str(repository_git.resolve()))
-
-    with pytest.raises(GitError, match="inside the repository"):
-        tree_git.read_tree_paths(shared, "HEAD")
-
-
-def test_alternate_object_directory_cycles_are_bounded(tmp_path: Path) -> None:
-    first = tmp_path / "first"
-    second = tmp_path / "second"
-    for directory, alternate in ((first, second), (second, first)):
-        info = directory / "info"
-        info.mkdir(parents=True)
-        (info / "alternates").write_text(f"{alternate}\n", encoding="utf-8")
-
-    assert tree_git._git_object_boundaries(first) == (first.resolve(), second.resolve())
-
-
-@pytest.mark.parametrize("object_id_length", [40, 64])
-def test_identity_parser_accepts_lowercase_sha_formats(object_id_length: int) -> None:
-    identity = b"a" * object_id_length
-
-    assert tree_git._parse_single_identity(identity + b"\n", label="commit") == identity.decode()
-
-
-@pytest.mark.parametrize(
-    "output",
-    [
-        b"",
-        b"a" * 39 + b"\n",
-        b"a" * 65 + b"\n",
-        b"A" * 40 + b"\n",
-        b"g" * 40 + b"\n",
-        b"a" * 40 + b"\n" + b"b" * 40 + b"\n",
-    ],
-)
-def test_identity_parser_rejects_malformed_or_multiple_values(output: bytes) -> None:
-    with pytest.raises(GitError, match="malformed commit identity"):
-        tree_git._parse_single_identity(output, label="commit")
 
 
 def test_commit_and_tree_resolution_are_exact_and_same_hash_format(
@@ -382,18 +195,25 @@ def test_commit_and_tree_resolution_are_exact_and_same_hash_format(
     calls: list[tuple[list[str], int]] = []
     results = iter(
         [
-            tree_git._ProcessResult(0, f"{commit_sha}\n".encode(), b"", False, False, False),
-            tree_git._ProcessResult(0, f"{tree_sha}\n".encode(), b"", False, False, False),
-            tree_git._ProcessResult(0, b"z.txt\0a.txt\0", b"", False, False, False),
+            ProcessResult(0, f"{commit_sha}\n".encode(), b"", False, False, False),
+            ProcessResult(0, f"{tree_sha}\n".encode(), b"", False, False, False),
+            ProcessResult(0, b"z.txt\0a.txt\0", b"", False, False, False),
         ]
     )
+    repository = GitRepository(tmp_path.resolve(), str(executable.resolve()))
 
-    def fake_run(command: list[str], *, stdout_limit: int) -> tree_git._ProcessResult:
-        calls.append((command, stdout_limit))
+    def fake_run(
+        selected: GitRepository,
+        arguments: list[str],
+        *,
+        stdout_limit: int,
+    ) -> ProcessResult:
+        assert selected == repository
+        calls.append((arguments, stdout_limit))
         return next(results)
 
-    monkeypatch.setattr(tree_git.shutil, "which", lambda _name: str(executable.resolve()))
-    monkeypatch.setattr(tree_git, "_run_git", fake_run)
+    monkeypatch.setattr(tree_git, "open_repository", lambda _path: repository)
+    monkeypatch.setattr(tree_git, "run_git", fake_run)
 
     selection = tree_git.read_tree_paths(tmp_path, "topic")
 
@@ -403,10 +223,6 @@ def test_commit_and_tree_resolution_are_exact_and_same_hash_format(
     assert calls == [
         (
             [
-                str(executable.resolve()),
-                "--no-lazy-fetch",
-                "-C",
-                str(tmp_path.resolve()),
                 "rev-parse",
                 "--verify",
                 "--end-of-options",
@@ -416,10 +232,6 @@ def test_commit_and_tree_resolution_are_exact_and_same_hash_format(
         ),
         (
             [
-                str(executable.resolve()),
-                "--no-lazy-fetch",
-                "-C",
-                str(tmp_path.resolve()),
                 "rev-parse",
                 "--verify",
                 "--end-of-options",
@@ -429,10 +241,6 @@ def test_commit_and_tree_resolution_are_exact_and_same_hash_format(
         ),
         (
             [
-                str(executable.resolve()),
-                "--no-lazy-fetch",
-                "-C",
-                str(tmp_path.resolve()),
                 "ls-tree",
                 "-r",
                 "-z",
@@ -454,12 +262,13 @@ def test_commit_and_tree_hash_formats_must_match(
     executable.write_bytes(b"placeholder")
     results = iter(
         [
-            tree_git._ProcessResult(0, b"a" * 40 + b"\n", b"", False, False, False),
-            tree_git._ProcessResult(0, b"b" * 64 + b"\n", b"", False, False, False),
+            ProcessResult(0, b"a" * 40 + b"\n", b"", False, False, False),
+            ProcessResult(0, b"b" * 64 + b"\n", b"", False, False, False),
         ]
     )
-    monkeypatch.setattr(tree_git.shutil, "which", lambda _name: str(executable.resolve()))
-    monkeypatch.setattr(tree_git, "_run_git", lambda *_args, **_kwargs: next(results))
+    repository = GitRepository(tmp_path.resolve(), str(executable.resolve()))
+    monkeypatch.setattr(tree_git, "open_repository", lambda _path: repository)
+    monkeypatch.setattr(tree_git, "run_git", lambda *_args, **_kwargs: next(results))
 
     with pytest.raises(GitError, match="inconsistent object identity lengths"):
         tree_git.read_tree_paths(tmp_path, "HEAD")
@@ -522,105 +331,6 @@ def test_tree_output_is_stopped_at_hard_byte_limit(
         tree_git.read_tree_paths(path, "HEAD")
 
 
-def test_process_capture_enforces_streaming_stdout_and_stderr_bounds() -> None:
-    for file_descriptor, overflow_attribute, output_attribute in (
-        (1, "stdout_overflow", "stdout"),
-        (2, "stderr_overflow", "stderr"),
-    ):
-        result = tree_git._run_bounded(
-            [
-                sys.executable,
-                "-c",
-                f"import os; os.write({file_descriptor}, b'x' * 4096)",
-            ],
-            stdout_limit=128,
-            stderr_limit=128,
-        )
-
-        assert getattr(result, overflow_attribute)
-        assert len(getattr(result, output_attribute)) == 128
-        assert result.timed_out is False
-
-
-def test_git_process_is_killed_at_hard_wall_time(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tree_git, "MAX_GIT_SECONDS", 0.1)
-
-    with pytest.raises(GitError, match="hard 0.1-second limit"):
-        tree_git._run_git(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
-            stdout_limit=16,
-        )
-
-
-def test_git_errors_are_sanitized_bounded_and_single_line() -> None:
-    detail = tree_git._safe_git_error(("bad\u202e ref\n::error::" + "x" * 5000).encode("utf-8"))
-
-    assert "\n" not in detail
-    assert "\u202e" not in detail
-    assert len(detail) <= 1000
-
-
-def test_git_environment_is_allowlisted_and_disables_lazy_fetch_and_replacements(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    hostile_names = (
-        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-        "GIT_ASKPASS",
-        "GIT_COMMON_DIR",
-        "GIT_CONFIG",
-        "GIT_CONFIG_COUNT",
-        "GIT_CONFIG_KEY_0",
-        "GIT_CONFIG_PARAMETERS",
-        "GIT_CONFIG_VALUE_0",
-        "GIT_DIR",
-        "GIT_EXEC_PATH",
-        "GIT_EXTERNAL_DIFF",
-        "GIT_INDEX_FILE",
-        "GIT_NAMESPACE",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_PAGER",
-        "GIT_PREFIX",
-        "GIT_SSH_COMMAND",
-        "GIT_TRACE",
-        "GIT_TRACE2_EVENT",
-        "GIT_WORK_TREE",
-        "HOME",
-        "LD_PRELOAD",
-        "PAGER",
-        "PATH",
-        "PYTHONPATH",
-        "XDG_CONFIG_HOME",
-    )
-    for name in hostile_names:
-        monkeypatch.setenv(name, "hostile")
-    monkeypatch.setenv("SYSTEMROOT", "system-root")
-
-    environment = tree_git._git_environment()
-
-    assert environment["SYSTEMROOT"] == "system-root"
-    expected_names = {
-        "GCM_INTERACTIVE",
-        "GIT_ATTR_NOSYSTEM",
-        "GIT_CONFIG_GLOBAL",
-        "GIT_CONFIG_NOSYSTEM",
-        "GIT_CONFIG_SYSTEM",
-        "GIT_NO_LAZY_FETCH",
-        "GIT_NO_REPLACE_OBJECTS",
-        "GIT_OPTIONAL_LOCKS",
-        "GIT_TERMINAL_PROMPT",
-        "LC_ALL",
-    }
-    expected_names.update(tree_git._PROCESS_ENVIRONMENT_ALLOWLIST & tree_git.os.environ.keys())
-    assert set(environment) == expected_names
-    assert environment["GIT_CONFIG_GLOBAL"] == os.devnull
-    assert environment["GIT_CONFIG_NOSYSTEM"] == "1"
-    assert environment["GIT_CONFIG_SYSTEM"] == os.devnull
-    assert environment["GIT_NO_LAZY_FETCH"] == "1"
-    assert environment["GIT_NO_REPLACE_OBJECTS"] == "1"
-    assert environment["GIT_OPTIONAL_LOCKS"] == "0"
-    assert environment["GIT_TERMINAL_PROMPT"] == "0"
-
-
 def test_replacement_refs_cannot_change_the_selected_tree(
     repository: tuple[Path, str],
 ) -> None:
@@ -634,54 +344,3 @@ def test_replacement_refs_cannot_change_the_selected_tree(
     selection = tree_git.read_tree_paths(path, original)
 
     assert selection.paths == ("README.md", "src/app.py")
-
-
-def test_run_bounded_uses_no_shell_devnull_stdin_and_minimal_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, object] = {}
-
-    class Stream:
-        def read(self, _size: int) -> bytes:
-            return b""
-
-        def close(self) -> None:
-            return None
-
-    class Process:
-        stdout = Stream()
-        stderr = Stream()
-
-        def poll(self) -> int:
-            return 0
-
-        def wait(self, *, timeout: float | None = None) -> int:
-            captured["timeout"] = timeout
-            return 0
-
-        def kill(self) -> None:
-            raise AssertionError("completed process must not be killed")
-
-    def fake_popen(command: list[str], **kwargs: object) -> Process:
-        captured["command"] = command
-        captured.update(kwargs)
-        return Process()
-
-    monkeypatch.setattr(tree_git.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(tree_git, "_git_environment", lambda: {"LC_ALL": "C"})
-
-    result = tree_git._run_bounded(
-        ["C:/Git/git.exe", "--version"],
-        stdout_limit=10,
-        stderr_limit=20,
-        timeout_seconds=3.0,
-    )
-
-    assert result.returncode == 0
-    assert captured["command"] == ["C:/Git/git.exe", "--version"]
-    assert captured["stdin"] is subprocess.DEVNULL
-    assert captured["stdout"] is subprocess.PIPE
-    assert captured["stderr"] is subprocess.PIPE
-    assert captured["env"] == {"LC_ALL": "C"}
-    assert captured["shell"] is False
-    assert captured["timeout"] == 3.0

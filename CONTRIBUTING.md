@@ -36,12 +36,24 @@ Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Gi
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
 
+All revision-bound providers use the dependency-free runtime under `src/yaga/git/`. Keep repository
+and executable discovery, metadata and alternate-object-store boundaries, process execution,
+environment isolation, time and output limits, object identity parsing, and complete-history checks
+centralized there. Its hard wall-time boundary includes platform-native process-tree containment and
+bounded cleanup after termination. Provider adapters pass only fixed Git subcommands and retain
+their own revision grammar and output parsing. Every invocation must use the runtime's global
+`--no-pager` and `--no-lazy-fetch` controls; do not add a provider-local subprocess path that
+bypasses them. Read repository pointer and alternate metadata only as bounded regular files with
+open-time type and identity revalidation; special files must fail closed before Git starts.
+
 `commit check` accepts exactly one of a message, UTF-8 file, standard input, Git commit, or Git
 range; with none it checks `HEAD`. Preserve full messages, deterministic oldest-first range order,
 hard message/config/output/count bounds, shell-free Git invocation, and explicit failure for missing
-or shallow history. Commit messages and Git output are untrusted terminal input: sanitize and bound
-anything displayed. The installed entrypoint must configure UTF-8 standard output and error before
-Typer renders user-controlled text; keep the legacy-console-encoding subprocess regression.
+or shallow history. Git-backed commit and range selection reject legacy graft overlays before and
+after reading parent metadata, and replacement refs remain disabled for every Git operation. Commit
+messages and Git output are untrusted terminal input: sanitize and bound anything displayed. The
+installed entrypoint must configure UTF-8 standard output and error before Typer renders
+user-controlled text; keep the legacy-console-encoding subprocess regression.
 
 Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or in the standalone
 `.yaga.toml` root plus `[commit]`. Load exactly one nearest or explicit file, reject unknown keys and

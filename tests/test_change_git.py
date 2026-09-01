@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -14,7 +13,9 @@ from yaga.changes.models import (
     MAX_CHANGED_PATH_COMPONENTS,
     MAX_CHANGED_PATHS,
 )
-from yaga.errors import GitError
+from yaga.errors import GitError, InputError
+from yaga.git import GitRepository, ProcessResult
+from yaga.git import runtime as git_runtime
 
 
 def git(repository: Path, *arguments: str) -> str:
@@ -180,25 +181,6 @@ def test_legacy_grafts_cannot_change_a_linked_worktree_merge_base(
         change_git.read_changed_paths(linked, f"{base_head}...{feature_head}")
 
 
-def test_common_git_directory_resolves_relative_to_the_repository(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    common_git_dir = tmp_path / ".git"
-    common_git_dir.mkdir()
-    captured: list[list[str]] = []
-
-    def fake_run(command: list[str], *, stdout_limit: int) -> change_git._ProcessResult:
-        captured.append(command)
-        assert stdout_limit == change_git._MAX_GIT_COMMON_DIR_BYTES
-        return change_git._ProcessResult(0, b".git\n", b"", False, False, False)
-
-    monkeypatch.setattr(change_git, "_run_git", fake_run)
-
-    assert change_git._resolve_common_git_directory(tmp_path, "git") == common_git_dir.resolve()
-    assert captured == [["git", "-C", str(tmp_path), "rev-parse", "--git-common-dir"]]
-
-
 @pytest.mark.parametrize(
     "revision_range",
     [
@@ -232,11 +214,11 @@ def test_missing_repository_git_and_revision_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path, head = repository
-    with pytest.raises(GitError, match="directory does not exist"):
+    with pytest.raises(InputError, match="cannot be resolved safely"):
         change_git.read_changed_paths(tmp_path / "missing", "HEAD..HEAD")
 
     with monkeypatch.context() as context:
-        context.setattr(change_git.shutil, "which", lambda _name: None)
+        context.setattr(git_runtime.shutil, "which", lambda _name: None)
         with pytest.raises(GitError, match="git executable was not found"):
             change_git.read_changed_paths(path, "HEAD..HEAD")
 
@@ -245,23 +227,29 @@ def test_missing_repository_git_and_revision_fail_closed(
     assert "\n" not in str(raised.value)
 
 
-def test_git_executable_must_be_absolute_and_outside_the_repository(
+def test_git_executable_must_be_absolute_and_outside_the_enclosing_repository(
     repository: tuple[Path, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path, _ = repository
     with monkeypatch.context() as context:
-        context.setattr(change_git.shutil, "which", lambda _name: "tools/git")
+        context.setattr(git_runtime.shutil, "which", lambda _name: "tools/git")
         with pytest.raises(GitError, match="path must be absolute"):
             change_git.read_changed_paths(path, "HEAD..HEAD")
 
+    nested = path / "nested" / "selection"
+    nested.mkdir(parents=True)
     repository_git = path / "tools" / "git"
     repository_git.parent.mkdir()
     repository_git.write_bytes(b"untrusted")
     with monkeypatch.context() as context:
-        context.setattr(change_git.shutil, "which", lambda _name: str(repository_git.resolve()))
+        context.setattr(
+            git_runtime.shutil,
+            "which",
+            lambda _name: str(repository_git.resolve()),
+        )
         with pytest.raises(GitError, match="inside the repository"):
-            change_git.read_changed_paths(path, "HEAD..HEAD")
+            change_git.read_changed_paths(nested, "HEAD..HEAD")
 
 
 def test_changed_paths_reject_a_shallow_repository(
@@ -327,29 +315,6 @@ def test_three_dot_rejects_ambiguous_merge_bases(repository: tuple[Path, str]) -
     }
     with pytest.raises(GitError, match="exactly one merge base"):
         change_git.read_changed_paths(path, f"{first_merge}...{second_merge}")
-
-
-@pytest.mark.parametrize("object_id_length", [40, 64])
-def test_identity_parser_accepts_lowercase_sha_formats(object_id_length: int) -> None:
-    identity = b"a" * object_id_length
-
-    assert change_git._parse_single_identity(identity + b"\n", label="commit") == identity.decode()
-
-
-@pytest.mark.parametrize(
-    "output",
-    [
-        b"",
-        b"a" * 39 + b"\n",
-        b"a" * 65 + b"\n",
-        b"A" * 40 + b"\n",
-        b"g" * 40 + b"\n",
-        b"a" * 40 + b"\n" + b"b" * 40 + b"\n",
-    ],
-)
-def test_identity_parser_rejects_malformed_or_multiple_values(output: bytes) -> None:
-    with pytest.raises(GitError, match="malformed commit identity"):
-        change_git._parse_single_identity(output, label="commit")
 
 
 def test_path_parser_sorts_exact_paths() -> None:
@@ -427,22 +392,26 @@ def test_diff_command_disables_renames_external_diff_and_textconv(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[list[str]] = []
+    repository = GitRepository(Path("repo"), "git")
 
-    def fake_run(command: list[str], *, stdout_limit: int) -> change_git._ProcessResult:
-        captured.append(command)
+    def fake_run(
+        selected: GitRepository,
+        arguments: list[str],
+        *,
+        stdout_limit: int,
+    ) -> ProcessResult:
+        assert selected == repository
+        captured.append(arguments)
         assert stdout_limit == change_git.MAX_GIT_DIFF_BYTES
-        return change_git._ProcessResult(0, b"", b"", False, False, False)
+        return ProcessResult(0, b"", b"", False, False, False)
 
-    monkeypatch.setattr(change_git, "_run_git", fake_run)
+    monkeypatch.setattr(change_git, "run_git", fake_run)
     base = "a" * 40
     head = "b" * 40
 
-    assert change_git._read_changed_path_output(Path("repo"), "git", base, head) == ()
+    assert change_git._read_changed_path_output(repository, base, head) == ()
     assert captured == [
         [
-            "git",
-            "-C",
-            "repo",
             "diff",
             "--name-only",
             "-z",
@@ -459,13 +428,20 @@ def test_diff_command_disables_renames_external_diff_and_textconv(
 
 def test_merge_base_command_requests_all_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[list[str]] = []
+    repository = GitRepository(Path("repo"), "git")
     base = "a" * 40
     head = "b" * 40
 
-    def fake_run(command: list[str], *, stdout_limit: int) -> change_git._ProcessResult:
-        captured.append(command)
+    def fake_run(
+        selected: GitRepository,
+        arguments: list[str],
+        *,
+        stdout_limit: int,
+    ) -> ProcessResult:
+        assert selected == repository
+        captured.append(arguments)
         assert stdout_limit == change_git._MAX_MERGE_BASE_BYTES
-        return change_git._ProcessResult(
+        return ProcessResult(
             0,
             ("c" * 40 + "\n").encode(),
             b"",
@@ -474,107 +450,7 @@ def test_merge_base_command_requests_all_candidates(monkeypatch: pytest.MonkeyPa
             False,
         )
 
-    monkeypatch.setattr(change_git, "_run_git", fake_run)
+    monkeypatch.setattr(change_git, "run_git", fake_run)
 
-    assert change_git._resolve_unique_merge_base(Path("repo"), "git", base, head) == "c" * 40
-    assert captured == [["git", "-C", "repo", "merge-base", "--all", base, head]]
-
-
-def test_process_capture_enforces_streaming_stdout_and_stderr_bounds() -> None:
-    for file_descriptor, overflow_attribute, output_attribute in (
-        (1, "stdout_overflow", "stdout"),
-        (2, "stderr_overflow", "stderr"),
-    ):
-        result = change_git._run_bounded(
-            [
-                sys.executable,
-                "-c",
-                f"import os; os.write({file_descriptor}, b'x' * 4096)",
-            ],
-            stdout_limit=128,
-            stderr_limit=128,
-        )
-
-        assert getattr(result, overflow_attribute)
-        assert len(getattr(result, output_attribute)) == 128
-        assert result.timed_out is False
-
-
-def test_git_process_is_killed_at_the_hard_wall_time(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(change_git, "MAX_GIT_SECONDS", 0.1)
-
-    with pytest.raises(GitError, match="hard 0.1-second limit"):
-        change_git._run_git(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
-            stdout_limit=16,
-        )
-
-
-def test_git_errors_are_sanitized_bounded_and_single_line() -> None:
-    detail = change_git._safe_git_error(("bad\u202e ref\n::error::" + "x" * 5000).encode("utf-8"))
-
-    assert "\n" not in detail
-    assert "\u202e" not in detail
-    assert len(detail) <= 1000
-
-
-def test_git_environment_is_allowlisted_and_disables_fetch_and_writes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    for name in (
-        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-        "GIT_ASKPASS",
-        "GIT_COMMON_DIR",
-        "GIT_CONFIG",
-        "GIT_CONFIG_COUNT",
-        "GIT_CONFIG_KEY_0",
-        "GIT_CONFIG_PARAMETERS",
-        "GIT_CONFIG_VALUE_0",
-        "GIT_DIR",
-        "GIT_EXEC_PATH",
-        "GIT_EXTERNAL_DIFF",
-        "GIT_INDEX_FILE",
-        "GIT_NAMESPACE",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_PAGER",
-        "GIT_PREFIX",
-        "GIT_SSH_COMMAND",
-        "GIT_TRACE",
-        "GIT_TRACE2_EVENT",
-        "GIT_WORK_TREE",
-        "HOME",
-        "LD_PRELOAD",
-        "PAGER",
-        "PATH",
-        "PYTHONPATH",
-        "XDG_CONFIG_HOME",
-    ):
-        monkeypatch.setenv(name, "hostile")
-    monkeypatch.setenv("SYSTEMROOT", "system-root")
-
-    environment = change_git._git_environment()
-
-    assert environment["SYSTEMROOT"] == "system-root"
-    expected_names = {
-        "GCM_INTERACTIVE",
-        "GIT_ATTR_NOSYSTEM",
-        "GIT_CONFIG_GLOBAL",
-        "GIT_CONFIG_NOSYSTEM",
-        "GIT_CONFIG_SYSTEM",
-        "GIT_NO_LAZY_FETCH",
-        "GIT_NO_REPLACE_OBJECTS",
-        "GIT_OPTIONAL_LOCKS",
-        "GIT_TERMINAL_PROMPT",
-        "LC_ALL",
-    }
-    expected_names.update(change_git._PROCESS_ENVIRONMENT_ALLOWLIST & change_git.os.environ.keys())
-    assert set(environment) == expected_names
-    assert environment["GIT_CONFIG_GLOBAL"] == change_git.os.devnull
-    assert environment["GIT_CONFIG_NOSYSTEM"] == "1"
-    assert environment["GIT_CONFIG_SYSTEM"] == change_git.os.devnull
-    assert environment["GIT_NO_LAZY_FETCH"] == "1"
-    assert environment["GIT_NO_REPLACE_OBJECTS"] == "1"
-    assert environment["GIT_OPTIONAL_LOCKS"] == "0"
-    assert environment["GIT_TERMINAL_PROMPT"] == "0"
+    assert change_git._resolve_unique_merge_base(repository, base, head) == "c" * 40
+    assert captured == [["merge-base", "--all", base, head]]

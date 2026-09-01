@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from yaga.commits import git as commit_git
+from yaga.commits.models import CommitTarget
 from yaga.errors import GitError
+from yaga.git import GitRepository
+from yaga.git import runtime as git_runtime
 
 
 def git(repository: Path, *arguments: str) -> str:
@@ -109,6 +111,169 @@ def test_range_rejects_a_shallow_repository(
         commit_git.read_range(shallow, "HEAD~1..HEAD", max_commits=10)
 
 
+def test_single_commit_rejects_a_shallow_boundary_that_hides_merge_parents(
+    repository: tuple[Path, list[str]],
+) -> None:
+    path, shas = repository
+    tree = git(path, "show", "-s", "--format=%T", shas[-1])
+    merge = git(
+        path,
+        "commit-tree",
+        tree,
+        "-p",
+        shas[-1],
+        "-p",
+        shas[0],
+        "-m",
+        "feat: merge shallow boundary work",
+    )
+    git(path, "update-ref", "refs/heads/main", merge)
+    shallow = path.with_name(f"{path.name}-single-shallow")
+    subprocess.run(
+        ["git", "clone", "--depth=1", "--no-local", str(path), str(shallow)],
+        check=True,
+        capture_output=True,
+    )
+
+    assert git(shallow, "rev-parse", "--is-shallow-repository") == "true"
+    assert git(shallow, "show", "-s", "--format=%P", "HEAD") == ""
+
+    with pytest.raises(GitError, match="non-shallow repository with complete history"):
+        commit_git.read_commit(shallow, "HEAD")
+
+
+def test_single_commit_rejects_graft_rewritten_merge_parents(
+    repository: tuple[Path, list[str]],
+) -> None:
+    path, shas = repository
+    tree = git(path, "show", "-s", "--format=%T", shas[-1])
+    merge = git(
+        path,
+        "commit-tree",
+        tree,
+        "-p",
+        shas[-1],
+        "-p",
+        shas[0],
+        "-m",
+        "feat: merge independent policy work",
+    )
+    assert git(path, "show", "-s", "--format=%P", merge) == f"{shas[-1]} {shas[0]}"
+    assert commit_git.read_commit(path, merge).parents == (shas[-1], shas[0])
+
+    grafts = path / ".git" / "info" / "grafts"
+    grafts.write_text(f"{merge} {shas[-1]}\n", encoding="ascii")
+    assert git(path, "show", "-s", "--format=%P", merge) == shas[-1]
+
+    with pytest.raises(GitError, match="legacy graft overlays"):
+        commit_git.read_commit(path, merge)
+
+
+def test_single_commit_revalidates_grafts_after_reading_parent_metadata(
+    repository: tuple[Path, list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, shas = repository
+    grafts = path / ".git" / "info" / "grafts"
+    original_read_log = commit_git._read_log
+
+    def read_log_then_add_graft(
+        repo: GitRepository,
+        selection: str,
+        *,
+        max_commits: int,
+        reverse: bool,
+        detect_overflow: bool,
+        no_walk: bool,
+    ) -> list[CommitTarget]:
+        selected = original_read_log(
+            repo,
+            selection,
+            max_commits=max_commits,
+            reverse=reverse,
+            detect_overflow=detect_overflow,
+            no_walk=no_walk,
+        )
+        grafts.write_text(f"{shas[-1]} {shas[0]}\n", encoding="ascii")
+        return selected
+
+    monkeypatch.setattr(commit_git, "_read_log", read_log_then_add_graft)
+
+    with pytest.raises(GitError, match="legacy graft overlays"):
+        commit_git.read_commit(path, shas[-1])
+
+
+def test_range_rejects_legacy_graft_overlays(
+    repository: tuple[Path, list[str]],
+) -> None:
+    path, shas = repository
+    grafts = path / ".git" / "info" / "grafts"
+    grafts.write_text(f"{shas[-1]} {shas[0]}\n", encoding="ascii")
+
+    with pytest.raises(GitError, match="legacy graft overlays"):
+        commit_git.read_range(path, f"{shas[0]}..{shas[-1]}", max_commits=10)
+
+
+def test_range_revalidates_grafts_after_reading_the_selection(
+    repository: tuple[Path, list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, shas = repository
+    grafts = path / ".git" / "info" / "grafts"
+    original_read_log = commit_git._read_log
+
+    def read_log_then_add_graft(
+        repo: GitRepository,
+        selection: str,
+        *,
+        max_commits: int,
+        reverse: bool,
+        detect_overflow: bool,
+        no_walk: bool,
+    ) -> list[CommitTarget]:
+        selected = original_read_log(
+            repo,
+            selection,
+            max_commits=max_commits,
+            reverse=reverse,
+            detect_overflow=detect_overflow,
+            no_walk=no_walk,
+        )
+        grafts.write_text(f"{shas[-1]} {shas[0]}\n", encoding="ascii")
+        return selected
+
+    monkeypatch.setattr(commit_git, "_read_log", read_log_then_add_graft)
+
+    with pytest.raises(GitError, match="legacy graft overlays"):
+        commit_git.read_range(path, f"{shas[0]}..{shas[-1]}", max_commits=10)
+
+
+def test_replacement_refs_cannot_change_selected_commit_message(
+    repository: tuple[Path, list[str]],
+) -> None:
+    path, shas = repository
+    original = shas[-1]
+    original_tree = git(path, "show", "-s", "--format=%T", original)
+    replacement = git(
+        path,
+        "commit-tree",
+        original_tree,
+        "-m",
+        "fix: replacement message must stay hidden",
+    )
+    git(path, "replace", original, replacement)
+    assert "replacement message" in git(path, "show", "-s", "--format=%B", original)
+    assert git(path, "log", "--format=%H", f"{shas[0]}..{original}") == original
+
+    selected = commit_git.read_commit(path, original)
+    selected_range = commit_git.read_range(path, f"{shas[0]}..{original}", max_commits=10)
+
+    assert selected.sha == original
+    assert selected.parents == (shas[-2],)
+    assert selected.message.startswith("docs: explain repository ranges")
+    assert [commit.sha for commit in selected_range] == shas[1:]
+
+
 def test_commit_and_range_sources_reject_ambiguous_revision_shapes(
     repository: tuple[Path, list[str]],
 ) -> None:
@@ -149,8 +314,46 @@ def test_git_failures_are_operational_errors_without_control_sequences(tmp_path:
     assert "\n" not in str(raised.value)
 
 
-def test_git_error_sanitizer_removes_bidi_and_c1_controls() -> None:
-    assert commit_git._safe_git_error("bad\u202e ref\u0085name".encode()) == "bad? ref?name"
+def test_git_executable_inside_enclosing_repository_is_rejected_from_subdirectory(
+    repository: tuple[Path, list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, _ = repository
+    subdirectory = path / "src"
+    subdirectory.mkdir()
+    repository_git = path / "tools" / "git"
+    repository_git.parent.mkdir()
+    repository_git.write_bytes(b"untrusted")
+    monkeypatch.setattr(git_runtime.shutil, "which", lambda _name: str(repository_git.resolve()))
+
+    with pytest.raises(GitError, match="inside the repository"):
+        commit_git.read_commit(subdirectory, "HEAD")
+
+
+def test_git_executable_inside_separate_metadata_directory_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worktree = tmp_path / "worktree"
+    metadata = tmp_path / "metadata"
+    subprocess.run(
+        [
+            "git",
+            "init",
+            "--quiet",
+            "--initial-branch=main",
+            f"--separate-git-dir={metadata}",
+            str(worktree),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    repository_git = metadata / "git.exe"
+    repository_git.write_bytes(b"untrusted")
+    monkeypatch.setattr(git_runtime.shutil, "which", lambda _name: str(repository_git.resolve()))
+
+    with pytest.raises(GitError, match="inside the repository"):
+        commit_git.read_commit(worktree, "HEAD")
 
 
 @pytest.mark.parametrize("object_id_length", [40, 64])
@@ -188,29 +391,6 @@ def test_record_parser_rejects_malformed_commit_and_parent_ids(
 
     with pytest.raises(GitError, match="malformed (commit|parent) identity"):
         commit_git._parse_records(output)
-
-
-@pytest.mark.parametrize(
-    ("file_descriptor", "overflow_attribute", "output_attribute"),
-    [(1, "stdout_overflow", "stdout"), (2, "stderr_overflow", "stderr")],
-)
-def test_process_capture_enforces_streaming_pipe_bounds(
-    file_descriptor: int,
-    overflow_attribute: str,
-    output_attribute: str,
-) -> None:
-    result = commit_git._run_bounded(
-        [
-            sys.executable,
-            "-c",
-            f"import os; os.write({file_descriptor}, b'x' * 4096)",
-        ],
-        stdout_limit=128,
-        stderr_limit=128,
-    )
-
-    assert getattr(result, overflow_attribute)
-    assert len(getattr(result, output_attribute)) == 128
 
 
 def test_git_log_output_is_stopped_at_the_hard_limit(
