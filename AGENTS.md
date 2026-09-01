@@ -21,6 +21,11 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
 - Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
   0/1/2, and the versioned JSON document are public pre-release contracts.
+- Keep `body-min-words` in configuration schema v1 as a zero-default integer from zero through
+  100000. Count only Unicode-whitespace-delimited prose-body tokens containing a Unicode
+  alphanumeric character, exclude recognized final footers, and do not make an optional absent
+  body required. Reject a nonzero minimum when body policy is forbidden, and preserve
+  `body.word-count` in every report.
 - Keep `workflow check`, `workflow security`, and `workflow lint` on the same default and explicit
   path-selection contract. They respectively own immutable-reference policy, a narrow pure-Python
   trust policy, and pinned actionlint syntax checks. Freeze the documented `recommended-v1`

@@ -7,7 +7,13 @@ from pathlib import Path
 import pytest
 
 from yaga.commits.config import MAX_CONFIG_BYTES, load_config
-from yaga.commits.models import CasePolicy, MergePolicy, PresencePolicy
+from yaga.commits.models import (
+    CasePolicy,
+    CommitPolicy,
+    EndingPolicy,
+    MergePolicy,
+    PresencePolicy,
+)
 from yaga.errors import ConfigurationError
 
 
@@ -28,7 +34,36 @@ def test_missing_configuration_uses_spec_only_defaults(tmp_path: Path) -> None:
     assert loaded.path is None
     assert loaded.policy.allowed_types is None
     assert loaded.policy.scope_policy is PresencePolicy.OPTIONAL
+    assert loaded.policy.body_min_words == 0
     assert loaded.policy.merge_commits is MergePolicy.IGNORE
+
+
+def test_commit_policy_preserves_the_legacy_positional_constructor() -> None:
+    policy = CommitPolicy(
+        1,
+        ("feat",),
+        CasePolicy.LOWER,
+        PresencePolicy.REQUIRED,
+        ("cli",),
+        CasePolicy.UPPER,
+        80,
+        3,
+        72,
+        EndingPolicy.FORBID,
+        PresencePolicy.OPTIONAL,
+        10,
+        100,
+        MergePolicy.REJECT,
+        ("Revert *",),
+        64,
+    )
+
+    assert policy.body_min_length == 10
+    assert policy.body_max_line_length == 100
+    assert policy.merge_commits is MergePolicy.REJECT
+    assert policy.ignored_headers == ("Revert *",)
+    assert policy.max_commits == 64
+    assert policy.body_min_words == 0
 
 
 def test_nearest_pyproject_is_discovered_from_a_nested_directory(tmp_path: Path) -> None:
@@ -153,6 +188,51 @@ def test_small_but_satisfiable_length_limits_are_supported(tmp_path: Path) -> No
 
     assert loaded.policy.header_max_length == 4
     assert loaded.policy.body_max_line_length == 1
+
+
+@pytest.mark.parametrize("minimum", [0, 100_000])
+def test_body_min_words_accepts_its_closed_integer_range(tmp_path: Path, minimum: int) -> None:
+    project = write_pyproject(tmp_path, f"body-min-words = {minimum}\n")
+
+    loaded = load_config(project)
+
+    assert loaded.policy.body_min_words == minimum
+
+
+@pytest.mark.parametrize("value", ["-1", "100001", "true", '"2"', "2.0"])
+def test_body_min_words_rejects_invalid_values(tmp_path: Path, value: str) -> None:
+    project = write_pyproject(tmp_path, f"body-min-words = {value}\n")
+
+    with pytest.raises(ConfigurationError, match="body-min-words must be an integer"):
+        load_config(project)
+
+
+@pytest.mark.parametrize(
+    ("minimums", "incompatible"),
+    [
+        ("body-min-length = 1\n", "body-min-length"),
+        ("body-min-words = 1\n", "body-min-words"),
+        (
+            "body-min-length = 1\nbody-min-words = 1\n",
+            "body-min-length and body-min-words",
+        ),
+    ],
+)
+def test_forbidden_body_requires_zero_body_minima(
+    tmp_path: Path,
+    minimums: str,
+    incompatible: str,
+) -> None:
+    project = write_pyproject(
+        tmp_path,
+        f'body-policy = "forbidden"\n{minimums}',
+    )
+
+    with pytest.raises(
+        ConfigurationError,
+        match=rf"{incompatible} must be zero when body-policy is forbidden",
+    ):
+        load_config(project)
 
 
 def test_invalid_utf8_and_oversized_files_are_rejected(tmp_path: Path) -> None:

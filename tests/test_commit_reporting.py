@@ -39,6 +39,37 @@ def test_json_report_has_a_versioned_machine_contract() -> None:
     assert document["commits"][0]["diagnostics"] == []
 
 
+def test_body_word_count_diagnostic_is_stable_in_text_and_json_reports() -> None:
+    result = check_target(
+        CommitTarget(label="message", message="feat: document the rule\n\none two"),
+        CommitPolicy(body_min_words=3),
+    )
+    report = ValidationReport(results=(result,), config_path=None)
+
+    rendered = render_report(report, OutputFormat.TEXT)
+    document = json.loads(render_report(report, OutputFormat.JSON))
+
+    assert "[body.word-count] line 3: body has 2 words; minimum is 3" in rendered
+    assert document["commits"][0]["diagnostics"] == [
+        {
+            "code": "body.word-count",
+            "message": "body has 2 words; minimum is 3",
+            "line": 3,
+            "column": 1,
+        }
+    ]
+
+
+def test_config_reports_the_effective_body_word_minimum() -> None:
+    loaded = LoadedConfig(policy=CommitPolicy(body_min_words=7), path=None)
+
+    rendered = render_config(loaded, OutputFormat.TEXT)
+    document = json.loads(render_config(loaded, OutputFormat.JSON))
+
+    assert "body-min-words: 7" in rendered
+    assert document["config"]["body_min_words"] == 7
+
+
 def test_untrusted_headers_and_operational_errors_are_sanitized() -> None:
     assert safe_text("feat: hello\x1b[31m\nworld\u202e\u0085") == ("feat: hello?[31m?world??")
     rendered = render_error(

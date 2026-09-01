@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import replace
 
 import pytest
 
+import yaga.commits.checker as commit_checker
 from yaga.commits.checker import check_header, check_target
 from yaga.commits.models import (
     CasePolicy,
@@ -100,10 +102,102 @@ def test_description_ending_policy_supports_require_and_forbid() -> None:
 
 
 def test_body_policy_does_not_count_footers_as_body() -> None:
-    required = CommitPolicy(body_policy=PresencePolicy.REQUIRED, body_min_length=10)
+    required = CommitPolicy(
+        body_policy=PresencePolicy.REQUIRED,
+        body_min_length=10,
+        body_min_words=10,
+    )
     message = "feat!: replace the API\n\nBREAKING CHANGE: use the new command"
 
     assert codes(message, required) == ["body.required"]
+
+
+def test_body_min_words_counts_only_tokens_with_unicode_alphanumeric_characters() -> None:
+    policy = CommitPolicy(body_min_words=5)
+    message = (
+        "feat: describe token counting\n\nnaïve\t１２３\u2003e\u0301lan ... -- 👾 \u0301\u0301 東京"
+    )
+
+    checked = result(message, policy)
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == ["body.word-count"]
+    assert checked.diagnostics[0].message == "body has 4 words; minimum is 5"
+    assert result(message, replace(policy, body_min_words=4)).valid
+
+
+def test_body_min_words_reports_the_body_start_line_at_the_lower_boundary() -> None:
+    policy = CommitPolicy(body_min_words=3)
+    message = "fix: document behavior\n\none two ..."
+
+    checked = result(message, policy)
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == ["body.word-count"]
+    assert checked.diagnostics[0].message == "body has 2 words; minimum is 3"
+    assert checked.diagnostics[0].line == 3
+    assert result("fix: document behavior\n\none two three", policy).valid
+
+
+def test_body_min_words_uses_singular_diagnostic_grammar() -> None:
+    checked = result(
+        "docs: explain a short body\n\none",
+        CommitPolicy(body_min_words=2),
+    )
+
+    assert checked.diagnostics[0].message == "body has 1 word; minimum is 2"
+
+
+def test_body_min_words_excludes_the_recognized_final_footer_block() -> None:
+    policy = CommitPolicy(body_min_words=3)
+    message = "feat: retain footer parsing\n\none two\n\nRefs: issue 123\ncontinued footer value"
+
+    checked = result(message, policy)
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == ["body.word-count"]
+    assert checked.diagnostics[0].message == "body has 2 words; minimum is 3"
+
+
+def test_body_min_words_is_not_applied_when_no_body_exists() -> None:
+    policy = CommitPolicy(body_min_words=100)
+
+    assert result("feat: allow an absent body", policy).valid
+    assert result("feat: allow footers\n\nRefs: issue 123", policy).valid
+
+
+def test_disabled_body_min_words_does_not_call_the_counter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_counter(_value: str, _minimum: int) -> int | None:
+        raise AssertionError("disabled body word policy invoked the counter")
+
+    monkeypatch.setattr(commit_checker, "_word_count_below_minimum", unexpected_counter)
+
+    assert result("feat: keep the default fast\n\nbody words are present").valid
+
+
+@pytest.mark.parametrize(
+    ("body", "minimum", "below_minimum"),
+    [
+        ("... -- 👾 \u0301\u0301", 1, 0),
+        ("one-two", 2, 1),
+        ("one\u2003two", 3, 2),
+        ("one ... two", 2, None),
+    ],
+)
+def test_body_word_counter_reports_only_below_minimum_counts(
+    body: str,
+    minimum: int,
+    below_minimum: int | None,
+) -> None:
+    assert commit_checker._word_count_below_minimum(body, minimum) == below_minimum
+
+
+def test_body_word_counter_stops_as_soon_as_the_minimum_is_reached() -> None:
+    class ExplodingTail(str):
+        def __iter__(self) -> Iterator[str]:
+            yield "o"
+            raise AssertionError("counter scanned beyond the satisfied minimum")
+
+    assert commit_checker._word_count_below_minimum(ExplodingTail("opaque"), 1) is None
 
 
 def test_body_structure_length_and_line_bounds_are_independent() -> None:
@@ -116,6 +210,20 @@ def test_body_structure_length_and_line_bounds_are_independent() -> None:
     ]
     long_line = "fix: preserve input\n\nThis body line is long enough"
     assert codes(long_line, policy) == ["body.line-length"]
+
+
+def test_body_diagnostics_have_stable_length_word_and_line_order() -> None:
+    policy = CommitPolicy(
+        body_min_length=20,
+        body_min_words=4,
+        body_max_line_length=5,
+    )
+
+    assert codes("fix: preserve input\n\none two", policy) == [
+        "body.length",
+        "body.word-count",
+        "body.line-length",
+    ]
 
 
 def test_merge_policy_uses_parent_identity_not_header_text() -> None:
@@ -162,6 +270,7 @@ def test_header_check_applies_header_rules_without_commit_body_policy() -> None:
         allowed_types=("fix",),
         body_policy=PresencePolicy.REQUIRED,
         body_min_length=100,
+        body_min_words=100,
         body_max_line_length=1,
     )
 

@@ -79,6 +79,7 @@ description-max-length = 72
 description-ending = "forbid"    # allow, require, or forbid . ! ?
 body-policy = "optional"
 body-min-length = 0
+body-min-words = 8
 body-max-line-length = 100
 merge-commits = "reject"         # ignore, check, or reject
 ignored-headers = ['Revert "*"'] # bounded, case-sensitive glob patterns
@@ -89,6 +90,14 @@ A standalone `.yaga.toml` uses `config-version = 1` and `[commit]` instead of th
 `[tool.yaga...]` tables. Omit `allowed-types` or `allowed-scopes` to allow any value. An explicit
 empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must not be empty.
 `yaga config show` prints every effective value and the source file, with `--format json` for tools.
+
+`body-min-length` and `body-min-words` are independent lower bounds on the parsed prose body.
+`body-min-words` accepts an integer from `0` through `100000` and defaults to `0`; it counts
+Unicode-whitespace-delimited tokens that contain at least one Unicode alphanumeric character.
+Punctuation-only and emoji-only tokens do not count, while text without Unicode whitespace is one
+token. The minimum is checked only when a prose body exists, so use `body-policy = "required"` to
+require one. A recognized final footer block is not prose body and does not contribute words. When
+`body-policy = "forbidden"`, both body minima must be zero.
 
 For a new repository, YAGA can create a recommended standalone policy and immediately report its
 effective values:
@@ -103,8 +112,8 @@ checks at most 64 commits per range. Initialization creates only `.yaga.toml`: i
 `pyproject.toml`, overwrites a path, or shadows a configuration already discovered for the target
 directory. Use `--format json` when another tool needs the created path and effective policy.
 
-Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`, and
-`header.length`. Text and versioned JSON reports use these exit codes:
+Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`,
+`header.length`, and `body.word-count`. Text and versioned JSON reports use these exit codes:
 
 | Exit | Meaning |
 | --- | --- |
