@@ -5,6 +5,7 @@ from __future__ import annotations
 from fnmatch import fnmatchcase
 
 from yaga.commits.models import (
+    BreakingMarkerPolicy,
     CasePolicy,
     CheckResult,
     CommitPolicy,
@@ -165,6 +166,16 @@ def _check_target(
         )
 
     if check_body:
+        if (
+            policy.breaking_markers is BreakingMarkerPolicy.PAIRED
+            and parsed.breaking_header != parsed.breaking_footer
+        ):
+            diagnostics.append(
+                Diagnostic(
+                    code="breaking.marker-pair",
+                    message="breaking changes must use both ! and a BREAKING CHANGE footer",
+                )
+            )
         has_body = bool(parsed.body.strip())
         if policy.body_policy is PresencePolicy.REQUIRED and not has_body:
             diagnostics.append(

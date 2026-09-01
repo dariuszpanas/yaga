@@ -427,7 +427,11 @@ def test_installed_entrypoint_forces_utf8_output(tmp_path: Path) -> None:
 def test_config_show_reports_the_discovered_source(tmp_path: Path) -> None:
     config = tmp_path / ".yaga.toml"
     config.write_text(
-        'config-version = 1\n[commit]\nallowed-types = ["feat"]\nbody-min-words = 4\n',
+        "config-version = 1\n"
+        "[commit]\n"
+        'allowed-types = ["feat"]\n'
+        'breaking-markers = "paired"\n'
+        "body-min-words = 4\n",
         encoding="utf-8",
     )
 
@@ -440,6 +444,7 @@ def test_config_show_reports_the_discovered_source(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert document["config_path"] == str(config)
     assert document["config"]["allowed_types"] == ["feat"]
+    assert document["config"]["breaking_markers"] == "paired"
     assert document["config"]["body_min_words"] == 4
 
 

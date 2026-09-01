@@ -8,6 +8,7 @@ import pytest
 
 from yaga.commits.config import MAX_CONFIG_BYTES, load_config
 from yaga.commits.models import (
+    BreakingMarkerPolicy,
     CasePolicy,
     CommitPolicy,
     EndingPolicy,
@@ -35,6 +36,7 @@ def test_missing_configuration_uses_spec_only_defaults(tmp_path: Path) -> None:
     assert loaded.policy.allowed_types is None
     assert loaded.policy.scope_policy is PresencePolicy.OPTIONAL
     assert loaded.policy.body_min_words == 0
+    assert loaded.policy.breaking_markers is BreakingMarkerPolicy.EITHER
     assert loaded.policy.merge_commits is MergePolicy.IGNORE
 
 
@@ -64,6 +66,7 @@ def test_commit_policy_preserves_the_legacy_positional_constructor() -> None:
     assert policy.ignored_headers == ("Revert *",)
     assert policy.max_commits == 64
     assert policy.body_min_words == 0
+    assert policy.breaking_markers is BreakingMarkerPolicy.EITHER
 
 
 def test_nearest_pyproject_is_discovered_from_a_nested_directory(tmp_path: Path) -> None:
@@ -188,6 +191,34 @@ def test_small_but_satisfiable_length_limits_are_supported(tmp_path: Path) -> No
 
     assert loaded.policy.header_max_length == 4
     assert loaded.policy.body_max_line_length == 1
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [
+        ("either", BreakingMarkerPolicy.EITHER),
+        ("paired", BreakingMarkerPolicy.PAIRED),
+    ],
+)
+def test_breaking_markers_accepts_its_closed_values(
+    tmp_path: Path,
+    configured: str,
+    expected: BreakingMarkerPolicy,
+) -> None:
+    project = write_pyproject(tmp_path, f'breaking-markers = "{configured}"\n')
+
+    assert load_config(project).policy.breaking_markers is expected
+
+
+@pytest.mark.parametrize("value", ['"both"', '"PAIRed"', "true", "1"])
+def test_breaking_markers_rejects_values_outside_its_closed_enum(
+    tmp_path: Path,
+    value: str,
+) -> None:
+    project = write_pyproject(tmp_path, f"breaking-markers = {value}\n")
+
+    with pytest.raises(ConfigurationError, match="breaking-markers must be"):
+        load_config(project)
 
 
 @pytest.mark.parametrize("minimum", [0, 100_000])

@@ -6,6 +6,7 @@ import json
 
 from yaga.commits.checker import check_target
 from yaga.commits.models import (
+    BreakingMarkerPolicy,
     CommitPolicy,
     CommitTarget,
     LoadedConfig,
@@ -39,6 +40,30 @@ def test_json_report_has_a_versioned_machine_contract() -> None:
     assert document["commits"][0]["diagnostics"] == []
 
 
+def test_breaking_marker_pair_diagnostic_is_stable_in_text_and_json_reports() -> None:
+    result = check_target(
+        CommitTarget(label="message", message="feat!: remove the old command"),
+        CommitPolicy(breaking_markers=BreakingMarkerPolicy.PAIRED),
+    )
+    report = ValidationReport(results=(result,), config_path=None)
+
+    rendered = render_report(report, OutputFormat.TEXT)
+    document = json.loads(render_report(report, OutputFormat.JSON))
+
+    assert (
+        "[breaking.marker-pair] line 1: breaking changes must use both ! and a "
+        "BREAKING CHANGE footer"
+    ) in rendered
+    assert document["commits"][0]["diagnostics"] == [
+        {
+            "code": "breaking.marker-pair",
+            "message": "breaking changes must use both ! and a BREAKING CHANGE footer",
+            "line": 1,
+            "column": 1,
+        }
+    ]
+
+
 def test_body_word_count_diagnostic_is_stable_in_text_and_json_reports() -> None:
     result = check_target(
         CommitTarget(label="message", message="feat: document the rule\n\none two"),
@@ -68,6 +93,19 @@ def test_config_reports_the_effective_body_word_minimum() -> None:
 
     assert "body-min-words: 7" in rendered
     assert document["config"]["body_min_words"] == 7
+
+
+def test_config_reports_the_effective_breaking_marker_policy() -> None:
+    loaded = LoadedConfig(
+        policy=CommitPolicy(breaking_markers=BreakingMarkerPolicy.PAIRED),
+        path=None,
+    )
+
+    rendered = render_config(loaded, OutputFormat.TEXT)
+    document = json.loads(render_config(loaded, OutputFormat.JSON))
+
+    assert "breaking-markers: paired" in rendered
+    assert document["config"]["breaking_markers"] == "paired"
 
 
 def test_untrusted_headers_and_operational_errors_are_sanitized() -> None:

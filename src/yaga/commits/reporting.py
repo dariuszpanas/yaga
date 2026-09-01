@@ -80,6 +80,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "description_min_length": policy.description_min_length,
         "description_max_length": policy.description_max_length,
         "description_ending": policy.description_ending.value,
+        "breaking_markers": policy.breaking_markers.value,
         "body_policy": policy.body_policy.value,
         "body_min_length": policy.body_min_length,
         "body_min_words": policy.body_min_words,

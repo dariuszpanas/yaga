@@ -56,6 +56,67 @@ def test_parser_accepts_unindented_multiline_footer_values() -> None:
     )
 
 
+def test_footer_value_may_continue_across_blank_line_delimited_paragraphs() -> None:
+    parsed = parse_message(
+        "feat!: replace the old command\n\n"
+        "BREAKING CHANGE: use the new command\n\n"
+        "The compatibility alias remains for one release.\n\n"
+        "Remove the alias after downstream users migrate."
+    )
+
+    assert parsed is not None
+    assert parsed.body == ""
+    assert parsed.footer_lines == (
+        "BREAKING CHANGE: use the new command",
+        "",
+        "The compatibility alias remains for one release.",
+        "",
+        "Remove the alias after downstream users migrate.",
+    )
+    assert parsed.breaking_footer
+
+
+def test_subsequent_footer_token_terminates_a_blank_line_continued_value() -> None:
+    parsed = parse_message(
+        "feat: preserve footer boundaries\n\n"
+        "Keep this paragraph as the body.\n\n"
+        "Reviewed-by: Example Maintainer\n\n"
+        "The review covered the compatibility path.\n\n"
+        "BREAKING CHANGE: remove the old command\n\n"
+        "Use the replacement command instead."
+    )
+
+    assert parsed is not None
+    assert parsed.body == "Keep this paragraph as the body."
+    assert parsed.footer_lines == (
+        "Reviewed-by: Example Maintainer",
+        "",
+        "The review covered the compatibility path.",
+        "",
+        "BREAKING CHANGE: remove the old command",
+        "",
+        "Use the replacement command instead.",
+    )
+    assert parsed.breaking_footer
+
+
+def test_footer_like_paragraph_start_deterministically_begins_the_footer_suffix() -> None:
+    parsed = parse_message(
+        "docs: explain the boundary\n\n"
+        "Keep this paragraph as prose.\n\n"
+        "Notes: this token starts footer parsing\n\n"
+        "Even this blank-separated paragraph remains in the footer value."
+    )
+
+    assert parsed is not None
+    assert parsed.body == "Keep this paragraph as prose."
+    assert parsed.footer_lines == (
+        "Notes: this token starts footer parsing",
+        "",
+        "Even this blank-separated paragraph remains in the footer value.",
+    )
+
+
 def test_trailer_like_line_inside_body_paragraph_does_not_start_footers() -> None:
     parsed = parse_message(
         "fix(cli): keep body paragraphs intact\n\nExplain why the change is needed.\nRefs #42\n"

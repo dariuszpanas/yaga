@@ -44,6 +44,7 @@ def _action_fixture(
     tmp_path: Path,
     *,
     head_message: str = "feat(action): check pull requests",
+    pull_request_title: str = "feat(action): check pull requests",
     config: str | None = None,
 ) -> tuple[Path, Path, dict[str, str]]:
     repository = tmp_path / "repository"
@@ -62,7 +63,7 @@ def _action_fixture(
         "repository": {"id": 100, "full_name": "owner/repository"},
         "pull_request": {
             "number": 17,
-            "title": "feat(action): check pull requests",
+            "title": pull_request_title,
             "state": "open",
             "draft": False,
             "base": {
@@ -222,6 +223,61 @@ def test_isolated_commit_action_reports_body_word_policy(tmp_path: Path) -> None
     assert completed.returncode == 1
     assert completed.stderr == ""
     assert "[body.word-count] line 3: body has 1 word; minimum is 2" in completed.stdout
+
+
+@pytest.mark.parametrize(
+    "head_message",
+    [
+        "feat(action)!: require paired markers",
+        "feat(action): require paired markers\n\nBREAKING CHANGE: use the new action",
+    ],
+)
+def test_isolated_commit_action_enforces_paired_breaking_markers_only_for_commits(
+    tmp_path: Path,
+    head_message: str,
+) -> None:
+    repository, event_file, action_environment = _action_fixture(
+        tmp_path,
+        head_message=head_message,
+        pull_request_title="feat(action)!: describe a breaking pull request",
+        config='config-version = 1\n[commit]\nbreaking-markers = "paired"\n',
+    )
+    environment = os.environ.copy()
+    environment.update(action_environment)
+    environment["PYTHONPATH"] = str(ROOT / "src")
+    environment["YAGA_COMMIT_ACTION_RUNTIME"] = "1"
+    environment.pop("YAGA_ACTION_RUNTIME", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            "-S",
+            "-m",
+            "yaga",
+            "github",
+            "pull-request",
+            "check",
+            "--event-file",
+            str(event_file),
+            "--repo",
+            str(repository),
+            "--format",
+            "github",
+        ],
+        cwd=repository,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    head_identity = _git(repository, "rev-parse", "--short=12", "HEAD")
+    assert completed.returncode == 1
+    assert completed.stderr == ""
+    assert completed.stdout.count("[breaking.marker-pair]") == 1
+    assert f"{head_identity}: [breaking.marker-pair]" in completed.stdout
+    assert "pull request #17 title: [breaking.marker-pair]" not in completed.stdout
 
 
 def test_action_runtime_selectors_are_mutually_exclusive(tmp_path: Path) -> None:
