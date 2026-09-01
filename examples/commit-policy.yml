@@ -24,4 +24,4 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: dariuszpanas/yaga/actions/commit-check@9476edf0459b7a355f5e4eca214c7c3bd3eaf3d5
+      - uses: dariuszpanas/yaga/actions/commit-check@1693ad15b66428f8edb30b168c1a422f0d1dfb26
