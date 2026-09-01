@@ -129,7 +129,7 @@ audited immutable commit that contains `.pre-commit-hooks.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/dariuszpanas/yaga
-    rev: 91d93b6e64b6d795a56c2069b20ccaebdf4303f3
+    rev: 1693ad15b66428f8edb30b168c1a422f0d1dfb26
     hooks:
       - id: yaga-commit-check
 ```
@@ -198,7 +198,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: dariuszpanas/yaga/actions/commit-check@9476edf0459b7a355f5e4eca214c7c3bd3eaf3d5
+      - uses: dariuszpanas/yaga/actions/commit-check@1693ad15b66428f8edb30b168c1a422f0d1dfb26
 ```
 
 The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,
