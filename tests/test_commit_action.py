@@ -40,14 +40,22 @@ def _commit(repository: Path, message: str) -> str:
     return _git(repository, "rev-parse", "HEAD")
 
 
-def _action_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+def _action_fixture(
+    tmp_path: Path,
+    *,
+    head_message: str = "feat(action): check pull requests",
+    config: str | None = None,
+) -> tuple[Path, Path, dict[str, str]]:
     repository = tmp_path / "repository"
     repository.mkdir()
     _git(repository, "init", "--initial-branch=main")
     _git(repository, "config", "user.name", "YAGA Tests")
     _git(repository, "config", "user.email", "yaga@example.invalid")
     base = _commit(repository, "chore: establish baseline")
-    head = _commit(repository, "feat(action): check pull requests")
+    if config is not None:
+        (repository / ".yaga.toml").write_text(config, encoding="utf-8")
+        _git(repository, "add", ".yaga.toml")
+    head = _commit(repository, head_message)
     event = {
         "action": "opened",
         "number": 17,
@@ -173,6 +181,47 @@ def test_commit_action_runs_without_site_packages_or_installed_cli(tmp_path: Pat
     assert completed.stderr == ""
     assert "YAGA checked pull request #17" in completed.stdout
     assert "typer" not in completed.stdout.casefold()
+
+
+def test_isolated_commit_action_reports_body_word_policy(tmp_path: Path) -> None:
+    repository, event_file, action_environment = _action_fixture(
+        tmp_path,
+        head_message="feat(action): enforce prose\n\none",
+        config="config-version = 1\n[commit]\nbody-min-words = 2\n",
+    )
+    environment = os.environ.copy()
+    environment.update(action_environment)
+    environment["PYTHONPATH"] = str(ROOT / "src")
+    environment["YAGA_COMMIT_ACTION_RUNTIME"] = "1"
+    environment.pop("YAGA_ACTION_RUNTIME", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            "-S",
+            "-m",
+            "yaga",
+            "github",
+            "pull-request",
+            "check",
+            "--event-file",
+            str(event_file),
+            "--repo",
+            str(repository),
+            "--format",
+            "github",
+        ],
+        cwd=repository,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stderr == ""
+    assert "[body.word-count] line 3: body has 1 word; minimum is 2" in completed.stdout
 
 
 def test_action_runtime_selectors_are_mutually_exclusive(tmp_path: Path) -> None:

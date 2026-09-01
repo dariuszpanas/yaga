@@ -113,6 +113,7 @@ header-max-length = 100
 description-min-length = 3
 description-ending = "forbid"
 body-policy = "optional"
+body-min-words = 8
 body-max-line-length = 100
 merge-commits = "reject"
 ignored-headers = []

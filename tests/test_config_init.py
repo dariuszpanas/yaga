@@ -96,6 +96,7 @@ def test_initialized_configuration_round_trips_to_the_recommended_policy(
     assert policy.description_ending is EndingPolicy.FORBID
     assert policy.body_policy is PresencePolicy.OPTIONAL
     assert policy.body_min_length == 0
+    assert policy.body_min_words == 0
     assert policy.body_max_line_length == 100
     assert policy.merge_commits is MergePolicy.REJECT
     assert policy.ignored_headers == ()

@@ -122,6 +122,64 @@ def test_github_pull_request_command_uses_exit_zero_one_and_two(tmp_path: Path) 
     assert json.loads(errored.stderr)["error"]["kind"] == "input"
 
 
+def test_github_pull_request_cli_reports_body_word_findings_as_annotations(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    git(repository, "init", "--initial-branch=main")
+    git(repository, "config", "user.name", "YAGA Tests")
+    git(repository, "config", "user.email", "yaga@example.invalid")
+    base = commit(repository, "chore: establish baseline")
+    head = commit(repository, "feat(cli): enforce prose minimum\n\none two")
+    (repository / ".yaga.toml").write_text(
+        "config-version = 1\n[commit]\nbody-min-words = 3\n",
+        encoding="utf-8",
+    )
+    event = {
+        "action": "opened",
+        "number": 18,
+        "repository": {"id": 100, "full_name": "owner/repository"},
+        "pull_request": {
+            "number": 18,
+            "title": "feat(cli): enforce prose minimum",
+            "state": "open",
+            "draft": False,
+            "base": {
+                "sha": base,
+                "ref": "main",
+                "repo": {"id": 100, "full_name": "owner/repository"},
+            },
+            "head": {
+                "sha": head,
+                "ref": "feature",
+                "repo": {"id": 100, "full_name": "owner/repository"},
+            },
+        },
+    }
+    event_file = tmp_path / "event.json"
+    event_file.write_text(json.dumps(event), encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "github",
+            "pull-request",
+            "check",
+            "--event-file",
+            str(event_file),
+            "--repo",
+            str(repository),
+            "--format",
+            "github",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "::error title=YAGA commit policy::" in result.stdout
+    assert "[body.word-count] line 3: body has 2 words; minimum is 3" in result.stdout
+
+
 def test_commit_check_accepts_a_message_and_uses_exit_one_for_violations(
     tmp_path: Path,
 ) -> None:
@@ -369,7 +427,7 @@ def test_installed_entrypoint_forces_utf8_output(tmp_path: Path) -> None:
 def test_config_show_reports_the_discovered_source(tmp_path: Path) -> None:
     config = tmp_path / ".yaga.toml"
     config.write_text(
-        'config-version = 1\n[commit]\nallowed-types = ["feat"]\n',
+        'config-version = 1\n[commit]\nallowed-types = ["feat"]\nbody-min-words = 4\n',
         encoding="utf-8",
     )
 
@@ -382,6 +440,7 @@ def test_config_show_reports_the_discovered_source(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert document["config_path"] == str(config)
     assert document["config"]["allowed_types"] == ["feat"]
+    assert document["config"]["body_min_words"] == 4
 
 
 def test_config_init_creates_and_reports_a_standalone_policy(tmp_path: Path) -> None:

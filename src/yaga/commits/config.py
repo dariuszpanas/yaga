@@ -42,6 +42,7 @@ _COMMIT_KEYS = frozenset(
         "description-ending",
         "body-policy",
         "body-min-length",
+        "body-min-words",
         "body-max-line-length",
         "merge-commits",
         "ignored-headers",
@@ -199,9 +200,24 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         100_000,
         path,
     )
-    if body_policy is PresencePolicy.FORBIDDEN and body_min:
+    body_min_words = _integer(
+        raw_commit.get("body-min-words", 0),
+        "body-min-words",
+        0,
+        100_000,
+        path,
+    )
+    if body_policy is PresencePolicy.FORBIDDEN and (body_min or body_min_words):
+        incompatible = " and ".join(
+            key
+            for key, value in (
+                ("body-min-length", body_min),
+                ("body-min-words", body_min_words),
+            )
+            if value
+        )
         raise ConfigurationError(
-            f"body-min-length must be zero when body-policy is forbidden in {path}"
+            f"{incompatible} must be zero when body-policy is forbidden in {path}"
         )
 
     header_max = _optional_integer(
@@ -247,6 +263,7 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         ),
         body_policy=body_policy,
         body_min_length=body_min,
+        body_min_words=body_min_words,
         body_max_line_length=_optional_integer(
             raw_commit, "body-max-line-length", minimum=1, maximum=100_000, path=path
         ),

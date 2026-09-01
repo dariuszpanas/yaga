@@ -45,6 +45,11 @@ Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or
 `.yaga.toml` root plus `[commit]`. Load exactly one nearest or explicit file, reject unknown keys and
 wrong types, and do not silently merge policies. Stable diagnostic identifiers and JSON schema
 fields are public pre-release interfaces; change them deliberately and test both text and JSON.
+`body-min-words` is a schema-v1 integer from zero through 100000 with a zero default. It counts only
+Unicode-whitespace-delimited prose-body tokens containing a Unicode alphanumeric character;
+recognized final footers and punctuation-only or emoji-only tokens are excluded. A nonzero value
+does not require an absent optional body, and it is invalid with a forbidden body. Keep its
+`body.word-count` diagnostic stable across text, JSON, and GitHub reports.
 `config init` creates only a new standalone `.yaga.toml` with exclusive no-overwrite semantics. It
 must refuse to shadow any effective discovered configuration, never edit `pyproject.toml`, and keep
 its deterministic starter template round-trippable through the strict loader.

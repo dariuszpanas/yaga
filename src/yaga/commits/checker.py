@@ -189,6 +189,20 @@ def _check_target(
                     line=parsed.body_start_line,
                 )
             )
+        if has_body and policy.body_min_words:
+            body_word_count = _word_count_below_minimum(parsed.body, policy.body_min_words)
+            if body_word_count is not None:
+                word_label = "word" if body_word_count == 1 else "words"
+                diagnostics.append(
+                    Diagnostic(
+                        code="body.word-count",
+                        message=(
+                            f"body has {body_word_count} {word_label}; minimum is "
+                            f"{policy.body_min_words}"
+                        ),
+                        line=parsed.body_start_line,
+                    )
+                )
         if policy.body_max_line_length is not None:
             for offset, line in enumerate(parsed.body_lines):
                 if len(line) > policy.body_max_line_length:
@@ -229,6 +243,21 @@ def _check_case(
 def _contains_casefold(values: tuple[str, ...], candidate: str) -> bool:
     folded = candidate.casefold()
     return any(value.casefold() == folded for value in values)
+
+
+def _word_count_below_minimum(value: str, minimum: int) -> int | None:
+    """Return the exact word count only when it is below ``minimum``."""
+    count = 0
+    token_has_alphanumeric = False
+    for character in value:
+        if character.isspace():
+            token_has_alphanumeric = False
+        elif not token_has_alphanumeric and character.isalnum():
+            token_has_alphanumeric = True
+            count += 1
+            if count >= minimum:
+                return None
+    return count
 
 
 def _failure(target: CommitTarget, header: str, code: str, message: str) -> CheckResult:

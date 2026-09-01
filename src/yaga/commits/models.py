@@ -66,6 +66,7 @@ class CommitPolicy:
     merge_commits: MergePolicy = MergePolicy.IGNORE
     ignored_headers: tuple[str, ...] = ()
     max_commits: int = 256
+    body_min_words: int = 0
 
 
 @dataclass(frozen=True, slots=True)
