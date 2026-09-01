@@ -41,10 +41,15 @@ def main() -> int:
             required = {
                 "yaga/__init__.py",
                 "yaga/action_cli.py",
+                "yaga/commit_action_cli.py",
+                "yaga/commit_action_runtime.py",
                 "yaga/cli.py",
                 "yaga/codex/runtime.py",
                 "yaga/commands/commit.py",
+                "yaga/commands/github.py",
                 "yaga/commits/checker.py",
+                "yaga/commits/github_event.py",
+                "yaga/commits/github_reporting.py",
                 "yaga/files.py",
             }
             if missing := sorted(required - names):
@@ -62,6 +67,8 @@ def main() -> int:
             names = source_distribution.getnames()
             required_suffixes = {
                 "/action.yml": "the composite Action",
+                "/actions/commit-check/action.yml": "the commit-check Action",
+                "/.github/workflows/commit-policy.yml": "the commit-policy dogfood workflow",
                 "/examples/codex-review.yml": "the Codex review workflow example",
                 "/examples/review-policy.yml": "the review policy workflow example",
                 "/src/yaga/__init__.py": "the yaga package",
