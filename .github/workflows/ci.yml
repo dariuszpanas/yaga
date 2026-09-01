@@ -67,6 +67,14 @@ jobs:
           --policy .yaga/tree-policy.toml
           --revision "$YAGA_TREE_REVISION"
           --format github
+      - name: Check committed path portability
+        env:
+          YAGA_PATH_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          uv run --frozen --python 3.12 yaga path check
+          --policy .yaga/path-policy.toml
+          --revision "$YAGA_PATH_REVISION"
+          --format github
       - name: Check committed blob sizes
         env:
           YAGA_SIZE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}

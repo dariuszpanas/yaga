@@ -52,6 +52,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert (
         "uv run yaga change check --policy .yaga/change-policy.toml --range HEAD^..HEAD" in makefile
     )
+    assert "uv run yaga path check --policy .yaga/path-policy.toml --revision HEAD" in makefile
     assert "uv run yaga size check --policy .yaga/size-policy.toml --revision HEAD" in makefile
     assert "uv run yaga tree check --policy .yaga/tree-policy.toml --revision HEAD" in makefile
     assert "uv run yaga repo check --check" not in makefile
@@ -85,6 +86,11 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         "branch-policy-version": 1,
         "allowed-patterns": ["main", "feat/*", "fix/*", "dependabot/*/**"],
     }
+    path_policy = tomllib.loads((ROOT / ".yaga" / "path-policy.toml").read_text(encoding="utf-8"))
+    assert path_policy == {
+        "path-policy-version": 1,
+        "profile": "windows-compatible-v1",
+    }
     size_policy = tomllib.loads((ROOT / ".yaga" / "size-policy.toml").read_text(encoding="utf-8"))
     assert size_policy == {
         "size-policy-version": 1,
@@ -96,6 +102,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert tree_policy == {
         "tree-policy-version": 1,
         "required-paths": [
+            ".yaga/path-policy.toml",
             ".yaga/size-policy.toml",
             ".yaga/tree-policy.toml",
             "LICENSE",
@@ -141,6 +148,14 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "--policy .yaga/tree-policy.toml" in ci
     assert "YAGA_TREE_REVISION" in ci
     assert '--revision "$YAGA_TREE_REVISION"' in ci
+    assert "Check committed path portability" in ci
+    assert "yaga path check" in ci
+    assert "--policy .yaga/path-policy.toml" in ci
+    assert (
+        "YAGA_PATH_REVISION: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}" in ci
+    )
+    assert '--revision "$YAGA_PATH_REVISION"' in ci
     assert "Check committed blob sizes" in ci
     assert "yaga size check" in ci
     assert "--policy .yaga/size-policy.toml" in ci
@@ -200,11 +215,13 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"repo",\n            "check"' in build_gate
     assert '"tree",\n            "check"' in build_gate
     assert '"size",\n            "check"' in build_gate
+    assert '"path",\n            "check"' in build_gate
     assert '"yaga/commands/repo.py"' in build_gate
     assert '"yaga/commands/change.py"' in build_gate
     assert '"yaga/commands/branch.py"' in build_gate
     assert '"yaga/commands/tree.py"' in build_gate
     assert '"yaga/commands/size.py"' in build_gate
+    assert '"yaga/commands/path.py"' in build_gate
     assert '"yaga/git/__init__.py"' in build_gate
     assert '"yaga/git/process.py"' in build_gate
     assert '"yaga/git/runtime.py"' in build_gate
@@ -240,6 +257,13 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/sizes/policy.py"' in build_gate
     assert '"yaga/sizes/reporting.py"' in build_gate
     assert '"yaga/sizes/service.py"' in build_gate
+    assert '"yaga/paths/__init__.py"' in build_gate
+    assert '"yaga/paths/checker.py"' in build_gate
+    assert '"yaga/paths/git.py"' in build_gate
+    assert '"yaga/paths/models.py"' in build_gate
+    assert '"yaga/paths/policy.py"' in build_gate
+    assert '"yaga/paths/reporting.py"' in build_gate
+    assert '"yaga/paths/service.py"' in build_gate
     assert '"yaga/repository/checker.py"' in build_gate
     assert '"yaga/repository/plan.py"' in build_gate
     assert '"yaga/workflows/inputs.py"' in build_gate
@@ -310,6 +334,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "from yaga.branches" not in source, path
         assert "from yaga.trees" not in source, path
         assert "from yaga.sizes" not in source, path
+        assert "from yaga.paths" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.commits" not in source, path
         assert "from yaga.workflows" not in source, path
@@ -317,6 +342,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "import yaga.branches" not in source, path
         assert "import yaga.trees" not in source, path
         assert "import yaga.sizes" not in source, path
+        assert "import yaga.paths" not in source, path
 
 
 def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
@@ -336,6 +362,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "from yaga.branches" not in source, path
         assert "from yaga.trees" not in source, path
         assert "from yaga.sizes" not in source, path
+        assert "from yaga.paths" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.codex" not in source, path
         assert "from yaga.workflows" not in source, path
@@ -344,4 +371,5 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "import yaga.branches" not in source, path
         assert "import yaga.trees" not in source, path
         assert "import yaga.sizes" not in source, path
+        assert "import yaga.paths" not in source, path
         assert "GITHUB_TOKEN" not in source, path

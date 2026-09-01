@@ -202,6 +202,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     branch_policy = consumer / "branch-policy.toml"
     change_policy = consumer / "change-policy.toml"
     repository_plan = consumer / "repository-plan.toml"
+    path_policy = consumer / "path-policy.toml"
     size_policy = consumer / "size-policy.toml"
     tree_policy = consumer / "tree-policy.toml"
     executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
@@ -412,6 +413,11 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         encoding="utf-8",
         newline="\n",
     )
+    path_policy.write_text(
+        'path-policy-version = 1\nprofile = "windows-compatible-v1"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
     size_policy.write_text(
         "size-policy-version = 1\n"
         "default-max-blob-bytes = 4096\n"
@@ -424,6 +430,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     )
     tree_required_paths = [
         ".yaga.toml",
+        "path-policy.toml",
         "size-policy.toml",
         "tree-policy.toml",
         "src/package.py",
@@ -432,7 +439,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     tree_forbidden_patterns = ["**/.env", "**/*.pyc", "dist/**"]
     tree_policy.write_text(
         "tree-policy-version = 1\n"
-        'required-paths = [".yaga.toml", "size-policy.toml", "tree-policy.toml", '
+        'required-paths = [".yaga.toml", "path-policy.toml", "size-policy.toml", "tree-policy.toml", '
         '"src/package.py", "tests/test_package.py"]\n'
         'forbidden-patterns = ["**/.env", "**/*.pyc", "dist/**"]\n',
         encoding="utf-8",
@@ -494,6 +501,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
             "branch-policy.toml",
             "change-policy.toml",
             "repository-plan.toml",
+            "path-policy.toml",
             "size-policy.toml",
             "src/package.py",
             "tests/test_package.py",
@@ -559,7 +567,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and tree_document.get("revision") == head_sha
         and tree_document.get("commit_sha") == head_sha
         and tree_document.get("tree_sha") == tree_sha
-        and tree_document.get("entries_checked") == 9
+        and tree_document.get("entries_checked") == 10
         and tree_document.get("required_paths") == tree_required_paths
         and tree_document.get("forbidden_patterns") == tree_forbidden_patterns
         and tree_document.get("diagnostics") == []
@@ -568,6 +576,62 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and tree_document.get("forbidden_paths") == 0
     ):
         raise SystemExit("installed wheel CLI tree check emitted the wrong report contract")
+    path_completed = run_bounded(
+        [
+            str(executable),
+            "path",
+            "check",
+            "--policy",
+            str(path_policy),
+            "--revision",
+            head_sha,
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    path_document = successful_json(path_completed, operation="path check")
+    path_identity = path_document.get("identity")
+    path_policy_report = path_document.get("policy")
+    path_counts = path_document.get("counts")
+    if not (
+        path_document.get("schema_version") == 1
+        and path_document.get("kind") == "path_policy"
+        and path_document.get("status") == "passed"
+        and path_document.get("valid") is True
+        and path_identity
+        == {
+            "policy_path": str(path_policy.resolve()),
+            "repository_path": str(consumer.resolve()),
+            "revision": head_sha,
+            "commit_sha": head_sha,
+            "tree_sha": tree_sha,
+        }
+        and path_policy_report
+        == {
+            "path_policy_version": 1,
+            "profile": "windows-compatible-v1",
+            "rules": [
+                "windows-characters",
+                "windows-trailing",
+                "windows-reserved",
+                "ascii-case-collision",
+            ],
+        }
+        and path_counts
+        == {
+            "paths": len(size_expected_paths),
+            "components": sum(path.count("/") + 1 for path in size_expected_paths),
+            "findings": 0,
+            "by_code": {},
+        }
+        and path_document.get("diagnostics") == []
+        and path_document.get("diagnostics_omitted") == 0
+    ):
+        raise SystemExit("installed wheel CLI path check emitted the wrong report contract")
     size_completed = run_bounded(
         [
             str(executable),
@@ -611,7 +675,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
             "max_total_blob_bytes": 65536,
             "path_limits": [{"pattern": "src/**", "max_blob_bytes": 128}],
         }
-        and size_counts == {"blobs": 9, "gitlinks": 0, "oversized_blobs": 0}
+        and size_counts == {"blobs": 10, "gitlinks": 0, "oversized_blobs": 0}
         and size_total
         == {
             "blob_bytes": size_expected_total,
@@ -757,6 +821,7 @@ def main() -> int:
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
                 "yaga/commands/repo.py",
+                "yaga/commands/path.py",
                 "yaga/commands/size.py",
                 "yaga/commands/tree.py",
                 "yaga/commands/workflow.py",
@@ -795,6 +860,13 @@ def main() -> int:
                 "yaga/sizes/policy.py",
                 "yaga/sizes/reporting.py",
                 "yaga/sizes/service.py",
+                "yaga/paths/__init__.py",
+                "yaga/paths/checker.py",
+                "yaga/paths/git.py",
+                "yaga/paths/models.py",
+                "yaga/paths/policy.py",
+                "yaga/paths/reporting.py",
+                "yaga/paths/service.py",
                 "yaga/files.py",
                 "yaga/repository/checker.py",
                 "yaga/repository/models.py",
