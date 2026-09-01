@@ -4,78 +4,23 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
 import pytest
 
-from scripts import check_build, run_actionlint
+from scripts import check_build
+from yaga.workflows.lint import ACTIONLINT_IMAGE
 
 ROOT = Path(__file__).parents[1]
 
 
-def test_actionlint_discovers_both_workflow_extensions(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(run_actionlint, "ROOT", tmp_path)
-    workflows = tmp_path / ".github" / "workflows"
-    examples = tmp_path / "examples"
-    workflows.mkdir(parents=True)
-    examples.mkdir()
-    (workflows / "ci.yaml").write_text("name: CI\n", encoding="utf-8")
-    (examples / "consumer.yml").write_text("name: Consumer\n", encoding="utf-8")
-
-    assert run_actionlint.workflow_paths() == [
-        ".github/workflows/ci.yaml",
-        "examples/consumer.yml",
-    ]
-
-
-def test_actionlint_streams_bounded_workflows_without_a_host_mount(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(run_actionlint, "ROOT", tmp_path)
-    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
-    workflow.parent.mkdir(parents=True)
-    workflow.write_bytes(b"name: CI\n")
-    calls: list[tuple[list[str], bytes]] = []
-
-    def fake_run(command: list[str], **options: object) -> subprocess.CompletedProcess[bytes]:
-        assert options["check"] is False
-        workflow_input = options["input"]
-        assert isinstance(workflow_input, bytes)
-        calls.append((command, workflow_input))
-        return subprocess.CompletedProcess(command, 0)
-
-    monkeypatch.setattr(run_actionlint.shutil, "which", lambda _name: "docker")
-    monkeypatch.setattr(run_actionlint.subprocess, "run", fake_run)
-
-    assert run_actionlint.main() == 0
-    assert calls == [
-        (
-            [
-                "docker",
-                "run",
-                "--rm",
-                "-i",
-                run_actionlint.ACTIONLINT_IMAGE,
-                "-color",
-                "-stdin-filename",
-                ".github/workflows/ci.yml",
-                "-",
-            ],
-            b"name: CI\n",
-        )
-    ]
-    assert "--volume" not in calls[0][0]
-
-
 def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
-    actionlint_image = run_actionlint.ACTIONLINT_IMAGE
+    actionlint_image = ACTIONLINT_IMAGE
+    assert actionlint_image == (
+        "rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
+    )
     assert re.fullmatch(r"rhysd/actionlint@sha256:[0-9a-f]{64}", actionlint_image)
     assert ":latest" not in actionlint_image
 
@@ -94,6 +39,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
 
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
+    assert "uv run yaga workflow lint .github/workflows examples" in makefile
+
+    for documentation in ("README.md", "CONTRIBUTING.md"):
+        assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert ci.count('version: "0.9.18"') == 2
@@ -103,6 +52,11 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "pre-commit try-repo . yaga-commit-check" in ci
     assert 'test "$YAGA_PRE_COMMIT_STATUS" -eq 1' in ci
     assert "grep -F -- '[syntax.header]'" in ci
+    assert "yaga workflow lint" in ci
+    assert "Exercise the cached actionlint integration" in ci
+    assert "tests/test_workflow_lint_hardening.py" in ci
+    assert "scripts/run_actionlint.py" not in ci
+    assert not (ROOT / "scripts" / "run_actionlint.py").exists()
 
     build_gate = (ROOT / "scripts" / "check_build.py").read_text(encoding="utf-8")
     for locked_argument in (
@@ -121,6 +75,9 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "cwd=consumer" in build_gate
     assert '"config",\n            "init"' in build_gate
     assert '"workflow",\n            "check"' in build_gate
+    assert '"workflow", "lint", "--help"' in build_gate
+    assert '"yaga/workflows/inputs.py"' in build_gate
+    assert '"yaga/workflows/lint.py"' in build_gate
     assert "config.write_text" not in build_gate
     assert 'completed.stdout.decode("utf-8")' in build_gate
     assert '"pip",\n            "check"' in build_gate

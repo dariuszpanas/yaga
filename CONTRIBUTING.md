@@ -14,12 +14,13 @@ uv sync --group dev
 uv run make ci
 ```
 
-The full gate uses Docker for the pinned actionlint container. The installed CLI uses the locked
-Typer dependency. The write-capable root Action import graph—`__main__` in gate mode, `action_cli`,
-`action`, `codex`, and the generic GitHub primitives—must remain Python-standard-library-only and
-must not import the installed CLI, command, commit-policy, or presentation modules. The separate
-read-only commit Action may import dependency-light commit modules, but never Typer, command
-modules, Codex policy, GitHub REST transport, site packages, or token handling.
+The full gate invokes the installed `yaga workflow lint` command, which requires Docker for its
+pinned actionlint container. The installed CLI uses the locked Typer dependency. The write-capable
+root Action import graph—`__main__` in gate mode, `action_cli`, `action`, `codex`, and the generic
+GitHub primitives—must remain Python-standard-library-only and must not import the installed CLI,
+command, commit-policy, or presentation modules. The separate read-only commit Action may import
+dependency-light commit modules, but never Typer, command modules, Codex policy, GitHub REST
+transport, site packages, or token handling.
 
 The package build gate must execute the fresh wheel outside the checkout. Export the publishable
 runtime closure from `uv.lock`, require its hashes without building dependencies, install the wheel
@@ -56,6 +57,28 @@ references, diagnostics, and displayed values. Keep immutable-reference checking
 actionlint and out of both dependency-free composite Action import graphs. Treat `$/` local
 references as commit-bound; `./` is a compatibility path whose integrity depends on the caller's
 trusted checkout and must not imply an immutable-reference guarantee.
+
+`workflow lint` shares `workflow check`'s default and explicit path-selection contract, but it is an
+installed-only adapter around the fixed
+`rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667`
+container rather than a pure-Python schema linter. Keep its digest and hardening flags fixed: invoke
+Docker without a shell or host mount. Build only a bounded deterministic synthetic repository:
+selected workflows, transitively called local reusable workflows, at most one native
+`.github/actionlint.yaml` or `.yml`, and actionlint's chosen local Action manifest (`action.yaml`
+before `action.yml`). Stage zero-byte file or empty-directory presence entries, never source
+content, for the runtime paths that native Action metadata checks with `stat`.
+
+Stream that archive through a stopped staging container into a private labeled volume. Mount the
+volume read-only for linting; keep the container root read-only, disable networking and logging,
+drop capabilities, forbid privilege escalation, and fix CPU, memory, swap, and PID ceilings. Keep
+valid `$/` compatibility translation source-marked, length-preserving, and private to the snapshot;
+never heuristically replace matching text elsewhere. Bound support-file reads, path depth, archive
+entries and bytes, process trees, time, stdout, stderr, diagnostics, and decoded JSON. Strictly parse
+the closed actionlint result, while accepting only its documented optional diagnostic fields.
+Force-remove and verify labeled containers and the private volume on every catchable terminal path;
+an uncertain late Docker create or unconfirmed cleanup is an operational failure. Preserve exits `0`
+for success, `1` for lint findings, and `2` for operational failure. The lint command and its runner
+must remain absent from both dependency-free composite Action import graphs.
 
 The pre-commit provider manifest exposes exactly one `commit-msg` hook. Keep it as a direct
 `language: python` adapter to `yaga commit check --file`; do not add shell indirection, filename

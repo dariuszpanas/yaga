@@ -13,6 +13,14 @@ from typer.testing import CliRunner
 
 from yaga.cli import app
 from yaga.commands import gate as gate_commands
+from yaga.commands import workflow as workflow_commands
+from yaga.errors import InputError
+from yaga.workflows import lint as workflow_lint
+from yaga.workflows.models import (
+    WorkflowDiagnostic,
+    WorkflowLintReport,
+    WorkflowLintResult,
+)
 
 runner = CliRunner()
 
@@ -464,6 +472,107 @@ def test_workflow_help_describes_default_and_explicit_paths() -> None:
     assert result.exit_code == 0
     assert ".github/workflows" in result.stdout
     assert "immutable external references" in result.stdout
+
+
+def test_workflow_lint_uses_exit_zero_one_and_two(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    arguments = [
+        "workflow",
+        "lint",
+        "examples",
+        "--repo",
+        str(tmp_path),
+        "--format",
+        "json",
+    ]
+
+    monkeypatch.setattr(
+        workflow_commands,
+        "lint_workflows",
+        lambda _repository, _selections: WorkflowLintReport(
+            (WorkflowLintResult(path="examples/valid.yml", diagnostics=()),)
+        ),
+    )
+    passed = runner.invoke(app, arguments)
+    assert passed.exit_code == 0
+    assert json.loads(passed.stdout)["kind"] == "github_workflow_lint"
+
+    monkeypatch.setattr(
+        workflow_commands,
+        "lint_workflows",
+        lambda _repository, _selections: WorkflowLintReport(
+            (
+                WorkflowLintResult(
+                    path="examples/invalid.yml",
+                    diagnostics=(
+                        WorkflowDiagnostic(
+                            code="syntax-check",
+                            message="workflow is invalid",
+                            line=2,
+                            column=4,
+                        ),
+                    ),
+                ),
+            )
+        ),
+    )
+    failed = runner.invoke(app, arguments)
+    assert failed.exit_code == 1
+    assert json.loads(failed.stdout)["diagnostics"] == 1
+
+    def fail_lint(_repository: Path, _selections: object) -> WorkflowLintReport:
+        raise InputError("Docker is unavailable")
+
+    monkeypatch.setattr(workflow_commands, "lint_workflows", fail_lint)
+    errored = runner.invoke(app, arguments)
+    assert errored.exit_code == 2
+    assert json.loads(errored.stderr)["error"]["kind"] == "input"
+
+
+def test_workflow_lint_help_exposes_pinned_runtime_and_paths() -> None:
+    group = runner.invoke(app, ["workflow", "--help"])
+    lint = runner.invoke(app, ["workflow", "lint", "--help"])
+
+    assert group.exit_code == 0
+    assert "lint" in group.stdout
+    assert "Inspect GitHub workflows" in group.stdout
+    assert "workflow policy" not in group.stdout
+    assert lint.exit_code == 0
+    assert ".github/workflows" in lint.stdout
+    assert "pinned actionlint container" in lint.stdout
+
+
+def test_workflow_lint_temporary_workspace_failures_are_bounded_json_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("jobs: {}\n", encoding="utf-8")
+    monkeypatch.setattr(workflow_lint, "_find_docker", lambda repository: "C:/tools/docker.exe")
+
+    def fail_temporary_directory(*args: object, **kwargs: object) -> object:
+        raise OSError("attacker-controlled temporary failure")
+
+    monkeypatch.setattr(
+        workflow_lint.tempfile,
+        "TemporaryDirectory",
+        fail_temporary_directory,
+    )
+
+    result = runner.invoke(
+        app,
+        ["workflow", "lint", "--repo", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 2
+    document = json.loads(result.stderr)
+    assert document["error"] == {
+        "kind": "input",
+        "message": "actionlint temporary workspace could not be managed safely",
+    }
 
 
 def test_gate_help_lists_every_preserved_operation() -> None:
