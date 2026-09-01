@@ -158,6 +158,46 @@ def test_ci_changed_path_policy_uses_explicit_unprivileged_event_boundaries() ->
     assert "--format github" in workflow
 
 
+def test_ci_branch_policy_uses_explicit_unprivileged_event_names() -> None:
+    workflow = read(".github/workflows/ci.yml")
+
+    assert section_keys(workflow, "permissions") == {"contents"}
+    assert "pull_request_target:" not in workflow
+    assert "workflow_run:" not in workflow
+    assert "name: Check pull-request branch name" in workflow
+    assert "name: Check pushed branch name" in workflow
+    assert "if: github.event_name == 'pull_request'" in workflow
+    assert "github.event_name == 'push' &&" in workflow
+    assert "github.ref_type == 'branch' &&" in workflow
+    assert "github.event.deleted == false" in workflow
+    assert "YAGA_BRANCH_NAME: ${{ github.head_ref }}" in workflow
+    assert "YAGA_BRANCH_NAME: ${{ github.ref_name }}" in workflow
+    assert workflow.count("yaga branch check") == 2
+    assert workflow.count("--policy .yaga/branch-policy.toml") == 2
+    assert workflow.count('--name "$YAGA_BRANCH_NAME"') == 2
+    assert "--format github" in workflow
+    for context in ("github.head_ref", "github.ref_name"):
+        assert f'--name "${{{{ {context} }}}}"' not in workflow
+
+
+def test_branch_policy_contract_is_documented_and_dogfooded() -> None:
+    readme = read("README.md")
+    contributing = read("CONTRIBUTING.md")
+    agents = read("AGENTS.md")
+
+    for document in (readme, contributing, agents):
+        assert "branch check" in document
+        assert "`branch.syntax`" in document
+        assert "`branch.allowed`" in document
+        assert "244-byte" in document
+        assert "`github.head_ref`" in document
+        assert "`github.ref_name`" in document
+
+    assert "one through 64 unique, case-sensitive patterns" in readme
+    assert "does not inspect the current checkout, invoke Git" in readme
+    assert "not a claim about every Git host" in readme
+
+
 def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:
     example = read("examples/commit-policy.yml")
     readme = read("README.md")

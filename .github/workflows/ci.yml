@@ -38,6 +38,27 @@ jobs:
       - run: >-
           uv run --frozen --python 3.12 yaga commit check
           --message "feat(ci): exercise the installed CLI"
+      - name: Check pull-request branch name
+        if: github.event_name == 'pull_request'
+        env:
+          YAGA_BRANCH_NAME: ${{ github.head_ref }}
+        run: >-
+          uv run --frozen --python 3.12 yaga branch check
+          --policy .yaga/branch-policy.toml
+          --name "$YAGA_BRANCH_NAME"
+          --format github
+      - name: Check pushed branch name
+        if: >-
+          github.event_name == 'push' &&
+          github.ref_type == 'branch' &&
+          github.event.deleted == false
+        env:
+          YAGA_BRANCH_NAME: ${{ github.ref_name }}
+        run: >-
+          uv run --frozen --python 3.12 yaga branch check
+          --policy .yaga/branch-policy.toml
+          --name "$YAGA_BRANCH_NAME"
+          --format github
       - name: Exercise the pre-commit provider
         run: |
           printf '%s\n' 'not conventional' > "$RUNNER_TEMP/YAGA_COMMIT_EDITMSG"
