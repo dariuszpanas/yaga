@@ -79,7 +79,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
 
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert project["project"]["name"] == "yaga-cli"
-    assert project["project"]["scripts"] == {"yaga": "yaga.cli:app"}
+    assert project["project"]["scripts"] == {"yaga": "yaga.cli:main"}
     assert project["project"]["dependencies"] == ["typer>=0.27.2,<1"]
     build_requirements = project["build-system"]["requires"]
     assert build_requirements == ["hatchling==1.32.0"]

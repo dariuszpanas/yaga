@@ -32,7 +32,8 @@ GitHub event adaptation, and reporting in focused dependency-light modules under
 range; with none it checks `HEAD`. Preserve full messages, deterministic oldest-first range order,
 hard message/config/output/count bounds, shell-free Git invocation, and explicit failure for missing
 or shallow history. Commit messages and Git output are untrusted terminal input: sanitize and bound
-anything displayed.
+anything displayed. The installed entrypoint must configure UTF-8 standard output and error before
+Typer renders user-controlled text; keep the legacy-console-encoding subprocess regression.
 
 Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or in the standalone
 `.yaga.toml` root plus `[commit]`. Load exactly one nearest or explicit file, reject unknown keys and

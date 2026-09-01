@@ -84,4 +84,5 @@ package. The public operations include `authorize`; `prepare` emits closed `rout
 `approved` plus `pull_request_number`. Prefer focused modules and tests. Pin every third-party
 example action to an audited full SHA. Run `uv run make ci` before push; it covers locked
 dependencies, Ruff, ty, pinned actionlint, tests, and package build. Use Conventional Commits and
-fold review/CI fixes into the logical commit.
+fold review/CI fixes into the logical commit. Keep the installed CLI entrypoint UTF-8-safe before
+Typer renders untrusted text.

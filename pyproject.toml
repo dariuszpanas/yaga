@@ -43,7 +43,7 @@ Repository = "https://github.com/dariuszpanas/yaga"
 Issues = "https://github.com/dariuszpanas/yaga/issues"
 
 [project.scripts]
-yaga = "yaga.cli:app"
+yaga = "yaga.cli:main"
 
 [dependency-groups]
 dev = [
