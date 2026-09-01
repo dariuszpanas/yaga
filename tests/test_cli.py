@@ -303,6 +303,59 @@ def test_invalid_utf8_stdin_is_a_sanitized_exit_two(tmp_path: Path) -> None:
     assert b"Traceback" not in result.stderr
 
 
+def test_installed_entrypoint_forces_utf8_output(tmp_path: Path) -> None:
+    message_file = tmp_path / "message.txt"
+    message_file.write_text("feat: add 🚀 launch support\n", encoding="utf-8")
+    executable = Path(sys.executable).with_name("yaga.exe" if os.name == "nt" else "yaga")
+    assert executable.is_file()
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "cp1252"
+    environment["PYTHONUTF8"] = "0"
+
+    result = subprocess.run(
+        [
+            executable,
+            "commit",
+            "check",
+            "--file",
+            str(message_file),
+            "--repo",
+            str(tmp_path),
+        ],
+        cwd=Path(__file__).parents[1],
+        env=environment,
+        check=False,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0
+    assert "feat: add 🚀 launch support" in result.stdout.decode("utf-8")
+    assert result.stderr == b""
+
+    missing_file = tmp_path / "missing 🚀 message.txt"
+    errored = subprocess.run(
+        [
+            executable,
+            "commit",
+            "check",
+            "--file",
+            str(missing_file),
+            "--repo",
+            str(tmp_path),
+        ],
+        cwd=Path(__file__).parents[1],
+        env=environment,
+        check=False,
+        capture_output=True,
+    )
+    error_text = errored.stderr.decode("utf-8")
+
+    assert errored.returncode == 2
+    assert errored.stdout == b""
+    assert str(missing_file.resolve()) in error_text
+    assert "Traceback" not in error_text
+
+
 def test_config_show_reports_the_discovered_source(tmp_path: Path) -> None:
     config = tmp_path / ".yaga.toml"
     config.write_text(

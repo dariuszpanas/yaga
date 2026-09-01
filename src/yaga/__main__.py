@@ -22,6 +22,6 @@ if os.environ.get("YAGA_COMMIT_ACTION_RUNTIME") == "1":
 
     raise SystemExit(main())
 
-from yaga.cli import app
+from yaga.cli import main
 
-app(prog_name="yaga")
+main()

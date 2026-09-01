@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated
 
@@ -22,6 +23,19 @@ app.add_typer(commit_app, name="commit")
 app.add_typer(config_app, name="config")
 app.add_typer(gate_app, name="gate")
 app.add_typer(github_app, name="github")
+
+
+def main() -> None:
+    """Run the installed CLI with deterministic Unicode output."""
+    _configure_utf8_output()
+    app(prog_name="yaga")
+
+
+def _configure_utf8_output() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def _version_callback(value: bool) -> None:

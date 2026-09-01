@@ -61,7 +61,7 @@ def main() -> int:
             if entry_points is None:
                 raise SystemExit("wheel does not contain console-script metadata")
             entry_point_text = wheel.read(entry_points).decode("utf-8")
-            if "yaga = yaga.cli:app" not in entry_point_text:
+            if "yaga = yaga.cli:main" not in entry_point_text:
                 raise SystemExit("wheel does not expose the yaga console script")
         with tarfile.open(source_distributions[0], mode="r:gz") as source_distribution:
             names = source_distribution.getnames()
