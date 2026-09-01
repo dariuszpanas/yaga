@@ -8,6 +8,7 @@ from yaga.workflows.security_models import WorkflowSecurityRule
 from yaga.workflows.security_rules import (
     RECOMMENDED_V1_RULES,
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     evaluate_workflow_security,
 )
 from yaga.workflows.yaml import parse_workflow_bundle
@@ -272,6 +273,174 @@ jobs:
 
     assert _codes(raw, RECOMMENDED_V1_RULES) == []
     assert _codes(raw, RECOMMENDED_V2_RULES) == ["security.checkout.persist_credentials"]
+
+
+@pytest.mark.parametrize(
+    "trigger",
+    [
+        "pull_request",
+        "[push, pull_request]",
+        "{pull_request: {types: [opened]}}",
+    ],
+)
+def test_recommended_v3_rejects_pull_request_write_at_workflow_and_job_scope(
+    trigger: str,
+) -> None:
+    raw = f"""\
+on: {trigger}
+permissions:
+  pull-requests: write
+  contents: read
+jobs:
+  publish:
+    permissions:
+      statuses: write
+    steps: []
+"""
+
+    diagnostics = _diagnostics(raw, RECOMMENDED_V3_RULES)
+
+    assert [(item.code, item.message, item.line, item.column) for item in diagnostics] == [
+        (
+            "security.permissions.pull_request_write",
+            "pull_request workflows must not grant pull-requests or statuses write access",
+            3,
+            18,
+        ),
+        (
+            "security.permissions.top_level_write",
+            "top-level write permission must be scoped to a job",
+            3,
+            18,
+        ),
+        (
+            "security.permissions.pull_request_write",
+            "pull_request workflows must not grant pull-requests or statuses write access",
+            8,
+            17,
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "trigger",
+    [
+        "push",
+        "pull_request_target",
+        "workflow_run",
+        "[push, pull_request_target]",
+        "{workflow_dispatch: {}, schedule: [{cron: '0 0 * * *'}]}",
+        "${{ github.event_name }}",
+    ],
+)
+def test_pull_request_write_policy_ignores_workflows_without_exact_event(
+    trigger: str,
+) -> None:
+    raw = f"""\
+on: {trigger}
+permissions:
+  pull-requests: write
+jobs:
+  publish:
+    permissions:
+      statuses: write
+    steps: []
+"""
+
+    assert (
+        _codes(
+            raw,
+            (WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,),
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "permissions",
+    [
+        "write-all",
+        "{pull-requests: read, statuses: none}",
+        "{contents: write, issues: write}",
+        "{pull-requests: Write, statuses: '${{ github.token }}'}",
+        "{pull-requests: {level: write}, statuses: [write]}",
+        "{Pull-Requests: write, status: write}",
+        "[]",
+        "false",
+    ],
+)
+def test_pull_request_write_policy_ignores_non_exact_or_malformed_permissions(
+    permissions: str,
+) -> None:
+    raw = f"""\
+on: pull_request
+permissions: {permissions}
+jobs: {{}}
+"""
+
+    assert (
+        _codes(
+            raw,
+            (WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,),
+        )
+        == []
+    )
+
+
+def test_pull_request_write_policy_preserves_duplicate_and_alias_occurrences() -> None:
+    raw = """\
+permission-template: &permission-template
+  pull-requests: write
+on: pull_request
+permissions: *permission-template
+jobs:
+  publish:
+    permissions:
+      statuses: write
+      statuses: write
+    steps: []
+"""
+
+    diagnostics = _diagnostics(
+        raw,
+        (WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,),
+    )
+
+    assert [(item.code, item.line, item.column) for item in diagnostics] == [
+        ("security.permissions.pull_request_write", 4, 14),
+        ("security.permissions.pull_request_write", 8, 17),
+        ("security.permissions.pull_request_write", 9, 17),
+    ]
+
+
+def test_pull_request_write_custom_rule_does_not_run_other_permission_rules() -> None:
+    raw = """\
+on: pull_request
+permissions:
+  pull-requests: write
+jobs: {}
+"""
+
+    assert _codes(
+        raw,
+        (WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,),
+    ) == ["security.permissions.pull_request_write"]
+
+
+def test_recommended_v1_and_v2_remain_frozen_without_pull_request_write_policy() -> None:
+    raw = """\
+on: pull_request
+permissions: {}
+jobs:
+  publish:
+    permissions:
+      statuses: write
+    steps: []
+"""
+
+    assert _codes(raw, RECOMMENDED_V1_RULES) == []
+    assert _codes(raw, RECOMMENDED_V2_RULES) == []
+    assert _codes(raw, RECOMMENDED_V3_RULES) == ["security.permissions.pull_request_write"]
 
 
 @pytest.mark.parametrize(

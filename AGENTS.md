@@ -37,10 +37,15 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   superset that also requires every direct runner-resolved `actions/checkout` step to set exactly
   one literal `with.persist-credentials: false`; wrapper Actions remain outside that rule. Match the
   runner's remote-reference segmentation conservatively and reject ambiguous scalar tags or input
-  environment-name collisions. Future defaults require a new profile. Do not merge the providers'
-  diagnostics or imply that one replaces another. Immutable-reference policy includes `uses`,
-  job-container images, and service-container images; container images require literal lowercase
-  SHA-256 digests, except for GitHub's quoted-empty disabled service image.
+  environment-name collisions. `recommended-v3` is the explicit v2 superset that adds
+  `permissions.pull_request_write`: whenever any `pull_request` trigger exists, reject exact
+  `pull-requests: write` and `statuses: write` values at workflow and job scope. Mixed-event and
+  conditionally guarded writer jobs fail; split trusted writers into `pull_request_target` or
+  `workflow_run` publishers. This rule does not cover other scopes, alternate tokens, reusable
+  permission inheritance, or expressions. Future defaults require a new profile. Do not merge the
+  providers' diagnostics or imply that one replaces another. Immutable-reference policy includes
+  `uses`, job-container images, and service-container images; container images require literal
+  lowercase SHA-256 digests, except for GitHub's quoted-empty disabled service image.
 - Keep privileged checkout analysis fail-closed without emulating GitHub expressions: on
   `pull_request_target` or `workflow_run`, dynamic `actions/checkout` `ref` or `repository` inputs
   fail, as does any `allow-unsafe-pr-checkout` value other than literal `false`.

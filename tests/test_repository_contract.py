@@ -206,6 +206,34 @@ def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:
         assert "ready_for_review" in document
 
 
+def test_recommended_v3_is_explicitly_dogfooded_and_bounded() -> None:
+    makefile = read("Makefile")
+    ci = read(".github/workflows/ci.yml")
+    readme = read("README.md")
+    contributing = read("CONTRIBUTING.md")
+    agents = read("AGENTS.md")
+
+    for gate in (makefile, ci):
+        assert "--workflow-security-profile recommended-v3" in gate
+        assert "--workflow-security-profile recommended-v2" not in gate
+
+    for document in (readme, contributing, agents):
+        assert "`recommended-v1`" in document
+        assert "`recommended-v2`" in document
+        assert "`recommended-v3`" in document
+        assert "`permissions.pull_request_write`" in document
+        assert "`pull-requests: write`" in document
+        assert "`statuses: write`" in document
+        assert "`pull_request_target`" in document
+        assert "`workflow_run`" in document
+
+    assert "With no selection options, YAGA still selects the frozen `recommended-v1`" in readme
+    assert "A mixed-event workflow remains pull-request-triggered" in readme
+    assert "a job-level `if` condition" in readme
+    assert "does not cover other write scopes, alternate" in readme
+    assert "tokens, reusable-workflow permission inheritance, or expressions" in readme
+
+
 def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> None:
     lifecycle = read("examples/review-policy.yml")
     publisher = read("examples/codex-review.yml")

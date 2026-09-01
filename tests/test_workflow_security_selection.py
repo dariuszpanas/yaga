@@ -11,6 +11,7 @@ from yaga.workflows.security_models import WorkflowSecurityProfile, WorkflowSecu
 from yaga.workflows.security_rules import (
     RECOMMENDED_V1_RULES,
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     normalize_security_rules,
 )
 
@@ -33,9 +34,19 @@ def test_recommended_v2_is_explicit_and_adds_checkout_credential_policy() -> Non
     assert selection.rules[-1] is WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS
 
 
+def test_recommended_v3_is_explicit_and_adds_pull_request_write_policy() -> None:
+    selection = normalize_security_rules(profile="recommended-v3")
+
+    assert selection.profile is WorkflowSecurityProfile.RECOMMENDED_V3
+    assert selection.rules == RECOMMENDED_V3_RULES
+    assert selection.rules[:-1] == RECOMMENDED_V2_RULES
+    assert selection.rules[-1] is WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE
+
+
 def test_custom_rules_are_exact_and_canonical_regardless_argument_order() -> None:
     selection = normalize_security_rules(
         rules=(
+            "permissions.pull_request_write",
             "checkout.persist_credentials",
             "secrets.inherit",
             "permissions.explicit",
@@ -47,6 +58,7 @@ def test_custom_rules_are_exact_and_canonical_regardless_argument_order() -> Non
         WorkflowSecurityRule.PERMISSIONS_EXPLICIT,
         WorkflowSecurityRule.SECRETS_INHERIT,
         WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,
+        WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,
     )
 
 

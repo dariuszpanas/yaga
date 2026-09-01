@@ -11,6 +11,7 @@ from yaga.workflows.models import WorkflowDiagnostic, WorkflowOutputFormat
 from yaga.workflows.security_models import (
     RECOMMENDED_V1_RULES,
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityReport,
     WorkflowSecurityResult,
@@ -159,6 +160,51 @@ def test_recommended_v2_selection_renders_its_additive_rule() -> None:
         "permissions.top_level_write, permissions.write_all, secrets.inherit, "
         "checkout.untrusted_ref, checkout.persist_credentials."
     )
+
+
+def test_recommended_v3_selection_renders_its_additive_rule() -> None:
+    report = report_with(
+        WorkflowSecurityResult(
+            path=".github/workflows/ci.yml",
+            diagnostics=(
+                diagnostic(
+                    code="security.permissions.pull_request_write",
+                    message=(
+                        "pull_request workflows must not grant pull-requests or statuses "
+                        "write access"
+                    ),
+                    line=6,
+                    column=22,
+                ),
+            ),
+        ),
+        profile=WorkflowSecurityProfile.RECOMMENDED_V3,
+        rules=RECOMMENDED_V3_RULES,
+    )
+
+    document = workflow_security_report_document(report)
+
+    assert document["profile"] == "recommended-v3"
+    assert document["rules"] == [rule.value for rule in RECOMMENDED_V3_RULES]
+    assert document["workflows"][0]["diagnostics"] == [
+        {
+            "code": "security.permissions.pull_request_write",
+            "message": (
+                "pull_request workflows must not grant pull-requests or statuses write access"
+            ),
+            "line": 6,
+            "column": 22,
+        }
+    ]
+    assert render_workflow_security_report(report, WorkflowOutputFormat.TEXT).splitlines()[:2] == [
+        (
+            "Profile: recommended-v3; rules: permissions.explicit, "
+            "permissions.top_level_write, permissions.write_all, secrets.inherit, "
+            "checkout.untrusted_ref, checkout.persist_credentials, "
+            "permissions.pull_request_write."
+        ),
+        "FAILED  .github/workflows/ci.yml  1 diagnostic(s)",
+    ]
 
 
 def test_github_annotations_escape_properties_data_and_controls() -> None:

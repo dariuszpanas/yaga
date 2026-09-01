@@ -13,6 +13,7 @@ class WorkflowSecurityProfile(StrEnum):
 
     RECOMMENDED_V1 = "recommended-v1"
     RECOMMENDED_V2 = "recommended-v2"
+    RECOMMENDED_V3 = "recommended-v3"
     CUSTOM = "custom"
 
 
@@ -25,6 +26,7 @@ class WorkflowSecurityRule(StrEnum):
     SECRETS_INHERIT = "secrets.inherit"
     CHECKOUT_UNTRUSTED_REF = "checkout.untrusted_ref"
     CHECKOUT_PERSIST_CREDENTIALS = "checkout.persist_credentials"
+    PERMISSIONS_PULL_REQUEST_WRITE = "permissions.pull_request_write"
 
 
 WORKFLOW_SECURITY_RULE_ORDER = tuple(WorkflowSecurityRule)
@@ -38,6 +40,10 @@ RECOMMENDED_V1_RULES = (
 RECOMMENDED_V2_RULES = (
     *RECOMMENDED_V1_RULES,
     WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,
+)
+RECOMMENDED_V3_RULES = (
+    *RECOMMENDED_V2_RULES,
+    WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,
 )
 
 
@@ -121,3 +127,5 @@ def _require_canonical_rules(
         raise ValueError("recommended-v1 requires its complete canonical rule set")
     if profile is WorkflowSecurityProfile.RECOMMENDED_V2 and rules != RECOMMENDED_V2_RULES:
         raise ValueError("recommended-v2 requires its complete canonical rule set")
+    if profile is WorkflowSecurityProfile.RECOMMENDED_V3 and rules != RECOMMENDED_V3_RULES:
+        raise ValueError("recommended-v3 requires its complete canonical rule set")

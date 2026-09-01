@@ -20,6 +20,7 @@ RECOMMENDED_V1_RULES = [
     "checkout.untrusted_ref",
 ]
 RECOMMENDED_V2_RULES = [*RECOMMENDED_V1_RULES, "checkout.persist_credentials"]
+RECOMMENDED_V3_RULES = [*RECOMMENDED_V2_RULES, "permissions.pull_request_write"]
 
 
 def unstyle(value: str) -> str:
@@ -52,6 +53,7 @@ def test_workflow_security_help_exposes_command_and_closed_options() -> None:
     assert "--profile" in command_help
     assert "recommended-v1" in command_help
     assert "recommended-v2" in command_help
+    assert "recommended-v3" in command_help
     assert "--rule" in command_help
     assert "Repeat explicitly" in command_help
     assert "--format" in command_help
@@ -155,6 +157,80 @@ def test_workflow_security_v2_finding_has_stable_github_annotation(tmp_path: Pat
             "::error file=.github/workflows/ci.yml,line=5,col=15,"
             "title=YAGA security.checkout.persist_credentials::"
             "actions/checkout must disable persisted credentials"
+        ),
+        "YAGA security checked 1 workflow file(s): 0 passed, 1 failed; 1 diagnostic(s).",
+    ]
+
+
+def test_workflow_security_accepts_recommended_v3_and_reports_its_rules(
+    tmp_path: Path,
+) -> None:
+    _write_workflow(
+        tmp_path,
+        "on: pull_request\n"
+        "permissions: {}\n"
+        "jobs:\n"
+        "  check:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          persist-credentials: false\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "workflow",
+            "security",
+            "--repo",
+            str(tmp_path),
+            "--profile",
+            "recommended-v3",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    assert document["profile"] == "recommended-v3"
+    assert document["rules"] == RECOMMENDED_V3_RULES
+    assert document["valid"] is True
+
+
+def test_workflow_security_v3_finding_has_stable_github_annotation(tmp_path: Path) -> None:
+    _write_workflow(
+        tmp_path,
+        "on: pull_request\n"
+        "permissions: {}\n"
+        "jobs:\n"
+        "  comment:\n"
+        "    permissions:\n"
+        "      pull-requests: write\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "workflow",
+            "security",
+            "--repo",
+            str(tmp_path),
+            "--profile",
+            "recommended-v3",
+            "--format",
+            "github",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert result.stderr == ""
+    assert result.stdout.splitlines() == [
+        (
+            "::error file=.github/workflows/ci.yml,line=6,col=22,"
+            "title=YAGA security.permissions.pull_request_write::"
+            "pull_request workflows must not grant pull-requests or statuses write access"
         ),
         "YAGA security checked 1 workflow file(s): 0 passed, 1 failed; 1 diagnostic(s).",
     ]

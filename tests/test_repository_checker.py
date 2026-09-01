@@ -22,9 +22,11 @@ from yaga.workflows.parser import ParsedWorkflowInput, parse_workflow_inputs
 from yaga.workflows.security_models import (
     RECOMMENDED_V1_RULES,
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityReport,
     WorkflowSecurityResult,
+    WorkflowSecurityRule,
 )
 
 
@@ -158,9 +160,27 @@ def test_security_selection_errors_precede_workflow_discovery(
         )
 
 
-def test_recommended_v2_profile_is_forwarded_to_the_shared_security_provider(
+@pytest.mark.parametrize(
+    ("profile", "expected_profile", "expected_rules"),
+    [
+        (
+            "recommended-v2",
+            WorkflowSecurityProfile.RECOMMENDED_V2,
+            RECOMMENDED_V2_RULES,
+        ),
+        (
+            "recommended-v3",
+            WorkflowSecurityProfile.RECOMMENDED_V3,
+            RECOMMENDED_V3_RULES,
+        ),
+    ],
+)
+def test_recommended_profile_is_forwarded_to_the_shared_security_provider(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+    expected_profile: WorkflowSecurityProfile,
+    expected_rules: tuple[WorkflowSecurityRule, ...],
 ) -> None:
     workflow = WorkflowInput(
         path=tmp_path / "ci.yml",
@@ -177,10 +197,10 @@ def test_recommended_v2_profile_is_forwarded_to_the_shared_security_provider(
         **kwargs: object,
     ) -> WorkflowSecurityReport:
         assert inputs == parsed
-        assert kwargs == {"profile": "recommended-v2", "rules": ()}
+        assert kwargs == {"profile": profile, "rules": ()}
         return WorkflowSecurityReport(
-            profile=WorkflowSecurityProfile.RECOMMENDED_V2,
-            rules=RECOMMENDED_V2_RULES,
+            profile=expected_profile,
+            rules=expected_rules,
             results=(WorkflowSecurityResult(path="ci.yml", diagnostics=()),),
         )
 
@@ -189,13 +209,13 @@ def test_recommended_v2_profile_is_forwarded_to_the_shared_security_provider(
     report = checker.check_repository(
         tmp_path,
         ["workflow-security"],
-        workflow_security_profile="recommended-v2",
+        workflow_security_profile=profile,
     )
 
     assert report.status is RepositoryCheckStatus.PASSED
     security = report.checks[0].report
     assert isinstance(security, WorkflowSecurityReport)
-    assert security.profile is WorkflowSecurityProfile.RECOMMENDED_V2
+    assert security.profile is expected_profile
 
 
 def test_providers_execute_once_in_canonical_order_with_one_shared_workflow_load(

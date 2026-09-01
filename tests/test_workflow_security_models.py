@@ -8,6 +8,7 @@ from yaga.workflows.models import WorkflowDiagnostic
 from yaga.workflows.security_models import (
     RECOMMENDED_V1_RULES,
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityReport,
     WorkflowSecurityResult,
@@ -92,6 +93,11 @@ def test_recommended_profiles_require_distinct_frozen_rule_sets() -> None:
         rules=RECOMMENDED_V2_RULES,
         results=(),
     )
+    v3 = WorkflowSecurityReport(
+        profile=WorkflowSecurityProfile.RECOMMENDED_V3,
+        rules=RECOMMENDED_V3_RULES,
+        results=(),
+    )
 
     assert v1.rules == (
         WorkflowSecurityRule.PERMISSIONS_EXPLICIT,
@@ -104,6 +110,10 @@ def test_recommended_profiles_require_distinct_frozen_rule_sets() -> None:
         *v1.rules,
         WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,
     )
+    assert v3.rules == (
+        *v2.rules,
+        WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,
+    )
 
 
 def test_recommended_v2_rejects_the_frozen_v1_rule_set() -> None:
@@ -111,5 +121,14 @@ def test_recommended_v2_rejects_the_frozen_v1_rule_set() -> None:
         WorkflowSecurityReport(
             profile=WorkflowSecurityProfile.RECOMMENDED_V2,
             rules=RECOMMENDED_V1_RULES,
+            results=(),
+        )
+
+
+def test_recommended_v3_rejects_the_frozen_v2_rule_set() -> None:
+    with pytest.raises(ValueError, match="recommended-v3 requires its complete canonical rule set"):
+        WorkflowSecurityReport(
+            profile=WorkflowSecurityProfile.RECOMMENDED_V3,
+            rules=RECOMMENDED_V2_RULES,
             results=(),
         )

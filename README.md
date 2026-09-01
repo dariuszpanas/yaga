@@ -290,21 +290,32 @@ Input names must be scalar ASCII values so Unicode or environment-name collision
 the required setting. This rule covers direct `actions/checkout` calls only: a wrapper Action must
 enforce and document its own credential handling.
 
+The opt-in `recommended-v3` profile contains all six `recommended-v2` rules and adds
+`permissions.pull_request_write`. Whenever a workflow has any `pull_request` trigger, this rule
+rejects the exact `pull-requests: write` and `statuses: write` permissions at both workflow and job
+scope. A mixed-event workflow remains pull-request-triggered, and a job-level `if` condition does
+not prove that a writer is unreachable from untrusted pull-request code. Split such a writer into a
+trusted publisher triggered by `pull_request_target` or `workflow_run`; those triggers are allowed
+by this rule when the workflow has no `pull_request` trigger, while the profile's other security
+rules still apply. This deliberately narrow rule does not cover other write scopes, alternate
+tokens, reusable-workflow permission inheritance, or expressions.
+
 ```bash
 yaga workflow security
 yaga workflow security --profile recommended-v2
+yaga workflow security --profile recommended-v3
 yaga workflow security .github/workflows examples --format github
 yaga workflow security \
   --rule permissions.explicit \
   --rule checkout.untrusted_ref
 ```
 
-With no selection options, YAGA still selects `recommended-v1`; opting in to `recommended-v2` is an
-explicit policy migration. Adding another future default requires another versioned profile instead
-of silently changing either existing gate. Repeat `--rule` to replace the profile with one exact,
-unique custom rule set; do not combine custom rules with `--profile`. Text, versioned JSON, and
-escaped GitHub output preserve the same `0`/`1`/`2` success, finding, and operational-error contract
-as the immutable-reference checker.
+With no selection options, YAGA still selects the frozen `recommended-v1`; opting in to
+`recommended-v2` or `recommended-v3` is an explicit policy migration. Adding another future
+default requires another versioned profile instead of silently changing an existing gate. Repeat
+`--rule` to replace the profile with one exact, unique custom rule set; do not combine custom rules
+with `--profile`. Text, versioned JSON, and escaped GitHub output preserve the same `0`/`1`/`2`
+success, finding, and operational-error contract as the immutable-reference checker.
 
 `yaga workflow lint` complements that pure-Python reference policy with GitHub workflow syntax and
 schema checks. It accepts the same paths as `workflow check`: no paths selects direct `.yml` and
@@ -378,8 +389,9 @@ pure Python and does not require Docker. Commit source and configuration options
 unless `commit` is selected, and workflow paths or security-selection options are rejected unless
 their provider is selected. Use `--workflow-security-profile recommended-v1` for the frozen
 default, `--workflow-security-profile recommended-v2` to require checkout credential persistence
-to be disabled, or repeat `--workflow-security-rule` for an exact custom selection in the
-aggregate command.
+to be disabled, `--workflow-security-profile recommended-v3` to additionally reject pull-request
+workflows with status or pull-request write authority, or repeat `--workflow-security-rule` for an
+exact custom selection in the aggregate command.
 
 Text preserves one section per provider. Versioned JSON embeds each existing provider document
 under a `repository_check` envelope. GitHub output uses balanced provider groups and one shared
