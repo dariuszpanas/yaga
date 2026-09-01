@@ -22,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -36,9 +37,6 @@ jobs:
       - run: >-
           uv run --frozen --python 3.12 yaga commit check
           --message "feat(ci): exercise the installed CLI"
-      - run: >-
-          uv run --frozen --python 3.12 yaga workflow check
-          .github/workflows examples --format github
       - name: Exercise the pre-commit provider
         run: |
           printf '%s\n' 'not conventional' > "$RUNNER_TEMP/YAGA_COMMIT_EDITMSG"
@@ -52,9 +50,13 @@ jobs:
           grep -F -- 'hook id: yaga-commit-check' "$RUNNER_TEMP/yaga-pre-commit.log"
           grep -F -- 'exit code: 1' "$RUNNER_TEMP/yaga-pre-commit.log"
           grep -F -- '[syntax.header]' "$RUNNER_TEMP/yaga-pre-commit.log"
-      - run: >-
-          uv run --frozen --python 3.12 yaga workflow lint
-          .github/workflows examples --format github
+      - name: Run aggregate repository checks
+        run: >-
+          uv run --frozen --python 3.12 yaga repo check
+          --check commit --check workflow --check workflow-lint
+          --commit HEAD
+          --workflow-path .github/workflows --workflow-path examples
+          --format github
       - name: Exercise the cached actionlint integration
         run: >-
           uv run --frozen --python 3.12 pytest -q

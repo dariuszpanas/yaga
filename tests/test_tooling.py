@@ -40,6 +40,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
     assert "uv run yaga workflow lint .github/workflows examples" in makefile
+    assert (
+        "uv run yaga repo check --check commit --check workflow --check workflow-lint "
+        "--commit HEAD --workflow-path .github/workflows --workflow-path examples"
+    ) in makefile
 
     for documentation in ("README.md", "CONTRIBUTING.md"):
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
@@ -52,7 +56,13 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "pre-commit try-repo . yaga-commit-check" in ci
     assert 'test "$YAGA_PRE_COMMIT_STATUS" -eq 1' in ci
     assert "grep -F -- '[syntax.header]'" in ci
-    assert "yaga workflow lint" in ci
+    assert "Run aggregate repository checks" in ci
+    assert "yaga repo check" in ci
+    assert "--check commit --check workflow --check workflow-lint" in ci
+    assert (
+        "ref: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}"
+    ) in ci
     assert "Exercise the cached actionlint integration" in ci
     assert "tests/test_workflow_lint_hardening.py" in ci
     assert "scripts/run_actionlint.py" not in ci
@@ -76,6 +86,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"config",\n            "init"' in build_gate
     assert '"workflow",\n            "check"' in build_gate
     assert '"workflow", "lint", "--help"' in build_gate
+    assert '"repo",\n            "check"' in build_gate
+    assert '"yaga/commands/repo.py"' in build_gate
+    assert '"yaga/commits/service.py"' in build_gate
+    assert '"yaga/repository/checker.py"' in build_gate
     assert '"yaga/workflows/inputs.py"' in build_gate
     assert '"yaga/workflows/lint.py"' in build_gate
     assert "config.write_text" not in build_gate

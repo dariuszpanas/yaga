@@ -1,0 +1,122 @@
+"""Dependency-light commit validation services shared by installed commands."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from yaga.commits.checker import check_target
+from yaga.commits.config import load_config
+from yaga.commits.git import read_commit, read_range
+from yaga.commits.models import CommitPolicy, CommitTarget, ValidationReport
+from yaga.commits.sources import from_file, from_message, from_stdin
+from yaga.errors import InputError
+
+
+def check_commits(
+    repository: Path,
+    *,
+    message: str | None = None,
+    file: Path | None = None,
+    stdin: bool = False,
+    commit: str | None = None,
+    revision_range: str | None = None,
+    config: Path | None = None,
+) -> ValidationReport:
+    """Check HEAD or exactly one explicitly selected commit-message source."""
+    selected = [
+        message is not None,
+        file is not None,
+        stdin,
+        commit is not None,
+        revision_range is not None,
+    ]
+    if sum(selected) > 1:
+        raise InputError("choose only one of --message, --file, --stdin, --commit, or --range")
+
+    repo = _resolve_repository(repository)
+    loaded = load_config(config, start=repo)
+    targets = _select_targets(
+        message=message,
+        file=file,
+        stdin=stdin,
+        commit=commit,
+        revision_range=revision_range,
+        repository=repo,
+        max_commits=loaded.policy.max_commits,
+    )
+    return _check_targets(targets, config_path=loaded.path, policy=loaded.policy)
+
+
+def check_git_commits(
+    repository: Path,
+    *,
+    commit: str | None = None,
+    revision_range: str | None = None,
+    config: Path | None = None,
+) -> ValidationReport:
+    """Check one Git revision, one Git range, or HEAD by default."""
+    if commit is not None and revision_range is not None:
+        raise InputError("choose only one of --commit or --range")
+
+    repo = _resolve_repository(repository)
+    loaded = load_config(config, start=repo)
+    targets = _select_git_targets(
+        repository=repo,
+        commit=commit,
+        revision_range=revision_range,
+        max_commits=loaded.policy.max_commits,
+    )
+    return _check_targets(targets, config_path=loaded.path, policy=loaded.policy)
+
+
+def _resolve_repository(repository: Path) -> Path:
+    try:
+        return repository.expanduser().resolve()
+    except (OSError, RuntimeError) as error:
+        raise InputError("commit repository path cannot be resolved") from error
+
+
+def _select_targets(
+    *,
+    message: str | None,
+    file: Path | None,
+    stdin: bool,
+    commit: str | None,
+    revision_range: str | None,
+    repository: Path,
+    max_commits: int,
+) -> list[CommitTarget]:
+    if message is not None:
+        return [from_message(message)]
+    if file is not None:
+        return [from_file(file)]
+    if stdin:
+        return [from_stdin()]
+    return _select_git_targets(
+        repository=repository,
+        commit=commit,
+        revision_range=revision_range,
+        max_commits=max_commits,
+    )
+
+
+def _select_git_targets(
+    *,
+    repository: Path,
+    commit: str | None,
+    revision_range: str | None,
+    max_commits: int,
+) -> list[CommitTarget]:
+    if revision_range is not None:
+        return read_range(repository, revision_range, max_commits=max_commits)
+    return [read_commit(repository, commit or "HEAD")]
+
+
+def _check_targets(
+    targets: list[CommitTarget],
+    *,
+    config_path: Path | None,
+    policy: CommitPolicy,
+) -> ValidationReport:
+    results = tuple(check_target(target, policy) for target in targets)
+    return ValidationReport(results=results, config_path=config_path)

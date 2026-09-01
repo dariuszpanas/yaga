@@ -7,13 +7,10 @@ from typing import Annotated
 
 import typer
 
-from yaga.commits.checker import check_target
-from yaga.commits.config import load_config
-from yaga.commits.git import read_commit, read_range
-from yaga.commits.models import CommitTarget, OutputFormat, ValidationReport
+from yaga.commits.models import OutputFormat
 from yaga.commits.reporting import render_error, render_report
-from yaga.commits.sources import from_file, from_message, from_stdin
-from yaga.errors import InputError, YagaError
+from yaga.commits.service import check_commits as check_commit_service
+from yaga.errors import YagaError
 
 app = typer.Typer(help="Inspect and enforce commit-message policy.", no_args_is_help=True)
 
@@ -59,28 +56,15 @@ def check_commits(
 ) -> None:
     """Check HEAD or exactly one explicitly selected message source."""
     try:
-        selected = [
-            message is not None,
-            file_ is not None,
-            stdin,
-            commit is not None,
-            revision_range is not None,
-        ]
-        if sum(selected) > 1:
-            raise InputError("choose only one of --message, --file, --stdin, --commit, or --range")
-        repo = repository.expanduser().resolve()
-        loaded = load_config(config, start=repo)
-        targets = _select_targets(
+        report = check_commit_service(
+            repository,
             message=message,
-            file_=file_,
+            file=file_,
             stdin=stdin,
             commit=commit,
             revision_range=revision_range,
-            repository=repo,
-            max_commits=loaded.policy.max_commits,
+            config=config,
         )
-        results = tuple(check_target(target, loaded.policy) for target in targets)
-        report = ValidationReport(results=results, config_path=loaded.path)
     except YagaError as error:
         typer.echo(render_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
@@ -89,24 +73,3 @@ def check_commits(
         typer.echo(render_report(report, output_format))
     if not report.valid:
         raise typer.Exit(code=1)
-
-
-def _select_targets(
-    *,
-    message: str | None,
-    file_: Path | None,
-    stdin: bool,
-    commit: str | None,
-    revision_range: str | None,
-    repository: Path,
-    max_commits: int,
-) -> list[CommitTarget]:
-    if message is not None:
-        return [from_message(message)]
-    if file_ is not None:
-        return [from_file(file_)]
-    if stdin:
-        return [from_stdin()]
-    if revision_range is not None:
-        return read_range(repository, revision_range, max_commits=max_commits)
-    return [read_commit(repository, commit or "HEAD")]

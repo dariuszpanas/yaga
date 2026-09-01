@@ -21,13 +21,14 @@ uv run yaga --help
 The distribution is named `yaga-cli`; the executable and Python package are both named `yaga`.
 The `yaga` distribution name on PyPI belongs to an unrelated project.
 
-The command tree starts with five deliberately separate surfaces:
+The command tree starts with six deliberately separated groups:
 
 ```text
 yaga commit check                  # validate one message, commit, or range
 yaga config init                   # create a safe standalone starter policy
 yaga config show                   # explain the effective policy and its source
 yaga github pull-request check     # validate one exact GitHub PR event
+yaga repo check --check commit     # aggregate an explicit provider set
 yaga workflow check                # require immutable workflow references
 yaga workflow lint                 # lint workflow syntax with pinned actionlint
 yaga gate codex-review <operation> # run the retained review gate
@@ -279,6 +280,38 @@ for Docker, snapshot, cleanup, input, or malformed-tool-output failures.
 Both workflow commands are installed-CLI providers, not composite Actions. Run them after installing
 the locked YAGA environment in ordinary unprivileged CI. Keep syntax linting and immutable-reference
 policy as separate checks; neither replaces the other.
+
+## Aggregate repository checks
+
+`yaga repo check` runs a closed, explicitly selected set of the existing providers and keeps their
+reports separate. Repeat `--check` with `commit`, `workflow`, or `workflow-lint`; at least one is
+required. There is deliberately no implicit `all` selection, so adding a future YAGA provider never
+changes an existing local command or CI gate.
+
+```bash
+yaga repo check \
+  --check commit \
+  --check workflow \
+  --check workflow-lint \
+  --commit HEAD \
+  --workflow-path .github/workflows \
+  --workflow-path examples
+```
+
+Providers execute once in canonical order regardless of option order. The commit provider accepts
+one `--commit` or `--range` and defaults to `HEAD`; it never fetches or weakens history. Both
+workflow providers consume the same bounded workflow bytes selected by repeatable
+`--workflow-path` options, while lint may add its bounded transitive support snapshot. Omitting
+`workflow-lint` keeps the aggregate pure Python and does not require Docker. Commit source and
+configuration options are rejected unless `commit` is selected, and workflow paths are rejected
+unless a workflow provider is selected.
+
+Text preserves one section per provider. Versioned JSON embeds each existing provider document
+under a `repository_check` envelope. GitHub output uses balanced provider groups and one shared
+50-annotation budget. YAGA continues independent providers after expected operational errors: exit
+`0` means all passed, exit `1` means findings with no operational error, and exit `2` means at least
+one operational error even if other providers found policy violations. Exit `0` and `1` reports go
+to standard output; aggregate exit `2` reports go to standard error.
 
 ## Gate commands and the composite Action
 

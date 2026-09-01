@@ -280,6 +280,45 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     ):
         raise SystemExit("installed wheel CLI workflow check emitted the wrong report contract")
 
+    repository_completed = run_bounded(
+        [
+            str(executable),
+            "repo",
+            "check",
+            "--check",
+            "workflow",
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    repository_document = successful_json(
+        repository_completed,
+        operation="repository check",
+    )
+    repository_checks = (
+        repository_document.get("checks") if isinstance(repository_document, dict) else None
+    )
+    if not (
+        repository_document.get("schema_version") == 1
+        and repository_document.get("kind") == "repository_check"
+        and repository_document.get("status") == "passed"
+        and repository_document.get("valid") is True
+        and repository_document.get("selected") == 1
+        and repository_document.get("passed") == 1
+        and repository_document.get("failed") == 0
+        and repository_document.get("errored") == 0
+        and isinstance(repository_checks, list)
+        and len(repository_checks) == 1
+        and isinstance(repository_checks[0], dict)
+        and repository_checks[0].get("provider") == "workflow"
+        and repository_checks[0].get("status") == "passed"
+    ):
+        raise SystemExit("installed wheel CLI repository check emitted the wrong report contract")
+
     lint_help = run_bounded(
         [str(executable), "workflow", "lint", "--help"],
         cwd=consumer,
@@ -365,11 +404,16 @@ def main() -> int:
                 "yaga/codex/runtime.py",
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
+                "yaga/commands/repo.py",
                 "yaga/commands/workflow.py",
                 "yaga/commits/checker.py",
                 "yaga/commits/github_event.py",
                 "yaga/commits/github_reporting.py",
+                "yaga/commits/service.py",
                 "yaga/files.py",
+                "yaga/repository/checker.py",
+                "yaga/repository/models.py",
+                "yaga/repository/reporting.py",
                 "yaga/workflows/actionlint_runtime.py",
                 "yaga/workflows/actionlint_snapshot.py",
                 "yaga/workflows/checker.py",
