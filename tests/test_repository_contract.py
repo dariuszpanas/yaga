@@ -8,6 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 FULL_SHA = re.compile(r"dariuszpanas/yaga@([0-9a-f]{40})(?:\s|$)")
 RESERVED_STATUS_NAMES = {"codex review", "ci gate"}
+COMMIT_CHECK_ACTION = (
+    "dariuszpanas/yaga/actions/commit-check@9476edf0459b7a355f5e4eca214c7c3bd3eaf3d5"
+)
+CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
 def read(path: str) -> str:
@@ -137,6 +141,33 @@ def test_commit_action_is_a_separate_read_only_closed_interface() -> None:
     assert "uses: ./actions/commit-check" in workflow
 
 
+def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:
+    example = read("examples/commit-policy.yml")
+    readme = read("README.md")
+
+    assert COMMIT_CHECK_ACTION in example
+    assert COMMIT_CHECK_ACTION in readme
+    assert "uses: ./actions/commit-check" not in example
+    assert CHECKOUT_ACTION in example
+    assert "pull_request:" in example
+    assert "types: [opened, synchronize, reopened, edited, ready_for_review]" in example
+    assert section_keys(example, "permissions") == {"contents"}
+    assert section_keys(example, "jobs") == {"commit-policy"}
+    assert "permissions:\n  contents: read" in example
+    assert "pull-requests: write" not in example
+    assert "statuses: write" not in example
+    assert "secrets:" not in example
+    assert "group: yaga-commit-policy-${{ github.event.pull_request.number }}" in example
+    assert "cancel-in-progress: true" in example
+    assert "ref: ${{ github.event.pull_request.head.sha }}" in example
+    assert "fetch-depth: 0" in example
+    assert "persist-credentials: false" in example
+    assert "name: Commit Messages" in example
+    assert "timeout-minutes: 5" in example
+    for unsupported in ("pull_request_target:", "workflow_run:", "push:", "merge_group:"):
+        assert unsupported not in example
+
+
 def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:
     ci = read(".github/workflows/ci.yml")
     readme = read("README.md")
@@ -161,6 +192,7 @@ def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> Non
 
     assert {path.name for path in (ROOT / "examples").glob("*.yml")} == {
         "codex-review.yml",
+        "commit-policy.yml",
         "review-policy.yml",
     }
     assert lifecycle.startswith("name: YAGA Review Policy\n")

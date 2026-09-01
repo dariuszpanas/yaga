@@ -139,7 +139,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: dariuszpanas/yaga/actions/commit-check@<AUDITED_40_CHARACTER_SHA>
+      - uses: dariuszpanas/yaga/actions/commit-check@9476edf0459b7a355f5e4eca214c7c3bd3eaf3d5
 ```
 
 The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,
@@ -154,8 +154,9 @@ This remains an unprivileged PR check and therefore a quality signal, not a secu
 policy file comes from the PR-head worktree and can be changed by the PR; review policy changes like
 any other code. Title validation is bound to the triggering event rather than the commit SHA. The
 `edited` wake and per-PR cancellation reduce stale ordering, but do not turn title metadata into
-immutable evidence. Consumers must replace the placeholder with an audited immutable YAGA commit
-SHA.
+immutable evidence. The copy-ready [commit-policy workflow](examples/commit-policy.yml) pins an
+audited pre-release commit; review and deliberately replace that immutable SHA when adopting a
+newer YAGA revision.
 
 ## Gate commands and the composite Action
 
