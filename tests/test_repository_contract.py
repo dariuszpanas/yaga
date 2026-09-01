@@ -183,7 +183,7 @@ def test_pre_commit_provider_is_one_closed_file_adapter() -> None:
         '  minimum_pre_commit_version: "3.2.0"\n'
     )
     assert "repo: https://github.com/dariuszpanas/yaga" in readme
-    assert "rev: 04c71982d8b03c960d46886d46c4ade6defcdbbe" in readme
+    assert "rev: 91d93b6e64b6d795a56c2069b20ccaebdf4303f3" in readme
     assert "id: yaga-commit-check" in readme
     assert "pre-commit install --hook-type commit-msg --install-hooks" in readme
 
