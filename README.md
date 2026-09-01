@@ -102,7 +102,7 @@ audited immutable commit that contains `.pre-commit-hooks.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/dariuszpanas/yaga
-    rev: <AUDITED_40_CHARACTER_SHA>
+    rev: 04c71982d8b03c960d46886d46c4ade6defcdbbe
     hooks:
       - id: yaga-commit-check
 ```
