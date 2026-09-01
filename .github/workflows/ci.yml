@@ -67,6 +67,14 @@ jobs:
           --policy .yaga/tree-policy.toml
           --revision "$YAGA_TREE_REVISION"
           --format github
+      - name: Check committed blob sizes
+        env:
+          YAGA_SIZE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          uv run --frozen --python 3.12 yaga size check
+          --policy .yaga/size-policy.toml
+          --revision "$YAGA_SIZE_REVISION"
+          --format github
       - name: Exercise the pre-commit provider
         run: |
           printf '%s\n' 'not conventional' > "$RUNNER_TEMP/YAGA_COMMIT_EDITMSG"

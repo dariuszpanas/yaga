@@ -1,5 +1,6 @@
 tree-policy-version = 1
 required-paths = [
+  ".yaga/size-policy.toml",
   ".yaga/tree-policy.toml",
   "LICENSE",
   "README.md",

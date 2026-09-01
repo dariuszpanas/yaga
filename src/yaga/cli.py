@@ -15,6 +15,7 @@ from yaga.commands.config import app as config_app
 from yaga.commands.gate import app as gate_app
 from yaga.commands.github import app as github_app
 from yaga.commands.repo import app as repo_app
+from yaga.commands.size import app as size_app
 from yaga.commands.tree import app as tree_app
 from yaga.commands.workflow import app as workflow_app
 
@@ -31,6 +32,7 @@ app.add_typer(config_app, name="config")
 app.add_typer(gate_app, name="gate")
 app.add_typer(github_app, name="github")
 app.add_typer(repo_app, name="repo")
+app.add_typer(size_app, name="size")
 app.add_typer(tree_app, name="tree")
 app.add_typer(workflow_app, name="workflow")
 

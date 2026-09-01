@@ -13,7 +13,7 @@ import threading
 import zipfile
 from email.parser import BytesParser
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_SMOKE_OUTPUT_BYTES = 65_536
@@ -202,6 +202,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     branch_policy = consumer / "branch-policy.toml"
     change_policy = consumer / "change-policy.toml"
     repository_plan = consumer / "repository-plan.toml"
+    size_policy = consumer / "size-policy.toml"
     tree_policy = consumer / "tree-policy.toml"
     executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
     if not executable.is_file():
@@ -410,8 +411,19 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         encoding="utf-8",
         newline="\n",
     )
+    size_policy.write_text(
+        "size-policy-version = 1\n"
+        "default-max-blob-bytes = 4096\n"
+        "max-total-blob-bytes = 65536\n\n"
+        "[[path-limits]]\n"
+        'pattern = "src/**"\n'
+        "max-blob-bytes = 128\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     tree_required_paths = [
         ".yaga.toml",
+        "size-policy.toml",
         "tree-policy.toml",
         "src/package.py",
         "tests/test_package.py",
@@ -419,7 +431,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     tree_forbidden_patterns = ["**/.env", "**/*.pyc", "dist/**"]
     tree_policy.write_text(
         "tree-policy-version = 1\n"
-        'required-paths = [".yaga.toml", "tree-policy.toml", '
+        'required-paths = [".yaga.toml", "size-policy.toml", "tree-policy.toml", '
         '"src/package.py", "tests/test_package.py"]\n'
         'forbidden-patterns = ["**/.env", "**/*.pyc", "dist/**"]\n',
         encoding="utf-8",
@@ -474,6 +486,46 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         [git, "-C", str(consumer), "rev-parse", f"{head_sha}^{{tree}}"],
         text=True,
     ).strip()
+    size_expected_paths = sorted(
+        (
+            ".github/workflows/ci.yml",
+            ".yaga.toml",
+            "branch-policy.toml",
+            "change-policy.toml",
+            "repository-plan.toml",
+            "size-policy.toml",
+            "src/package.py",
+            "tests/test_package.py",
+            "tree-policy.toml",
+        )
+    )
+    size_expected_largest: list[dict[str, object]] = []
+    size_expected_total = 0
+    for relative_path in size_expected_paths:
+        oid = subprocess.check_output(
+            [git, "-C", str(consumer), "rev-parse", f"{head_sha}:{relative_path}"],
+            text=True,
+        ).strip()
+        committed_size = int(
+            subprocess.check_output(
+                [git, "-C", str(consumer), "cat-file", "-s", oid],
+                text=True,
+            ).strip()
+        )
+        size_expected_total += committed_size
+        size_expected_largest.append(
+            {
+                "path": relative_path,
+                "oid": oid,
+                "mode": "100644",
+                "size_bytes": committed_size,
+                "max_blob_bytes": 128 if relative_path.startswith("src/") else 4096,
+                "pattern": "src/**" if relative_path.startswith("src/") else None,
+            }
+        )
+    size_expected_largest.sort(
+        key=lambda item: (-cast(int, item["size_bytes"]), cast(str, item["path"])),
+    )
     (consumer / ".env").write_text("UNTRACKED=1\n", encoding="utf-8", newline="\n")
     untracked_dist = consumer / "dist"
     untracked_dist.mkdir()
@@ -506,7 +558,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and tree_document.get("revision") == head_sha
         and tree_document.get("commit_sha") == head_sha
         and tree_document.get("tree_sha") == tree_sha
-        and tree_document.get("entries_checked") == 8
+        and tree_document.get("entries_checked") == 9
         and tree_document.get("required_paths") == tree_required_paths
         and tree_document.get("forbidden_patterns") == tree_forbidden_patterns
         and tree_document.get("diagnostics") == []
@@ -515,6 +567,61 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and tree_document.get("forbidden_paths") == 0
     ):
         raise SystemExit("installed wheel CLI tree check emitted the wrong report contract")
+    size_completed = run_bounded(
+        [
+            str(executable),
+            "size",
+            "check",
+            "--policy",
+            str(size_policy),
+            "--revision",
+            head_sha,
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    size_document = successful_json(size_completed, operation="size check")
+    size_identity = size_document.get("identity")
+    size_policy_report = size_document.get("policy")
+    size_counts = size_document.get("counts")
+    size_total = size_document.get("total")
+    size_largest = size_document.get("largest")
+    if not (
+        size_document.get("schema_version") == 1
+        and size_document.get("kind") == "size_policy"
+        and size_document.get("status") == "passed"
+        and size_document.get("valid") is True
+        and size_identity
+        == {
+            "policy_path": str(size_policy.resolve()),
+            "repository_path": str(consumer.resolve()),
+            "revision": head_sha,
+            "commit_sha": head_sha,
+            "tree_sha": tree_sha,
+        }
+        and size_policy_report
+        == {
+            "size_policy_version": 1,
+            "default_max_blob_bytes": 4096,
+            "max_total_blob_bytes": 65536,
+            "path_limits": [{"pattern": "src/**", "max_blob_bytes": 128}],
+        }
+        and size_counts == {"blobs": 9, "gitlinks": 0, "oversized_blobs": 0}
+        and size_total
+        == {
+            "blob_bytes": size_expected_total,
+            "max_total_blob_bytes": 65536,
+            "exceeded": False,
+        }
+        and size_largest == {"blobs": size_expected_largest, "omitted": 0}
+        and size_document.get("diagnostics") == []
+        and size_document.get("diagnostics_omitted") == 0
+    ):
+        raise SystemExit("installed wheel CLI size check emitted the wrong report contract")
     change_completed = run_bounded(
         [
             str(executable),
@@ -649,6 +756,7 @@ def main() -> int:
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
                 "yaga/commands/repo.py",
+                "yaga/commands/size.py",
                 "yaga/commands/tree.py",
                 "yaga/commands/workflow.py",
                 "yaga/commits/checker.py",
@@ -678,6 +786,14 @@ def main() -> int:
                 "yaga/trees/policy.py",
                 "yaga/trees/reporting.py",
                 "yaga/trees/service.py",
+                "yaga/sizes/__init__.py",
+                "yaga/sizes/checker.py",
+                "yaga/sizes/git.py",
+                "yaga/sizes/models.py",
+                "yaga/sizes/patterns.py",
+                "yaga/sizes/policy.py",
+                "yaga/sizes/reporting.py",
+                "yaga/sizes/service.py",
                 "yaga/files.py",
                 "yaga/repository/checker.py",
                 "yaga/repository/models.py",

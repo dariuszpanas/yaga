@@ -31,7 +31,7 @@ with project and Python environment leakage removed.
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `repo`,
-`tree`, `workflow`, and `gate`.
+`size`, `tree`, `workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
@@ -141,10 +141,28 @@ unsupported older clients and missing promised objects fail closed. Validate Git
 outermost enclosing repository boundary even when the requested directory is a worktree
 subdirectory, and resolve bounded `.git` files, linked-worktree `commondir`, and external object
 directories plus cycle-safe local alternate chains into that trust boundary; allow at most 128
-object directories. Shallow history is valid when the selected objects are present. The policy path
-is a runtime input and carries no provenance claim. Bound JSON/text/GitHub diagnostics without
+object directories. Reject legacy graft overlays before revision resolution and recheck after tree
+enumeration. Shallow history is valid when the selected objects are present. The policy path is a
+runtime input and carries no provenance claim. Bound JSON/text/GitHub diagnostics without
 weakening exact aggregate counts, and keep this provider outside both Action import graphs and the
 repository-plan v1 provider set until that contract is deliberately revised.
+
+Committed blob-size policy lives under `src/yaga/sizes/` and remains installed-only. `size check`
+requires one explicit versioned policy and one explicit commit-ish; only `--repo` may default to
+`.`. Never infer `HEAD`, discover policy, fetch, parse events, read the worktree/index/untracked
+set, or recurse into gitlinks. Schema v1 requires a nonnegative default blob limit, permits one
+optional total limit, and accepts up to 128 ordered first-match path overrides. Preserve canonical
+anchored case-sensitive literal/component-`*`/whole-component-`**` matching, one shared
+10,000,000-unit work ceiling, a 2^53 - 1 portable-integer ceiling for every emitted byte count, and
+stable `size.blob` then `size.total` diagnostic order.
+
+Resolve exactly one commit and tree, then enumerate recursive full-tree object metadata with the
+shared bounded Git runtime. Count regular, executable, and symlink blob bytes; exclude validated
+gitlinks; count duplicate blob identities once per path; and treat Git LFS pointers as ordinary
+stored blobs. Keep strict mode/type/identity/size/path parsing, 50,000-entry and 64 MiB output caps,
+and shallow-checkout support only when selected objects are present. Reject legacy graft overlays
+before revision resolution and recheck after blob enumeration. Bound displayed findings while
+retaining exact totals, and keep the provider outside both Action graphs and repository-plan v1.
 
 Workflow reference policy lives under `src/yaga/workflows/` and remains installed-CLI-only. Parse
 untrusted YAML through the bounded pure-Python `SafeLoader` composition boundary without
