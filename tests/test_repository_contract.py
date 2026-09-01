@@ -241,13 +241,17 @@ def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:
 def test_recommended_v3_is_explicitly_dogfooded_and_bounded() -> None:
     makefile = read("Makefile")
     ci = read(".github/workflows/ci.yml")
+    plan = read(".yaga/checks/ci.toml")
     readme = read("README.md")
     contributing = read("CONTRIBUTING.md")
     agents = read("AGENTS.md")
 
     for gate in (makefile, ci):
-        assert "--workflow-security-profile recommended-v3" in gate
+        assert "--plan .yaga/checks/ci.toml" in gate
         assert "--workflow-security-profile recommended-v2" not in gate
+
+    assert 'workflow-security-profile = "recommended-v3"' in plan
+    assert "recommended-v2" not in plan
 
     for document in (readme, contributing, agents):
         assert "`recommended-v1`" in document

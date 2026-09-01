@@ -419,6 +419,36 @@ yaga repo check \
   --workflow-path examples
 ```
 
+For a stable local-and-CI selection, put only the repository policy in an explicit, versioned plan:
+
+```toml
+# .yaga/checks/ci.toml
+plan-version = 1
+checks = ["commit", "workflow", "workflow-security", "workflow-lint"]
+workflow-paths = [".github/workflows", "examples"]
+workflow-security-profile = "recommended-v3"
+```
+
+Then keep invocation-specific state on the command line:
+
+```bash
+yaga repo check --plan .yaga/checks/ci.toml --commit HEAD
+```
+
+YAGA never discovers a plan implicitly. `--plan` replaces the selection flags `--check`,
+`--workflow-path`, `--workflow-security-profile`, and `--workflow-security-rule`; combining them is
+an input error. `--repo`, `--config`, `--commit`, `--range`, and `--format` remain runtime options.
+Plan version 1 accepts only the shown keys plus `workflow-security-rules` for an exact custom rule
+set. Files, arrays, strings, and portable forward-slash workflow paths are strictly bounded;
+unknown keys, unknown versions, absolute or parent-traversing paths, duplicate selections, and
+profile/rule conflicts fail closed. Workflow paths resolve under `--repo`, never beside the plan.
+Plans have no includes, discovery, environment interpolation, expressions, commands, or secret
+fields.
+
+A plan changed by an untrusted pull request controls only that pull request's unprivileged quality
+check. It is not a security authority and cannot replace trusted default-branch workflow,
+permissions, ruleset, or merge-policy enforcement.
+
 Providers execute once in canonical `commit`, `workflow`, `workflow-security`, `workflow-lint`
 order regardless of option order. The commit provider accepts one `--commit` or `--range` and
 defaults to `HEAD`; it never fetches or weakens history. The pure workflow providers consume one

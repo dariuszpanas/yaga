@@ -14,13 +14,14 @@ uv sync --group dev
 uv run make ci
 ```
 
-The full gate invokes `yaga repo check` with the Docker-backed `workflow-lint` provider. The
-installed CLI uses the locked Typer dependency. The write-capable
-root Action import graph—`__main__` in gate mode, `action_cli`, `action`, `codex`, and the generic
-GitHub primitives—must remain Python-standard-library-only and must not import the installed CLI,
-command, commit-policy, or presentation modules. The separate read-only commit Action may import
-dependency-light commit modules, but never Typer, command modules, Codex policy, GitHub REST
-transport, site packages, or token handling.
+The full gate invokes `yaga repo check --plan .yaga/checks/ci.toml --commit HEAD`; that explicit
+versioned plan selects the same providers and workflow paths locally and in CI, including the
+Docker-backed `workflow-lint` provider. The installed CLI uses the locked Typer dependency. The
+write-capable root Action import graph—`__main__` in gate mode, `action_cli`, `action`, `codex`, and
+the generic GitHub primitives—must remain Python-standard-library-only and must not import the
+installed CLI, command, commit-policy, or presentation modules. The separate read-only commit
+Action may import dependency-light commit modules, but never Typer, command modules, Codex policy,
+GitHub REST transport, site packages, or token handling.
 
 The package build gate must execute the fresh wheel outside the checkout. Export the publishable
 runtime closure from `uv.lock`, require its hashes without building dependencies, install the wheel
@@ -150,6 +151,15 @@ must not suppress independent actionlint. Preserve one global GitHub annotation 
 `0` for all passed, `1` for findings only, and `2` when any provider errors. Provider-specific
 arguments must fail when their provider is absent. The aggregate remains outside both Action import
 graphs and does not replace the event-bound commit Action.
+
+Repository check plans are explicit saved provider selections, never implicit configuration. Keep
+their TOML schema versioned, closed, portable, and strictly bounded; reject unknown keys and
+versions, unsafe workflow paths, duplicate values, and inconsistent provider arguments. Plans may
+hold only checks, workflow paths, and a workflow-security profile or exact rules. Keep repository,
+commit configuration, commit/range selection, and output format as runtime CLI options. Do not add
+includes, discovery, environment interpolation, expressions, commands, or secret fields. Resolve
+plan workflow paths only under the runtime repository, never relative to the plan file. A
+pull-request-controlled plan remains an unprivileged quality policy, not a security authority.
 
 The pre-commit provider manifest exposes exactly one `commit-msg` hook. Keep it as a direct
 `language: python` adapter to `yaga commit check --file`; do not add shell indirection, filename

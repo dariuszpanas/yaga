@@ -4,11 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import PurePosixPath
 
 from yaga.commits.models import ValidationReport
 from yaga.errors import YagaError
 from yaga.workflows.models import WorkflowLintReport, WorkflowReport
-from yaga.workflows.security_models import WorkflowSecurityReport
+from yaga.workflows.security_models import (
+    WORKFLOW_SECURITY_RULE_ORDER,
+    WorkflowSecurityProfile,
+    WorkflowSecurityReport,
+    WorkflowSecurityRule,
+)
 
 type ProviderReport = (
     ValidationReport | WorkflowReport | WorkflowSecurityReport | WorkflowLintReport
@@ -38,6 +44,66 @@ class RepositoryCheckStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     ERROR = "error"
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryCheckPlan:
+    """One immutable, normalized repository-check plan."""
+
+    plan_version: int
+    checks: tuple[RepositoryProvider, ...]
+    workflow_paths: tuple[PurePosixPath, ...] = ()
+    workflow_security_profile: WorkflowSecurityProfile | None = None
+    workflow_security_rules: tuple[WorkflowSecurityRule, ...] = ()
+
+    def __post_init__(self) -> None:
+        if isinstance(self.plan_version, bool) or self.plan_version != 1:
+            raise ValueError("repository check plan version must be 1")
+        if not self.checks or any(not isinstance(item, RepositoryProvider) for item in self.checks):
+            raise ValueError("repository check plan requires known providers")
+        selected = frozenset(self.checks)
+        canonical_checks = tuple(
+            provider for provider in RepositoryProvider if provider in selected
+        )
+        if len(selected) != len(self.checks) or self.checks != canonical_checks:
+            raise ValueError("repository check plan providers must be unique and canonical")
+        if any(type(path) is not PurePosixPath for path in self.workflow_paths):
+            raise ValueError("repository check plan workflow paths must be portable paths")
+        normalized_paths = {path.as_posix().casefold() for path in self.workflow_paths}
+        if len(normalized_paths) != len(self.workflow_paths):
+            raise ValueError("repository check plan workflow paths must be unique")
+        if self.workflow_security_profile is not None and not isinstance(
+            self.workflow_security_profile, WorkflowSecurityProfile
+        ):
+            raise ValueError("repository check plan profile must be a known profile")
+        if self.workflow_security_profile is WorkflowSecurityProfile.CUSTOM:
+            raise ValueError("repository check plan cannot select the custom profile by name")
+        if self.workflow_security_profile is not None and self.workflow_security_rules:
+            raise ValueError("repository check plan cannot combine a profile and explicit rules")
+        if any(not isinstance(rule, WorkflowSecurityRule) for rule in self.workflow_security_rules):
+            raise ValueError("repository check plan rules must be known rules")
+        selected_rules = frozenset(self.workflow_security_rules)
+        canonical_rules = tuple(
+            rule for rule in WORKFLOW_SECURITY_RULE_ORDER if rule in selected_rules
+        )
+        if (
+            len(selected_rules) != len(self.workflow_security_rules)
+            or self.workflow_security_rules != canonical_rules
+        ):
+            raise ValueError("repository check plan rules must be unique and canonical")
+        workflow_providers = frozenset(
+            {
+                RepositoryProvider.WORKFLOW,
+                RepositoryProvider.WORKFLOW_SECURITY,
+                RepositoryProvider.WORKFLOW_LINT,
+            }
+        )
+        if self.workflow_paths and selected.isdisjoint(workflow_providers):
+            raise ValueError("repository check plan workflow paths require a workflow provider")
+        if (
+            self.workflow_security_profile is not None or self.workflow_security_rules
+        ) and RepositoryProvider.WORKFLOW_SECURITY not in selected:
+            raise ValueError("repository check plan security policy requires its provider")
 
 
 @dataclass(frozen=True, slots=True)

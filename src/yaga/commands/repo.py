@@ -7,9 +7,10 @@ from typing import Annotated
 
 import typer
 
-from yaga.errors import YagaError
+from yaga.errors import InputError, YagaError
 from yaga.repository.checker import check_repository
 from yaga.repository.models import RepositoryOutputFormat
+from yaga.repository.plan import load_repository_check_plan
 from yaga.repository.reporting import render_repository_error, render_repository_report
 
 app = typer.Typer(help="Run explicit repository check providers.", no_args_is_help=True)
@@ -17,6 +18,13 @@ app = typer.Typer(help="Run explicit repository check providers.", no_args_is_he
 
 @app.command("check")
 def check_repo(
+    plan_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--plan",
+            help="Versioned repository check plan. Replaces command-line check selection.",
+        ),
+    ] = None,
     checks: Annotated[
         list[str] | None,
         typer.Option(
@@ -74,15 +82,36 @@ def check_repo(
 ) -> None:
     """Run only the explicitly selected providers in canonical order."""
     try:
+        selected_checks = checks or ()
+        selected_workflow_paths = workflow_paths or ()
+        selected_security_profile = workflow_security_profile
+        selected_security_rules = workflow_security_rules or ()
+        if plan_path is not None:
+            if (
+                checks
+                or workflow_paths
+                or workflow_security_profile is not None
+                or workflow_security_rules
+            ):
+                raise InputError(
+                    "--plan cannot be combined with --check, --workflow-path, "
+                    "--workflow-security-profile, or --workflow-security-rule"
+                )
+            plan = load_repository_check_plan(plan_path)
+            selected_checks = plan.checks
+            selected_workflow_paths = tuple(Path(path) for path in plan.workflow_paths)
+            selected_security_profile = plan.workflow_security_profile
+            selected_security_rules = plan.workflow_security_rules
+
         report = check_repository(
             repository,
-            checks or (),
+            selected_checks,
             config=config,
             commit=commit,
             revision_range=revision_range,
-            workflow_paths=workflow_paths or (),
-            workflow_security_profile=workflow_security_profile,
-            workflow_security_rules=workflow_security_rules or (),
+            workflow_paths=selected_workflow_paths,
+            workflow_security_profile=selected_security_profile,
+            workflow_security_rules=selected_security_rules,
         )
     except YagaError as error:
         typer.echo(render_repository_error(error, output_format), err=True)

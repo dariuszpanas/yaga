@@ -62,11 +62,19 @@ operations through `yaga gate` and keep the composite Action as a supported adap
 - Keep privileged checkout analysis fail-closed without emulating GitHub expressions: on
   `pull_request_target` or `workflow_run`, dynamic `actions/checkout` `ref` or `repository` inputs
   fail, as does any `allow-unsafe-pr-checkout` value other than literal `false`.
-- Keep `repo check` installed-only and argument-driven. Require an explicit, unique provider set;
+- Keep `repo check` installed-only and explicitly driven by either arguments or one named,
+  versioned plan. Require a unique provider set;
   run `commit`, `workflow`, `workflow-security`, and `workflow-lint` in canonical order; share one
   bounded workflow load and pure-Python parse; and keep child reports separate. Do not add an
   implicit `all`, silently skip unavailable Docker, or weaken exit precedence: provider errors
   require exit 2 even alongside findings.
+- Keep repository check plans opt-in, closed, portable, and bounded. They may select only providers,
+  workflow paths, and a workflow-security profile or exact rule set; commit source/configuration and
+  output format remain runtime options. Reject unknown keys/versions, duplicate selections, unsafe
+  paths, selection-flag mixing, and inconsistent provider arguments. Resolve plan paths under the
+  runtime repository rather than beside the plan. Never add plan discovery, includes, environment
+  interpolation, expressions, commands, or secrets. A PR-controlled plan is quality policy only and
+  never trusted security authority.
 - Keep `.pre-commit-hooks.yaml` as one direct Python `commit-msg` adapter to
   `yaga commit check --file`. Do not add a wrapper, filters, policy arguments, or hook-only
   dependencies; local hooks are bypassable and cannot enforce merge parent policy.

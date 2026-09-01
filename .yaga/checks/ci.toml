@@ -1,0 +1,4 @@
+plan-version = 1
+checks = ["commit", "workflow", "workflow-security", "workflow-lint"]
+workflow-paths = [".github/workflows", "examples"]
+workflow-security-profile = "recommended-v3"
