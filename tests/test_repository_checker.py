@@ -106,11 +106,11 @@ def test_provider_selection_is_closed_explicit_and_unique(
 
 
 def test_commit_arguments_require_the_commit_provider() -> None:
-    with pytest.raises(InputError, match="require --check commit"):
+    with pytest.raises(InputError, match="require the commit provider"):
         checker.check_repository(Path("."), ["workflow"], config=Path("policy.toml"))
-    with pytest.raises(InputError, match="require --check commit"):
+    with pytest.raises(InputError, match="require the commit provider"):
         checker.check_repository(Path("."), ["workflow"], commit="HEAD~1")
-    with pytest.raises(InputError, match="require --check commit"):
+    with pytest.raises(InputError, match="require the commit provider"):
         checker.check_repository(Path("."), ["workflow"], revision_range="main..HEAD")
 
 
@@ -128,13 +128,13 @@ def test_provider_specific_arguments_are_mutually_scoped() -> None:
             ["commit"],
             workflow_paths=[Path("examples")],
         )
-    with pytest.raises(InputError, match="require --check workflow-security"):
+    with pytest.raises(InputError, match="require the workflow-security provider"):
         checker.check_repository(
             Path("."),
             ["workflow"],
             workflow_security_profile="recommended-v1",
         )
-    with pytest.raises(InputError, match="require --check workflow-security"):
+    with pytest.raises(InputError, match="require the workflow-security provider"):
         checker.check_repository(
             Path("."),
             ["workflow"],

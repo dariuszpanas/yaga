@@ -161,7 +161,7 @@ def _validate_provider_arguments(
     if RepositoryProvider.COMMIT not in selected and any(
         value is not None for value in (config, commit, revision_range)
     ):
-        raise InputError("commit source and --config require --check commit")
+        raise InputError("commit source and --config require the commit provider")
     if commit is not None and revision_range is not None:
         raise InputError("choose only one of --commit or --range")
     if not selected & _WORKFLOW_PROVIDERS and workflow_paths:
@@ -169,4 +169,6 @@ def _validate_provider_arguments(
     if RepositoryProvider.WORKFLOW_SECURITY not in selected and (
         workflow_security_profile is not None or workflow_security_rules
     ):
-        raise InputError("workflow security profile and rules require --check workflow-security")
+        raise InputError(
+            "workflow security profile and rules require the workflow-security provider"
+        )

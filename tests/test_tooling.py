@@ -48,12 +48,18 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
     assert "uv run yaga workflow lint .github/workflows examples" in makefile
-    assert (
-        "uv run yaga repo check --check commit --check workflow --check workflow-security "
-        "--check workflow-lint "
-        "--commit HEAD --workflow-path .github/workflows --workflow-path examples "
-        "--workflow-security-profile recommended-v3"
-    ) in makefile
+    assert "uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD" in makefile
+    assert "uv run yaga repo check --check" not in makefile
+
+    repository_plan = tomllib.loads(
+        (ROOT / ".yaga" / "checks" / "ci.toml").read_text(encoding="utf-8")
+    )
+    assert repository_plan == {
+        "plan-version": 1,
+        "checks": ["commit", "workflow", "workflow-security", "workflow-lint"],
+        "workflow-paths": [".github/workflows", "examples"],
+        "workflow-security-profile": "recommended-v3",
+    }
 
     for documentation in ("README.md", "CONTRIBUTING.md"):
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
@@ -68,8 +74,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "grep -F -- '[syntax.header]'" in ci
     assert "Run aggregate repository checks" in ci
     assert "yaga repo check" in ci
-    assert "--check commit --check workflow --check workflow-security --check workflow-lint" in ci
-    assert "--workflow-security-profile recommended-v3" in ci
+    assert "--plan .yaga/checks/ci.toml" in ci
+    assert (
+        "--check commit --check workflow --check workflow-security --check workflow-lint" not in ci
+    )
     assert (
         "ref: ${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}"
@@ -102,6 +110,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/commands/repo.py"' in build_gate
     assert '"yaga/commits/service.py"' in build_gate
     assert '"yaga/repository/checker.py"' in build_gate
+    assert '"yaga/repository/plan.py"' in build_gate
     assert '"yaga/workflows/inputs.py"' in build_gate
     assert '"yaga/workflows/lint.py"' in build_gate
     assert '"yaga/workflows/parser.py"' in build_gate

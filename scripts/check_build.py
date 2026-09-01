@@ -199,6 +199,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     consumer = output / "consumer"
     consumer.mkdir()
     config = consumer / ".yaga.toml"
+    repository_plan = consumer / "repository-plan.toml"
     executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
     if not executable.is_file():
         raise SystemExit("installed wheel does not expose the yaga executable")
@@ -314,15 +315,21 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     ):
         raise SystemExit("installed wheel CLI workflow security emitted the wrong report contract")
 
+    repository_plan.write_text(
+        "plan-version = 1\n"
+        'checks = ["workflow", "workflow-security"]\n'
+        'workflow-paths = [".github/workflows"]\n'
+        'workflow-security-profile = "recommended-v1"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
     repository_completed = run_bounded(
         [
             str(executable),
             "repo",
             "check",
-            "--check",
-            "workflow",
-            "--check",
-            "workflow-security",
+            "--plan",
+            str(repository_plan),
             "--repo",
             str(consumer),
             "--format",
@@ -452,6 +459,7 @@ def main() -> int:
                 "yaga/files.py",
                 "yaga/repository/checker.py",
                 "yaga/repository/models.py",
+                "yaga/repository/plan.py",
                 "yaga/repository/reporting.py",
                 "yaga/workflows/actionlint_runtime.py",
                 "yaga/workflows/actionlint_snapshot.py",
