@@ -13,7 +13,7 @@ from yaga.workflows.inputs import (
 )
 from yaga.workflows.models import ParsedWorkflow, WorkflowReport, WorkflowResult
 from yaga.workflows.parser import MAX_TOTAL_PARSED_NODES, ParsedWorkflowInput
-from yaga.workflows.references import check_reference
+from yaga.workflows.references import check_image_reference, check_reference
 from yaga.workflows.yaml import parse_workflow
 
 MAX_TOTAL_NODES = MAX_TOTAL_PARSED_NODES
@@ -63,7 +63,8 @@ def _check_parsed_workflows(
         total_nodes += parsed.node_count
         if total_nodes > MAX_TOTAL_NODES:
             raise InputError(f"workflow inputs exceed the hard {MAX_TOTAL_NODES}-node total limit")
-        total_references += len(parsed.references)
+        reference_count = len(parsed.references) + len(parsed.images)
+        total_references += reference_count
         if total_references > MAX_TOTAL_REFERENCES:
             raise InputError(
                 f"workflow inputs exceed the hard {MAX_TOTAL_REFERENCES}-reference total limit"
@@ -75,6 +76,11 @@ def _check_parsed_workflows(
             for reference in parsed.references
             if (diagnostic := check_reference(reference)) is not None
         )
+        diagnostics.extend(
+            diagnostic
+            for image in parsed.images
+            if (diagnostic := check_image_reference(image)) is not None
+        )
         diagnostics.sort(key=lambda item: (item.line, item.column, item.code, item.message))
         total_diagnostics += len(diagnostics)
         if total_diagnostics > MAX_TOTAL_DIAGNOSTICS:
@@ -84,7 +90,7 @@ def _check_parsed_workflows(
         results.append(
             WorkflowResult(
                 path=relative_path,
-                references_checked=len(parsed.references),
+                references_checked=reference_count,
                 diagnostics=tuple(diagnostics),
             )
         )

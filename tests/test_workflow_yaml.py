@@ -6,7 +6,7 @@ import pytest
 
 from yaga.errors import InputError
 from yaga.workflows import yaml as workflow_yaml
-from yaga.workflows.models import ReferenceContext
+from yaga.workflows.models import ImageReferenceContext, ParsedWorkflow, ReferenceContext
 from yaga.workflows.yaml import parse_workflow
 
 
@@ -69,6 +69,125 @@ jobs:
         (diagnostic.code, diagnostic.line, diagnostic.column) for diagnostic in parsed.diagnostics
     ] == [("yaml.duplicate_key", 5, 9)]
     assert parsed.node_count == 12
+
+
+def test_parsed_workflow_defaults_to_no_image_references() -> None:
+    parsed = ParsedWorkflow(references=(), diagnostics=(), node_count=1)
+
+    assert parsed.images == ()
+
+
+def test_extracts_job_and_service_image_references_with_scalar_tags() -> None:
+    parsed = parse_workflow(
+        b"""\
+jobs:
+  direct:
+    container: ghcr.io/example/job@sha256:1111
+    services:
+      database:
+        image: postgres@sha256:2222
+      null-image:
+        image:
+      quoted-empty:
+        image: ""
+  mapped:
+    container:
+      image: node@sha256:3333
+      image: node@sha256:4444
+      env:
+        image: ignored/nested:latest
+    image: ignored/job-field:latest
+""",
+        label="workflow.yml",
+    )
+
+    assert [
+        (image.context, image.value, image.tag, image.style, image.line, image.column)
+        for image in parsed.images
+    ] == [
+        (
+            ImageReferenceContext.JOB,
+            "ghcr.io/example/job@sha256:1111",
+            "tag:yaml.org,2002:str",
+            None,
+            3,
+            16,
+        ),
+        (
+            ImageReferenceContext.SERVICE,
+            "postgres@sha256:2222",
+            "tag:yaml.org,2002:str",
+            None,
+            6,
+            16,
+        ),
+        (
+            ImageReferenceContext.SERVICE,
+            "",
+            "tag:yaml.org,2002:null",
+            None,
+            8,
+            15,
+        ),
+        (
+            ImageReferenceContext.SERVICE,
+            "",
+            "tag:yaml.org,2002:str",
+            '"',
+            10,
+            16,
+        ),
+        (
+            ImageReferenceContext.JOB,
+            "node@sha256:3333",
+            "tag:yaml.org,2002:str",
+            None,
+            13,
+            14,
+        ),
+        (
+            ImageReferenceContext.JOB,
+            "node@sha256:4444",
+            "tag:yaml.org,2002:str",
+            None,
+            14,
+            14,
+        ),
+    ]
+    assert [
+        (diagnostic.code, diagnostic.line, diagnostic.column) for diagnostic in parsed.diagnostics
+    ] == [("yaml.duplicate_key", 14, 7)]
+
+
+def test_image_references_use_each_alias_occurrence_location() -> None:
+    parsed = parse_workflow(
+        b"""\
+image: &image redis@sha256:1111
+job-container: &job-container
+  image: node@sha256:2222
+service-container: &service-container
+  image: postgres@sha256:3333
+jobs:
+  build:
+    container: *job-container
+    services:
+      database: *service-container
+      replica: *service-container
+      cache:
+        image: *image
+  release:
+    container: *job-container
+""",
+        label="workflow.yml",
+    )
+
+    assert [(image.value, image.line, image.column) for image in parsed.images] == [
+        ("node@sha256:2222", 8, 16),
+        ("postgres@sha256:3333", 10, 17),
+        ("postgres@sha256:3333", 11, 16),
+        ("redis@sha256:1111", 13, 16),
+        ("node@sha256:2222", 15, 16),
+    ]
 
 
 def test_diagnoses_merge_keys_and_explicit_tags_without_constructing_them() -> None:
@@ -262,6 +381,22 @@ jobs:
         )
 
 
+def test_reference_limit_counts_uses_and_container_images(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(workflow_yaml, "MAX_REFERENCES", 1)
+
+    with pytest.raises(InputError, match="reference limit of 1"):
+        parse_workflow(
+            b"""\
+jobs:
+  build:
+    container: ubuntu@sha256:1111
+    steps:
+      - uses: owner/action@v1
+""",
+            label="workflow.yml",
+        )
+
+
 def test_rejects_too_many_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(workflow_yaml, "MAX_DIAGNOSTICS", 1)
 
@@ -299,6 +434,36 @@ jobs:
             4,
             15,
         ),
+        (
+            b"jobs:\n  build:\n    container: []\n",
+            "job container must be a scalar or mapping",
+            3,
+            16,
+        ),
+        (
+            b"jobs:\n  build:\n    container:\n      image: []\n",
+            "job container image must be a scalar",
+            4,
+            14,
+        ),
+        (
+            b"jobs:\n  build:\n    services: []\n",
+            "job services must be a mapping",
+            3,
+            15,
+        ),
+        (
+            b"jobs:\n  build:\n    services:\n      database: value\n",
+            "service definitions must be mappings",
+            4,
+            17,
+        ),
+        (
+            b"jobs:\n  build:\n    services:\n      database:\n        image: []\n",
+            "service image must be a scalar",
+            5,
+            16,
+        ),
     ],
 )
 def test_reports_unsupported_workflow_structures(
@@ -315,6 +480,33 @@ def test_reports_unsupported_workflow_structures(
         if diagnostic.code == "workflow.structure" and message in diagnostic.message
     ]
     assert [(diagnostic.line, diagnostic.column) for diagnostic in matching] == [(line, column)]
+
+
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        (
+            b"jobs:\n  build:\n    container:\n      ? [image]\n      : value\n",
+            "job container mapping keys must be scalars",
+        ),
+        (
+            b"jobs:\n  build:\n    services:\n      ? [database]\n      : {image: value}\n",
+            "service identifiers must be scalars",
+        ),
+        (
+            b"jobs:\n  build:\n    services:\n      database:\n        ? [image]\n"
+            b"        : value\n",
+            "service mapping keys must be scalars",
+        ),
+    ],
+)
+def test_reports_non_scalar_container_mapping_keys(raw: bytes, message: str) -> None:
+    parsed = parse_workflow(raw, label="workflow.yml")
+
+    assert any(
+        diagnostic.code == "workflow.structure" and diagnostic.message == message
+        for diagnostic in parsed.diagnostics
+    )
 
 
 def test_extracts_action_references_from_parallel_step_groups() -> None:

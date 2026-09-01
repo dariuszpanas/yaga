@@ -25,7 +25,9 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   path-selection contract. They respectively own immutable-reference policy, a narrow pure-Python
   trust policy, and pinned actionlint syntax checks. Freeze the documented `recommended-v1`
   security rules; future defaults require a new profile. Do not merge their diagnostics or imply
-  that one replaces another.
+  that one replaces another. Immutable-reference policy includes `uses`, job-container images, and
+  service-container images; container images require literal lowercase SHA-256 digests, except for
+  GitHub's quoted-empty disabled service image.
 - Keep privileged checkout analysis fail-closed without emulating GitHub expressions: on
   `pull_request_target` or `workflow_run`, dynamic `actions/checkout` `ref` or `repository` inputs
   fail, as does any `allow-unsafe-pr-checkout` value other than literal `false`.

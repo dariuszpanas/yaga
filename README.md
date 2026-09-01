@@ -210,10 +210,10 @@ newer YAGA revision.
 
 ## GitHub workflow checks
 
-`yaga workflow check` catches mutable third-party Action and reusable-workflow references before
-they become a supply-chain regression. With no paths it checks direct `.yml` and `.yaml` children
-of `.github/workflows`; explicit file or directory selections make examples and other workflow
-sets checkable with the same policy:
+`yaga workflow check` catches mutable third-party Action, reusable-workflow, job-container, and
+service-container references before they become a supply-chain regression. With no paths it checks
+direct `.yml` and `.yaml` children of `.github/workflows`; explicit file or directory selections
+make examples and other workflow sets checkable with the same policy:
 
 ```bash
 yaga workflow check
@@ -223,8 +223,14 @@ yaga workflow check .github/workflows examples --format github
 External GitHub references must use a full lowercase 40-character commit SHA. Step-level local
 Actions may use `./` or `$/` repository paths, while job-level local references must select one
 direct `.github/workflows/*.yml` or `.yaml` reusable workflow. Docker Actions must use a lowercase
-SHA-256 image digest. Expressions, ambiguous paths, tags, branches, abbreviated or uppercase SHAs,
-and references in the wrong step/job context fail policy.
+SHA-256 image digest. The scalar and mapping forms of `jobs.<job>.container` and every
+`jobs.<job>.services.<service>.image` use that same literal digest policy. A quoted empty service
+image is allowed because GitHub treats it as disabled; dynamic expressions remain unverifiable and
+fail closed. Expressions, ambiguous paths, tags, branches, abbreviated or uppercase SHAs, and
+references in the wrong step/job context fail policy. This is a lexical immutability check: it does
+not verify registry availability, signatures, provenance, or vulnerability status. See GitHub's
+[job and service container syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idcontainer)
+and Docker's [digest-pinning behavior](https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier).
 
 The `$/` self-repository syntax requires github.com and Actions runner 2.336.0 or newer; use `./`
 for GitHub Enterprise Server or older self-hosted runners. Prefer `$/` when it is available: `./`
@@ -232,10 +238,11 @@ executes from the checked-out workspace, so its integrity depends on an exact tr
 it must not consume untrusted pull-request code in a write-capable workflow.
 
 The checker strictly bounds selected files, bytes, YAML nodes, depth, aliases, scalar sizes,
-references, and diagnostics. It composes a YAML node graph without constructing Python objects, so
-duplicate keys and merge keys remain visible and fail closed. Text, versioned JSON, and escaped
-GitHub annotations use exit `0` for success, `1` for policy findings, and `2` for discovery, input,
-YAML, or resource-limit errors.
+references, and diagnostics. Its reported reference count includes selected `uses` values and
+container images. It composes a YAML node graph without constructing Python objects, so duplicate
+keys and merge keys remain visible and fail closed. Text, versioned JSON, and escaped GitHub
+annotations use exit `0` for success, `1` for policy findings, and `2` for discovery, input, YAML,
+or resource-limit errors.
 
 `yaga workflow security` applies a narrow, pure-Python trust policy to the same bounded workflow
 selection. Its versioned `recommended-v1` profile requires an explicit read-only top-level

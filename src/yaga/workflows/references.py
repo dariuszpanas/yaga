@@ -1,22 +1,35 @@
-"""Lexical policy for immutable GitHub workflow ``uses`` references."""
+"""Lexical policy for immutable GitHub workflow dependency references."""
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import unicodedata
 
-from yaga.workflows.models import ReferenceContext, WorkflowDiagnostic, WorkflowReference
+from yaga.workflows.models import (
+    ImageReferenceContext,
+    ReferenceContext,
+    WorkflowDiagnostic,
+    WorkflowImageReference,
+    WorkflowReference,
+)
 
 MAX_USES_LENGTH = 1024
+MAX_DOCKER_NAME_LENGTH = 255
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _DOCKER_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _PATH_SEGMENT = re.compile(r"[A-Za-z0-9_.+-]+\Z")
 _REPOSITORY_SEGMENT = re.compile(r"[A-Za-z0-9_.-]+\Z")
 _MUTABLE_REF = re.compile(r"[A-Za-z0-9._+/-]+\Z")
-_DOCKER_IMAGE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._:/+-]*[A-Za-z0-9])?\Z")
 _DOCKER_DIGEST_CANDIDATE = re.compile(r"[A-Za-z0-9:._+-]+\Z")
+_DOCKER_DOMAIN_COMPONENT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\Z")
+_DOCKER_IPV6_LITERAL = re.compile(r"[0-9A-Fa-f:]+\Z")
+_DOCKER_PATH_COMPONENT = re.compile(r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*\Z")
+_DOCKER_TAG = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\Z")
 _WORKFLOW_FILE = re.compile(r"[A-Za-z0-9_.-]+\.ya?ml\Z")
+_YAML_STRING_TAG = "tag:yaml.org,2002:str"
+_QUOTED_YAML_STYLES = frozenset({"'", '"'})
 
 
 def check_reference(reference: WorkflowReference) -> WorkflowDiagnostic | None:
@@ -30,6 +43,32 @@ def check_reference(reference: WorkflowReference) -> WorkflowDiagnostic | None:
     if value.startswith(("./", "$/")):
         return _check_local_reference(reference)
     return _check_external_reference(reference)
+
+
+def check_image_reference(reference: WorkflowImageReference) -> WorkflowDiagnostic | None:
+    """Return the first stable policy diagnostic for one container image reference."""
+    value = reference.value
+    if reference.tag != _YAML_STRING_TAG:
+        return _image_diagnostic(reference, "image.syntax", "container image has invalid syntax")
+    if (
+        value == ""
+        and reference.context is ImageReferenceContext.SERVICE
+        and reference.style in _QUOTED_YAML_STYLES
+    ):
+        return None
+    if _invalid_common_syntax(value):
+        return _image_diagnostic(reference, "image.syntax", "container image has invalid syntax")
+
+    issue = _docker_payload_issue(value)
+    if issue == "syntax":
+        return _image_diagnostic(reference, "image.syntax", "container image has invalid syntax")
+    if issue == "pin":
+        return _image_diagnostic(
+            reference,
+            "image.pin",
+            "container image must use an immutable lowercase digest",
+        )
+    return None
 
 
 def _check_local_reference(reference: WorkflowReference) -> WorkflowDiagnostic | None:
@@ -96,15 +135,8 @@ def _check_external_reference(reference: WorkflowReference) -> WorkflowDiagnosti
 
 def _check_docker_reference(reference: WorkflowReference) -> WorkflowDiagnostic | None:
     payload = reference.value.removeprefix("docker://")
-    if "@" in payload:
-        image, digest = payload.split("@", 1)
-        if not digest or _DOCKER_DIGEST_CANDIDATE.fullmatch(digest) is None:
-            return _diagnostic(reference, "uses.syntax", "uses reference has invalid syntax")
-    else:
-        image = payload
-        digest = None
-
-    if not _safe_docker_image(image):
+    issue = _docker_payload_issue(payload)
+    if issue == "syntax":
         return _diagnostic(reference, "uses.syntax", "uses reference has invalid syntax")
     if reference.context is ReferenceContext.JOB:
         return _diagnostic(
@@ -112,12 +144,28 @@ def _check_docker_reference(reference: WorkflowReference) -> WorkflowDiagnostic 
             "uses.context",
             "uses reference is not permitted in this workflow context",
         )
-    if digest is None or _DOCKER_DIGEST.fullmatch(digest) is None:
+    if issue == "pin":
         return _diagnostic(
             reference,
             "uses.pin",
             "uses reference must use an immutable lowercase digest",
         )
+    return None
+
+
+def _docker_payload_issue(value: str) -> str | None:
+    if "@" in value:
+        image, digest = value.split("@", 1)
+        if not digest or _DOCKER_DIGEST_CANDIDATE.fullmatch(digest) is None:
+            return "syntax"
+    else:
+        image = value
+        digest = None
+
+    if not _safe_docker_image(image):
+        return "syntax"
+    if digest is None or _DOCKER_DIGEST.fullmatch(digest) is None:
+        return "pin"
     return None
 
 
@@ -155,9 +203,62 @@ def _safe_mutable_ref(value: str) -> bool:
 
 
 def _safe_docker_image(value: str) -> bool:
-    return _DOCKER_IMAGE.fullmatch(value) is not None and all(
-        segment not in {"", ".", ".."} for segment in value.split("/")
+    slash = value.rfind("/")
+    colon = value.rfind(":")
+    name = value
+    if colon > slash:
+        name = value[:colon]
+        if _DOCKER_TAG.fullmatch(value[colon + 1 :]) is None:
+            return False
+
+    if not name or len(name) > MAX_DOCKER_NAME_LENGTH:
+        return False
+    segments = name.split("/")
+    if any(not segment for segment in segments):
+        return False
+
+    if len(segments) > 1 and _is_docker_domain(segments[0]):
+        if not _safe_docker_domain(segments.pop(0)):
+            return False
+    return bool(segments) and all(
+        _DOCKER_PATH_COMPONENT.fullmatch(segment) is not None for segment in segments
     )
+
+
+def _is_docker_domain(value: str) -> bool:
+    return "." in value or ":" in value or value.lower() == "localhost" or value.lower() != value
+
+
+def _safe_docker_domain(value: str) -> bool:
+    if value.startswith("["):
+        closing = value.find("]")
+        if closing < 2:
+            return False
+        literal = value[1:closing]
+        suffix = value[closing + 1 :]
+        if _DOCKER_IPV6_LITERAL.fullmatch(literal) is None:
+            return False
+        if suffix and (not suffix.startswith(":") or not _safe_docker_port(suffix[1:])):
+            return False
+        try:
+            ipaddress.IPv6Address(literal)
+        except ipaddress.AddressValueError:
+            return False
+        return True
+    if value.count(":") > 1:
+        return False
+    host = value
+    if ":" in value:
+        host, port = value.rsplit(":", 1)
+        if not _safe_docker_port(port):
+            return False
+    return bool(host) and all(
+        _DOCKER_DOMAIN_COMPONENT.fullmatch(component) is not None for component in host.split(".")
+    )
+
+
+def _safe_docker_port(value: str) -> bool:
+    return bool(value) and value.isascii() and value.isdecimal()
 
 
 def _is_direct_workflow_path(value: str) -> bool:
@@ -179,6 +280,19 @@ def _is_external_workflow_path(segments: list[str]) -> bool:
 
 def _diagnostic(
     reference: WorkflowReference,
+    code: str,
+    message: str,
+) -> WorkflowDiagnostic:
+    return WorkflowDiagnostic(
+        code=code,
+        message=message,
+        line=reference.line,
+        column=reference.column,
+    )
+
+
+def _image_diagnostic(
+    reference: WorkflowImageReference,
     code: str,
     message: str,
 ) -> WorkflowDiagnostic:

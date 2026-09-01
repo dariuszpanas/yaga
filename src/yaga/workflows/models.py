@@ -13,6 +13,13 @@ class ReferenceContext(StrEnum):
     JOB = "job"
 
 
+class ImageReferenceContext(StrEnum):
+    """The GitHub workflow container location that owns one image reference."""
+
+    JOB = "job"
+    SERVICE = "service"
+
+
 class WorkflowOutputFormat(StrEnum):
     """Supported workflow-policy report formats."""
 
@@ -44,6 +51,18 @@ class WorkflowReference:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkflowImageReference:
+    """One bounded container-image scalar selected from a workflow."""
+
+    value: str
+    context: ImageReferenceContext
+    tag: str
+    line: int
+    column: int
+    style: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ActionManifestDependency:
     """One action-runtime file reference selected without constructing YAML."""
 
@@ -66,6 +85,7 @@ class ParsedWorkflow:
     references: tuple[WorkflowReference, ...]
     diagnostics: tuple[WorkflowDiagnostic, ...]
     node_count: int
+    images: tuple[WorkflowImageReference, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +130,7 @@ class WorkflowReport:
 
     @property
     def references_checked(self) -> int:
-        """Return the number of selected ``uses`` references."""
+        """Return the number of selected executable dependency references."""
         return sum(result.references_checked for result in self.results)
 
     @property
