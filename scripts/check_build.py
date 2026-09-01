@@ -2,14 +2,242 @@
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
+import threading
 import zipfile
+from email.parser import BytesParser
 from pathlib import Path
+from typing import BinaryIO
 
 ROOT = Path(__file__).resolve().parents[1]
+MAX_SMOKE_OUTPUT_BYTES = 65_536
+SMOKE_MESSAGE = "feat(build): execute the built wheel"
+EXPECTED_REQUIRES_DIST = ["typer<1,>=0.27.2"]
+
+
+def validate_wheel_metadata(raw: bytes) -> None:
+    """Require the wheel to advertise its complete supported runtime contract."""
+    metadata = BytesParser().parsebytes(raw)
+    if metadata.get_all("Requires-Dist", []) != EXPECTED_REQUIRES_DIST:
+        raise SystemExit("wheel has the wrong runtime dependency metadata")
+    if metadata.get("Requires-Python") != ">=3.12":
+        raise SystemExit("wheel has the wrong Python requirement metadata")
+
+
+def run_bounded(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+) -> subprocess.CompletedProcess[bytes]:
+    """Run one smoke command with hard per-stream byte and time limits."""
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert process.stdout is not None
+    assert process.stderr is not None
+    stdout = bytearray()
+    stderr = bytearray()
+    overflow = threading.Event()
+
+    def drain(stream: BinaryIO, target: bytearray) -> None:
+        while chunk := stream.read(8192):
+            remaining = MAX_SMOKE_OUTPUT_BYTES - len(target)
+            if remaining > 0:
+                target.extend(chunk[:remaining])
+            if len(chunk) > remaining:
+                overflow.set()
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+                return
+
+    threads = [
+        threading.Thread(target=drain, args=(process.stdout, stdout), daemon=True),
+        threading.Thread(target=drain, args=(process.stderr, stderr), daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+    timed_out = False
+    try:
+        returncode = process.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        process.kill()
+        returncode = process.wait()
+    finally:
+        for thread in threads:
+            thread.join()
+    if timed_out:
+        raise SystemExit("installed wheel CLI exceeded the smoke-test timeout")
+    if overflow.is_set():
+        raise SystemExit("installed wheel CLI output exceeds the smoke-test limit")
+    return subprocess.CompletedProcess(command, returncode, bytes(stdout), bytes(stderr))
+
+
+def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
+    """Install the built wheel over its hash-locked runtime and execute its CLI."""
+    runtime_requirements = output / "runtime-requirements.txt"
+    subprocess.run(
+        [
+            uv,
+            "export",
+            "--quiet",
+            "--project",
+            str(ROOT),
+            "--locked",
+            "--no-sources",
+            "--no-default-groups",
+            "--no-emit-project",
+            "--no-annotate",
+            "--no-header",
+            "--python",
+            sys.executable,
+            "--no-python-downloads",
+            "--output-file",
+            str(runtime_requirements),
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+
+    environment = output / "wheel-environment"
+    subprocess.run(
+        [
+            uv,
+            "venv",
+            "--no-project",
+            "--no-config",
+            "--no-python-downloads",
+            "--python",
+            sys.executable,
+            str(environment),
+        ],
+        cwd=output,
+        check=True,
+    )
+    subprocess.run(
+        [
+            uv,
+            "pip",
+            "install",
+            "--python",
+            str(environment),
+            "--no-config",
+            "--no-python-downloads",
+            "--exact",
+            "--require-hashes",
+            "--no-build",
+            "--requirements",
+            str(runtime_requirements),
+        ],
+        cwd=output,
+        check=True,
+    )
+    subprocess.run(
+        [
+            uv,
+            "pip",
+            "install",
+            "--python",
+            str(environment),
+            "--no-config",
+            "--no-python-downloads",
+            "--no-deps",
+            "--no-build",
+            str(wheel.resolve()),
+        ],
+        cwd=output,
+        check=True,
+    )
+    subprocess.run(
+        [
+            uv,
+            "pip",
+            "check",
+            "--python",
+            str(environment),
+            "--no-config",
+            "--no-python-downloads",
+        ],
+        cwd=output,
+        check=True,
+    )
+
+    consumer = output / "consumer"
+    consumer.mkdir()
+    config = consumer / ".yaga.toml"
+    config.write_text(
+        'config-version = 1\n[commit]\nallowed-types = ["feat"]\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
+    if not executable.is_file():
+        raise SystemExit("installed wheel does not expose the yaga executable")
+    child_environment = os.environ.copy()
+    for variable in (
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
+        "YAGA_ACTION_RUNTIME",
+        "YAGA_COMMIT_ACTION_RUNTIME",
+    ):
+        child_environment.pop(variable, None)
+    child_environment["PYTHONNOUSERSITE"] = "1"
+    child_environment["PYTHONSAFEPATH"] = "1"
+    completed = run_bounded(
+        [
+            str(executable),
+            "commit",
+            "check",
+            "--message",
+            SMOKE_MESSAGE,
+            "--repo",
+            str(consumer),
+            "--config",
+            str(config),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    if completed.returncode != 0:
+        raise SystemExit(f"installed wheel CLI exited with status {completed.returncode}")
+    if completed.stderr:
+        raise SystemExit("installed wheel CLI wrote to standard error")
+    try:
+        document = json.loads(completed.stdout.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise SystemExit("installed wheel CLI did not emit UTF-8 JSON") from error
+    commits = document.get("commits") if isinstance(document, dict) else None
+    if not (
+        isinstance(document, dict)
+        and document.get("schema_version") == 1
+        and document.get("valid") is True
+        and document.get("checked") == 1
+        and document.get("passed") == 1
+        and document.get("failed") == 0
+        and document.get("config_path") == str(config.resolve())
+        and isinstance(commits, list)
+        and len(commits) == 1
+        and isinstance(commits[0], dict)
+        and commits[0].get("header") == SMOKE_MESSAGE
+        and commits[0].get("status") == "passed"
+    ):
+        raise SystemExit("installed wheel CLI emitted the wrong report contract")
 
 
 def main() -> int:
@@ -63,6 +291,10 @@ def main() -> int:
             entry_point_text = wheel.read(entry_points).decode("utf-8")
             if "yaga = yaga.cli:main" not in entry_point_text:
                 raise SystemExit("wheel does not expose the yaga console script")
+            metadata_paths = [name for name in names if name.endswith(".dist-info/METADATA")]
+            if len(metadata_paths) != 1:
+                raise SystemExit("wheel must contain exactly one metadata document")
+            validate_wheel_metadata(wheel.read(metadata_paths[0]))
         with tarfile.open(source_distributions[0], mode="r:gz") as source_distribution:
             names = source_distribution.getnames()
             required_suffixes = {
@@ -78,6 +310,7 @@ def main() -> int:
             for suffix, label in required_suffixes.items():
                 if not any(name.endswith(suffix) for name in names):
                     raise SystemExit(f"source distribution does not contain {label}")
+        exercise_installed_wheel(uv, output, wheels[0])
     return 0
 
 

@@ -21,6 +21,11 @@ must not import the installed CLI, command, commit-policy, or presentation modul
 read-only commit Action may import dependency-light commit modules, but never Typer, command
 modules, Codex policy, GitHub REST transport, site packages, or token handling.
 
+The package build gate must execute the fresh wheel outside the checkout. Export the publishable
+runtime closure from `uv.lock`, require its hashes without building dependencies, install the wheel
+with dependency resolution disabled, run `uv pip check`, and execute the installed `yaga` entrypoint
+with project and Python environment leakage removed.
+
 ## CLI and commit policy contract
 
 The public installed command groups are `commit`, `config`, `github`, and `gate`. Keep Typer
