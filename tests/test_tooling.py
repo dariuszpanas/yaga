@@ -38,6 +38,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert project["tool"]["uv"]["required-version"] == "==0.9.18"
     commit_policy = project["tool"]["yaga"]["commit"]
     assert commit_policy["breaking-markers"] == "paired"
+    assert commit_policy["scope-policy-by-type"] == {
+        "feat": "required",
+        "fix": "required",
+    }
     assert commit_policy["forbidden-footer-tokens"] == ["WIP"]
     assert "required-footer-tokens" not in commit_policy
 

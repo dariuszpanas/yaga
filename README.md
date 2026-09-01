@@ -71,6 +71,7 @@ allowed-types = [
 ]
 type-case = "lower"              # any, lower, or upper
 scope-policy = "optional"        # optional, required, or forbidden
+scope-policy-by-type = { feat = "required", fix = "required", revert = "forbidden" }
 allowed-scopes = ["cli", "config", "git"]
 scope-case = "lower"
 header-max-length = 100
@@ -93,6 +94,20 @@ A standalone `.yaga.toml` uses `config-version = 1` and `[commit]` instead of th
 `[tool.yaga...]` tables. Omit `allowed-types` or `allowed-scopes` to allow any value. An explicit
 empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must not be empty.
 `yaga config show` prints every effective value and the source file, with `--format json` for tools.
+
+`scope-policy-by-type` defaults to an empty mapping. Each entry replaces the global
+`scope-policy` only for that Conventional Commit type, so a project can require scopes for
+`feat` and `fix`, keep them optional elsewhere, and forbid them for `revert`. Type matching is
+case-insensitive and the same effective policy is used for complete commits and pull-request
+titles. `scope-case` and `allowed-scopes` still validate every scope that is present.
+
+The mapping accepts at most 128 safe type tokens and the same closed `optional`, `required`, and
+`forbidden` values as the global policy. Configuration rejects case-insensitive duplicate keys and,
+when `allowed-types` is configured, override keys outside that list. An empty `allowed-scopes` list
+is invalid when any reachable type requires a scope; a non-empty list is invalid when every
+reachable type forbids scopes. `header-max-length` validation uses a conservative structural lower
+bound so shorter Unicode case-fold equivalents are never rejected during configuration loading;
+the commit check remains authoritative for every actual header.
 
 `breaking-markers` defaults to `"either"`. A header `!`, a recognized final
 `BREAKING CHANGE:` or `BREAKING-CHANGE:` footer, or both mark a breaking change in that mode. The
@@ -144,8 +159,8 @@ checks at most 64 commits per range. Initialization creates only `.yaga.toml`: i
 directory. Use `--format json` when another tool needs the created path and effective policy.
 
 Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`,
-`header.length`, `breaking.marker-pair`, `body.word-count`, `footer.required`, and
-`footer.forbidden`. Text and versioned JSON reports use these exit codes:
+`scope.forbidden`, `header.length`, `breaking.marker-pair`, `body.word-count`, `footer.required`,
+and `footer.forbidden`. Text and versioned JSON reports use these exit codes:
 
 | Exit | Meaning |
 | --- | --- |
@@ -161,7 +176,7 @@ audited immutable commit that contains `.pre-commit-hooks.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/dariuszpanas/yaga
-    rev: e3870e19a9c2697d961309552b87e86c72f93c25
+    rev: 407c9ba487e8b8aa15476f6884f9b8df43100c8e
     hooks:
       - id: yaga-commit-check
 ```
@@ -230,7 +245,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: dariuszpanas/yaga/actions/commit-check@e3870e19a9c2697d961309552b87e86c72f93c25
+      - uses: dariuszpanas/yaga/actions/commit-check@407c9ba487e8b8aa15476f6884f9b8df43100c8e
 ```
 
 The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,

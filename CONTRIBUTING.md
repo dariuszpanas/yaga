@@ -45,6 +45,15 @@ Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or
 `.yaga.toml` root plus `[commit]`. Load exactly one nearest or explicit file, reject unknown keys and
 wrong types, and do not silently merge policies. Stable diagnostic identifiers and JSON schema
 fields are public pre-release interfaces; change them deliberately and test both text and JSON.
+`scope-policy-by-type` is an empty-default schema-v1 mapping of safe type tokens to the closed
+presence-policy values. Match override keys case-insensitively and let an override replace the
+global `scope-policy` for both complete commits and header-only pull-request title checks; keep
+`scope-case` and `allowed-scopes` independent when a scope is present. Bound the mapping at 128
+entries, reject normalized duplicates and keys outside a configured `allowed-types`, and validate
+allowed-scope reachability. Header-limit validation is deliberately a conservative structural
+lower bound because Unicode case-fold equivalents may be shorter than configured spellings;
+actual headers remain subject to every normal check. Preserve the existing `scope.required` and
+`scope.forbidden` diagnostics.
 `breaking-markers` is a schema-v1 enum with `either` as its default. `either` accepts a header `!`,
 a recognized final `BREAKING CHANGE:` or `BREAKING-CHANGE:` footer, or both; `paired` requires both
 markers or neither and reports `breaking.marker-pair` for exactly one. Apply marker pairing only to

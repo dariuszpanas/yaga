@@ -108,6 +108,7 @@ allowed-types = [
 ]
 type-case = "lower"
 scope-policy = "optional"
+scope-policy-by-type = { feat = "required", fix = "required" }
 scope-case = "lower"
 header-max-length = 100
 description-min-length = 3

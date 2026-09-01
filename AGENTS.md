@@ -21,6 +21,12 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
 - Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
   0/1/2, and the versioned JSON document are public pre-release contracts.
+- Keep `scope-policy-by-type` as an empty-default schema-v1 mapping with at most 128 safe,
+  case-insensitively unique type keys and closed presence-policy values. Overrides replace the
+  global scope policy for full commits and PR titles; `scope-case` and `allowed-scopes` remain
+  independent. Reject keys outside configured allowed types and impossible allowed-scope
+  reachability. Treat header-minimum validation as a conservative structural bound rather than an
+  exact satisfiability proof, and preserve `scope.required` and `scope.forbidden`.
 - Keep `breaking-markers` in configuration schema v1 with closed values `either` and `paired` and
   the default `either`. `paired` requires both the header `!` and a recognized final breaking
   footer, or neither; exactly one reports `breaking.marker-pair`. Apply it to complete commits but
