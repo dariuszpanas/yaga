@@ -202,6 +202,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     branch_policy = consumer / "branch-policy.toml"
     change_policy = consumer / "change-policy.toml"
     repository_plan = consumer / "repository-plan.toml"
+    repository_plan_v2 = consumer / "repository-plan-v2.toml"
     mode_policy = consumer / "mode-policy.toml"
     path_policy = consumer / "path-policy.toml"
     size_policy = consumer / "size-policy.toml"
@@ -442,6 +443,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         ".yaga.toml",
         "mode-policy.toml",
         "path-policy.toml",
+        "repository-plan-v2.toml",
         "size-policy.toml",
         "tree-policy.toml",
         "src/package.py",
@@ -451,9 +453,20 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     tree_policy.write_text(
         "tree-policy-version = 1\n"
         'required-paths = [".yaga.toml", "mode-policy.toml", "path-policy.toml", '
+        '"repository-plan-v2.toml", '
         '"size-policy.toml", "tree-policy.toml", '
         '"src/package.py", "tests/test_package.py"]\n'
         'forbidden-patterns = ["**/.env", "**/*.pyc", "dist/**"]\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    repository_plan_v2.write_text(
+        "plan-version = 2\n"
+        'checks = ["commit", "mode", "path", "size", "tree"]\n'
+        'mode-policy = "mode-policy.toml"\n'
+        'path-policy = "path-policy.toml"\n'
+        'size-policy = "size-policy.toml"\n'
+        'tree-policy = "tree-policy.toml"\n',
         encoding="utf-8",
         newline="\n",
     )
@@ -518,6 +531,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
             "change-policy.toml",
             "mode-policy.toml",
             "repository-plan.toml",
+            "repository-plan-v2.toml",
             "path-policy.toml",
             "size-policy.toml",
             "src/package.py",
@@ -759,6 +773,60 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and size_document.get("diagnostics_omitted") == 0
     ):
         raise SystemExit("installed wheel CLI size check emitted the wrong report contract")
+    repository_v2_completed = run_bounded(
+        [
+            str(executable),
+            "repo",
+            "check",
+            "--plan",
+            str(repository_plan_v2),
+            "--repo",
+            str(consumer),
+            "--commit",
+            head_sha,
+            "--revision",
+            head_sha,
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    repository_v2_document = successful_json(
+        repository_v2_completed,
+        operation="repository check plan v2",
+    )
+    repository_v2_checks = (
+        repository_v2_document.get("checks") if isinstance(repository_v2_document, dict) else None
+    )
+    if not (
+        repository_v2_document.get("schema_version") == 1
+        and repository_v2_document.get("kind") == "repository_check"
+        and repository_v2_document.get("status") == "passed"
+        and repository_v2_document.get("valid") is True
+        and repository_v2_document.get("selected") == 5
+        and repository_v2_document.get("passed") == 5
+        and repository_v2_document.get("failed") == 0
+        and repository_v2_document.get("errored") == 0
+        and isinstance(repository_v2_checks, list)
+        and [item.get("provider") for item in repository_v2_checks if isinstance(item, dict)]
+        == ["commit", "mode", "path", "size", "tree"]
+    ):
+        raise SystemExit("installed wheel CLI repository plan v2 emitted the wrong envelope")
+    repository_v2_reports = {
+        item["provider"]: item.get("report")
+        for item in repository_v2_checks
+        if isinstance(item, dict) and isinstance(item.get("provider"), str)
+    }
+    if not (
+        isinstance(repository_v2_reports.get("commit"), dict)
+        and repository_v2_reports["commit"].get("valid") is True
+        and repository_v2_reports.get("mode") == mode_document
+        and repository_v2_reports.get("path") == path_document
+        and repository_v2_reports.get("size") == size_document
+        and repository_v2_reports.get("tree") == tree_document
+    ):
+        raise SystemExit("installed wheel CLI repository plan v2 changed a standalone child report")
     change_completed = run_bounded(
         [
             str(executable),
@@ -888,6 +956,7 @@ def main() -> int:
                 "yaga/git/__init__.py",
                 "yaga/git/process.py",
                 "yaga/git/runtime.py",
+                "yaga/git/tree.py",
                 "yaga/commands/branch.py",
                 "yaga/commands/change.py",
                 "yaga/commands/commit.py",

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from yaga.git import CommittedTreeIdentity
 from yaga.sizes.checker import check_sizes
 from yaga.sizes.git import read_blob_sizes
 from yaga.sizes.models import SizeReport
@@ -30,9 +31,14 @@ def check_size_policy(
     *,
     policy_path: Path,
     revision: str,
+    identity: CommittedTreeIdentity | None = None,
 ) -> CheckedSize:
     """Load policy, read one exact committed tree, and check its blob sizes."""
     loaded = load_size_policy(policy_path)
-    selection = read_blob_sizes(repository, revision)
+    selection = (
+        read_blob_sizes(repository, revision)
+        if identity is None
+        else read_blob_sizes(repository, revision, identity=identity)
+    )
     report = check_sizes(loaded.policy, selection)
     return CheckedSize(report=report, policy_path=loaded.path)

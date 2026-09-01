@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Annotated
 
 import typer
@@ -14,6 +14,21 @@ from yaga.repository.plan import load_repository_check_plan
 from yaga.repository.reporting import render_repository_error, render_repository_report
 
 app = typer.Typer(help="Run explicit repository check providers.", no_args_is_help=True)
+
+
+def _resolve_plan_policy_path(repository: Path, policy_path: PurePosixPath) -> Path:
+    """Resolve one plan-owned policy path without permitting repository escape."""
+    try:
+        resolved_repository = repository.expanduser().resolve()
+        if not resolved_repository.is_dir():
+            raise OSError
+        resolved_policy_path = resolved_repository.joinpath(*policy_path.parts).resolve()
+        resolved_policy_path.relative_to(resolved_repository)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise InputError(
+            "repository plan policy paths must resolve inside the repository"
+        ) from error
+    return resolved_policy_path
 
 
 @app.command("check")
@@ -30,8 +45,8 @@ def check_repo(
         typer.Option(
             "--check",
             help=(
-                "Provider to run: commit, workflow, workflow-security, or workflow-lint. "
-                "Repeat explicitly."
+                "Provider to run: commit, workflow, workflow-security, workflow-lint, mode, "
+                "path, size, or tree. Repeat explicitly."
             ),
         ),
     ] = None,
@@ -50,6 +65,13 @@ def check_repo(
     revision_range: Annotated[
         str | None,
         typer.Option("--range", "-r", help="Commit provider Git range, oldest-first."),
+    ] = None,
+    revision: Annotated[
+        str | None,
+        typer.Option(
+            "--revision",
+            help="Exact Git revision shared by selected committed-tree providers.",
+        ),
     ] = None,
     workflow_paths: Annotated[
         list[Path] | None,
@@ -75,6 +97,22 @@ def check_repo(
             help="Exact custom workflow-security rule. Repeat explicitly.",
         ),
     ] = None,
+    mode_policy_path: Annotated[
+        Path | None,
+        typer.Option("--mode-policy", help="Mode provider policy file."),
+    ] = None,
+    path_policy_path: Annotated[
+        Path | None,
+        typer.Option("--path-policy", help="Path provider policy file."),
+    ] = None,
+    size_policy_path: Annotated[
+        Path | None,
+        typer.Option("--size-policy", help="Size provider policy file."),
+    ] = None,
+    tree_policy_path: Annotated[
+        Path | None,
+        typer.Option("--tree-policy", help="Tree provider policy file."),
+    ] = None,
     output_format: Annotated[
         RepositoryOutputFormat,
         typer.Option("--format", case_sensitive=False, help="Aggregate report format."),
@@ -86,22 +124,51 @@ def check_repo(
         selected_workflow_paths = workflow_paths or ()
         selected_security_profile = workflow_security_profile
         selected_security_rules = workflow_security_rules or ()
+        selected_mode_policy_path = mode_policy_path
+        selected_path_policy_path = path_policy_path
+        selected_size_policy_path = size_policy_path
+        selected_tree_policy_path = tree_policy_path
         if plan_path is not None:
             if (
                 checks
                 or workflow_paths
                 or workflow_security_profile is not None
                 or workflow_security_rules
+                or mode_policy_path is not None
+                or path_policy_path is not None
+                or size_policy_path is not None
+                or tree_policy_path is not None
             ):
                 raise InputError(
                     "--plan cannot be combined with --check, --workflow-path, "
-                    "--workflow-security-profile, or --workflow-security-rule"
+                    "--workflow-security-profile, --workflow-security-rule, --mode-policy, "
+                    "--path-policy, --size-policy, or --tree-policy"
                 )
             plan = load_repository_check_plan(plan_path)
             selected_checks = plan.checks
             selected_workflow_paths = tuple(Path(path) for path in plan.workflow_paths)
             selected_security_profile = plan.workflow_security_profile
             selected_security_rules = plan.workflow_security_rules
+            selected_mode_policy_path = (
+                _resolve_plan_policy_path(repository, plan.mode_policy_path)
+                if plan.mode_policy_path is not None
+                else None
+            )
+            selected_path_policy_path = (
+                _resolve_plan_policy_path(repository, plan.path_policy_path)
+                if plan.path_policy_path is not None
+                else None
+            )
+            selected_size_policy_path = (
+                _resolve_plan_policy_path(repository, plan.size_policy_path)
+                if plan.size_policy_path is not None
+                else None
+            )
+            selected_tree_policy_path = (
+                _resolve_plan_policy_path(repository, plan.tree_policy_path)
+                if plan.tree_policy_path is not None
+                else None
+            )
 
         report = check_repository(
             repository,
@@ -112,6 +179,11 @@ def check_repo(
             workflow_paths=selected_workflow_paths,
             workflow_security_profile=selected_security_profile,
             workflow_security_rules=selected_security_rules,
+            revision=revision,
+            mode_policy_path=selected_mode_policy_path,
+            path_policy_path=selected_path_policy_path,
+            size_policy_path=selected_size_policy_path,
+            tree_policy_path=selected_tree_policy_path,
         )
     except YagaError as error:
         typer.echo(render_repository_error(error, output_format), err=True)

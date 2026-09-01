@@ -10,8 +10,18 @@ from typing import cast
 import pytest
 
 from yaga.errors import ConfigurationError
-from yaga.repository.models import RepositoryCheckPlan, RepositoryProvider
-from yaga.repository.plan import MAX_REPOSITORY_PLAN_BYTES, load_repository_check_plan
+from yaga.repository.models import (
+    REPOSITORY_PLAN_V1_PROVIDER_ORDER,
+    REPOSITORY_PROVIDER_ORDER,
+    RepositoryCheckPlan,
+    RepositoryProvider,
+)
+from yaga.repository.plan import (
+    MAX_REPOSITORY_PLAN_BYTES,
+    MAX_REPOSITORY_POLICY_PATH_BYTES,
+    MAX_REPOSITORY_POLICY_PATH_COMPONENTS,
+    load_repository_check_plan,
+)
 from yaga.workflows.inputs import (
     MAX_WORKFLOW_FILES,
     MAX_WORKFLOW_PATH_BYTES,
@@ -30,8 +40,8 @@ def write_plan(path: Path, body: str) -> Path:
     return plan
 
 
-def plan_document(*lines: str) -> str:
-    return "\n".join(("plan-version = 1", *lines, ""))
+def plan_document(*lines: str, version: int = 1) -> str:
+    return "\n".join((f"plan-version = {version}", *lines, ""))
 
 
 def test_minimal_plan_requires_only_a_version_and_explicit_checks(tmp_path: Path) -> None:
@@ -63,7 +73,7 @@ def test_plan_normalizes_provider_rule_order_and_portable_paths(tmp_path: Path) 
 
     plan = load_repository_check_plan(path)
 
-    assert plan.checks == tuple(RepositoryProvider)
+    assert plan.checks == REPOSITORY_PLAN_V1_PROVIDER_ORDER
     assert plan.workflow_paths == (
         PurePosixPath(".github/workflows"),
         PurePosixPath(".github/workflows/ci.yml"),
@@ -88,6 +98,266 @@ def test_named_security_profile_is_preserved_without_expanding_rules(tmp_path: P
 
     assert plan.workflow_security_profile is WorkflowSecurityProfile.RECOMMENDED_V3
     assert plan.workflow_security_rules == ()
+
+
+def test_v2_normalizes_all_providers_and_preserves_explicit_policy_paths(
+    tmp_path: Path,
+) -> None:
+    path = write_plan(
+        tmp_path,
+        plan_document(
+            'checks = ["tree", "workflow-lint", "path", "commit", "size", "mode", '
+            '"workflow-security", "workflow"]',
+            'workflow-paths = [".github/workflows/ci.yml"]',
+            'workflow-security-profile = "recommended-v3"',
+            'mode-policy = ".yaga/mode.toml"',
+            'path-policy = ".yaga/path.toml"',
+            'size-policy = ".yaga/size.toml"',
+            'tree-policy = ".yaga/tree.toml"',
+            version=2,
+        ),
+    )
+
+    plan = load_repository_check_plan(path)
+
+    assert plan.plan_version == 2
+    assert plan.checks == REPOSITORY_PROVIDER_ORDER
+    assert plan.mode_policy_path == PurePosixPath(".yaga/mode.toml")
+    assert plan.path_policy_path == PurePosixPath(".yaga/path.toml")
+    assert plan.size_policy_path == PurePosixPath(".yaga/size.toml")
+    assert plan.tree_policy_path == PurePosixPath(".yaga/tree.toml")
+
+
+def test_v2_can_select_only_original_providers_without_policy_paths(tmp_path: Path) -> None:
+    path = write_plan(
+        tmp_path,
+        plan_document('checks = ["commit", "workflow"]', version=2),
+    )
+
+    plan = load_repository_check_plan(path)
+
+    assert plan.checks == (RepositoryProvider.COMMIT, RepositoryProvider.WORKFLOW)
+    assert plan.mode_policy_path is None
+    assert plan.path_policy_path is None
+    assert plan.size_policy_path is None
+    assert plan.tree_policy_path is None
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["include", "environment", "command", "mode_policy", "policy-directory"],
+)
+def test_v2_schema_remains_closed_to_exact_nonexpanding_keys(tmp_path: Path, key: str) -> None:
+    path = write_plan(
+        tmp_path,
+        plan_document('checks = ["commit"]', f'{key} = "unsupported"', version=2),
+    )
+
+    with pytest.raises(ConfigurationError, match=rf"unknown repository check plan key.*{key}"):
+        load_repository_check_plan(path)
+
+
+def test_v2_provider_selection_keeps_its_eight_entry_hard_limit(tmp_path: Path) -> None:
+    path = write_plan(
+        tmp_path,
+        plan_document(
+            'checks = ["commit", "workflow", "workflow-security", "workflow-lint", '
+            '"mode", "path", "size", "tree", "commit"]',
+            version=2,
+        ),
+    )
+
+    with pytest.raises(ConfigurationError, match="checks exceeds 8 entries"):
+        load_repository_check_plan(path)
+
+
+@pytest.mark.parametrize("provider", ["mode", "path", "size", "tree"])
+def test_v1_rejects_v2_providers(tmp_path: Path, provider: str) -> None:
+    path = write_plan(tmp_path, plan_document(f'checks = ["{provider}"]'))
+
+    with pytest.raises(ConfigurationError, match="unknown repository check provider"):
+        load_repository_check_plan(path)
+
+
+@pytest.mark.parametrize("key", ["mode-policy", "path-policy", "size-policy", "tree-policy"])
+def test_v1_rejects_v2_policy_keys(tmp_path: Path, key: str) -> None:
+    path = write_plan(
+        tmp_path,
+        plan_document('checks = ["commit"]', f'{key} = ".yaga/policy.toml"'),
+    )
+
+    with pytest.raises(ConfigurationError, match=rf"unknown repository check plan key.*{key}"):
+        load_repository_check_plan(path)
+
+
+@pytest.mark.parametrize(
+    ("provider", "key"),
+    [
+        ("mode", "mode-policy"),
+        ("path", "path-policy"),
+        ("size", "size-policy"),
+        ("tree", "tree-policy"),
+    ],
+)
+def test_v2_policy_paths_are_required_exactly_for_matching_providers(
+    tmp_path: Path,
+    provider: str,
+    key: str,
+) -> None:
+    missing = write_plan(
+        tmp_path,
+        plan_document(f'checks = ["{provider}"]', version=2),
+    )
+    with pytest.raises(ConfigurationError, match=rf"{key} is required"):
+        load_repository_check_plan(missing)
+
+    unused = write_plan(
+        tmp_path,
+        plan_document(
+            'checks = ["commit"]',
+            f'{key} = ".yaga/{provider}.toml"',
+            version=2,
+        ),
+    )
+    with pytest.raises(ConfigurationError, match=rf"{key} requires the {provider} check"):
+        load_repository_check_plan(unused)
+
+
+@pytest.mark.parametrize("value", [True, 1, [".yaga/mode.toml"]])
+def test_v2_policy_paths_must_be_single_strings(tmp_path: Path, value: object) -> None:
+    encoded = json.dumps(value)
+    path = write_plan(
+        tmp_path,
+        plan_document(
+            'checks = ["mode"]',
+            f"mode-policy = {encoded}",
+            version=2,
+        ),
+    )
+
+    with pytest.raises(ConfigurationError, match="mode-policy must be a string"):
+        load_repository_check_plan(path)
+
+
+@pytest.mark.parametrize(
+    "policy_path",
+    [
+        "",
+        "/.yaga/mode.toml",
+        "C:/.yaga/mode.toml",
+        ".yaga\\mode.toml",
+        ".yaga//mode.toml",
+        "./.yaga/mode.toml",
+        ".yaga/../mode.toml",
+        "~/.yaga/mode.toml",
+        ".yaga/~mode.toml",
+        ".yaga/NUL.toml",
+        ".yaga/COM¹.toml",
+        ".yaga/COM².toml",
+        ".yaga/LPT³.toml",
+        ".yaga/bad:name.toml",
+        ".yaga/trailing.",
+        ".yaga/trailing ",
+        ".yaga/ leading.toml",
+        ".yaga/zero\u200bwidth.toml",
+        "a/" * MAX_REPOSITORY_POLICY_PATH_COMPONENTS + "mode.toml",
+        "a" * (MAX_REPOSITORY_POLICY_PATH_BYTES + 1),
+    ],
+)
+def test_v2_policy_paths_are_strict_portable_repository_relative_paths(
+    tmp_path: Path,
+    policy_path: str,
+) -> None:
+    path = write_plan(
+        tmp_path,
+        plan_document(
+            'checks = ["mode"]',
+            f"mode-policy = {json.dumps(policy_path)}",
+            version=2,
+        ),
+    )
+
+    with pytest.raises(ConfigurationError, match="mode-policy contains"):
+        load_repository_check_plan(path)
+
+
+def test_v2_policy_paths_accept_exact_bounds_and_literal_dollar_percent(
+    tmp_path: Path,
+) -> None:
+    exact_bytes = "a" * (MAX_REPOSITORY_POLICY_PATH_BYTES - len(".toml")) + ".toml"
+    exact_components = "/".join(["a"] * (MAX_REPOSITORY_POLICY_PATH_COMPONENTS - 1) + ["mode.toml"])
+
+    byte_plan = load_repository_check_plan(
+        write_plan(
+            tmp_path,
+            plan_document(
+                'checks = ["mode"]',
+                f"mode-policy = {json.dumps(exact_bytes)}",
+                version=2,
+            ),
+        )
+    )
+    assert byte_plan.mode_policy_path == PurePosixPath(exact_bytes)
+
+    component_plan = load_repository_check_plan(
+        write_plan(
+            tmp_path,
+            plan_document(
+                'checks = ["mode"]',
+                f"mode-policy = {json.dumps(exact_components)}",
+                version=2,
+            ),
+        )
+    )
+    assert component_plan.mode_policy_path == PurePosixPath(exact_components)
+
+    literal_plan = load_repository_check_plan(
+        write_plan(
+            tmp_path,
+            plan_document(
+                'checks = ["mode"]',
+                'mode-policy = "$POLICIES/%literal%/mode.toml"',
+                version=2,
+            ),
+        )
+    )
+    assert literal_plan.mode_policy_path == PurePosixPath("$POLICIES/%literal%/mode.toml")
+
+
+def test_v2_policy_paths_are_case_insensitively_unique_across_providers(
+    tmp_path: Path,
+) -> None:
+    path = write_plan(
+        tmp_path,
+        plan_document(
+            'checks = ["mode", "path"]',
+            'mode-policy = ".yaga/POLICY.toml"',
+            'path-policy = ".yaga/policy.toml"',
+            version=2,
+        ),
+    )
+
+    with pytest.raises(ConfigurationError, match="policy paths must not be repeated"):
+        load_repository_check_plan(path)
+
+
+def test_v2_policy_paths_remain_relative_to_runtime_repository_not_plan_directory(
+    tmp_path: Path,
+) -> None:
+    plan_directory = tmp_path / "configuration" / "nested"
+    plan_directory.mkdir(parents=True)
+    path = write_plan(
+        plan_directory,
+        plan_document(
+            'checks = ["tree"]',
+            'tree-policy = ".yaga/tree.toml"',
+            version=2,
+        ),
+    )
+
+    plan = load_repository_check_plan(path)
+
+    assert plan.tree_policy_path == PurePosixPath(".yaga/tree.toml")
 
 
 @pytest.mark.parametrize(
@@ -138,9 +408,9 @@ def test_explicit_loader_selection_matrix(
     [
         ('checks = ["commit"]\n', "missing plan-version"),
         ("plan-version = 1\n", "missing checks"),
-        ('plan-version = 2\nchecks = ["commit"]\n', "integer 1"),
-        ('plan-version = true\nchecks = ["commit"]\n', "integer 1"),
-        ('plan-version = "1"\nchecks = ["commit"]\n', "integer 1"),
+        ('plan-version = 3\nchecks = ["commit"]\n', "integer 1 or 2"),
+        ('plan-version = true\nchecks = ["commit"]\n', "integer 1 or 2"),
+        ('plan-version = "1"\nchecks = ["commit"]\n', "integer 1 or 2"),
         (plan_document("checks = []"), "must not be empty"),
         (plan_document('checks = "commit"'), "array of strings"),
         (plan_document('checks = ["commit", 1]'), "array of strings"),
@@ -404,7 +674,8 @@ def test_security_selection_requires_its_provider(
 @pytest.mark.parametrize(
     "factory",
     [
-        lambda: RepositoryCheckPlan(2, (RepositoryProvider.COMMIT,)),
+        lambda: RepositoryCheckPlan(3, (RepositoryProvider.COMMIT,)),
+        lambda: RepositoryCheckPlan(1, (RepositoryProvider.MODE,)),
         lambda: RepositoryCheckPlan(1, ()),
         lambda: RepositoryCheckPlan(
             1,

@@ -181,7 +181,10 @@ def test_mode_entry_rejects_structurally_invalid_paths(path: str) -> None:
         _entry(path)
 
 
-@pytest.mark.parametrize("revision", ["", "--all", "^HEAD", "A..B", "head ref", "line\nbreak"])
+@pytest.mark.parametrize(
+    "revision",
+    ["", "--all", ":vendor", "HEAD:vendor", "^HEAD", "A..B", "head ref", "line\nbreak"],
+)
 def test_mode_selection_rejects_unsafe_revision(revision: str, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="mode revision"):
         ModeSelection(tmp_path.resolve(), revision, OID, TREE_OID, ())

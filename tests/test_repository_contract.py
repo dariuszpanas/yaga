@@ -199,30 +199,33 @@ def test_branch_policy_contract_is_documented_and_dogfooded() -> None:
     assert "not a claim about every Git host" in readme
 
 
-def test_ci_tree_policy_uses_the_exact_unprivileged_source_commit() -> None:
+def test_ci_repository_plan_uses_one_exact_unprivileged_committed_tree_revision() -> None:
     workflow = read(".github/workflows/ci.yml")
 
     assert section_keys(workflow, "permissions") == {"contents"}
     assert "pull_request_target:" not in workflow
     assert "workflow_run:" not in workflow
-    assert "name: Check committed-tree policy" in workflow
+    assert "name: Run aggregate repository checks" in workflow
     assert (
-        "YAGA_TREE_REVISION: ${{ github.event_name == 'pull_request' && "
+        "YAGA_REPOSITORY_REVISION: ${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}" in workflow
     )
-    assert "yaga tree check" in workflow
-    assert "--policy .yaga/tree-policy.toml" in workflow
-    assert '--revision "$YAGA_TREE_REVISION"' in workflow
+    assert "yaga repo check" in workflow
+    assert "--plan .yaga/checks/ci.toml" in workflow
+    assert '--commit "$YAGA_REPOSITORY_REVISION"' in workflow
+    assert '--revision "$YAGA_REPOSITORY_REVISION"' in workflow
     assert '--revision "${{ github.' not in workflow
+    for command in ("tree check", "path check", "mode check", "size check"):
+        assert f"yaga {command}" not in workflow
     assert "fetch-depth: 0" in workflow
     assert "persist-credentials: false" in workflow
 
 
-def test_tree_policy_contract_is_documented_and_kept_out_of_repo_plan_v1() -> None:
+def test_tree_policy_contract_is_documented_and_dogfooded_in_repo_plan_v2() -> None:
     readme = read("README.md")
     contributing = read("CONTRIBUTING.md")
     agents = read("AGENTS.md")
-    plan = read(".yaga/checks/ci.toml")
+    plan = tomllib.loads(read(".yaga/checks/ci.toml"))
 
     for document in (readme, contributing, agents):
         assert "tree check" in document
@@ -240,29 +243,12 @@ def test_tree_policy_contract_is_documented_and_kept_out_of_repo_plan_v1() -> No
     assert "may differ from the selected tree" in readme
     assert "outermost enclosing repository" in readme
     assert re.search(r"does\s+not claim policy provenance", readme)
-    assert "tree" not in tomllib.loads(plan)["checks"]
+    assert plan["plan-version"] == 2
+    assert "tree" in plan["checks"]
+    assert plan["tree-policy"] == ".yaga/tree-policy.toml"
 
 
-def test_ci_mode_policy_uses_the_exact_unprivileged_source_commit() -> None:
-    workflow = read(".github/workflows/ci.yml")
-
-    assert section_keys(workflow, "permissions") == {"contents"}
-    assert "pull_request_target:" not in workflow
-    assert "workflow_run:" not in workflow
-    assert "name: Check committed entry modes" in workflow
-    assert (
-        "YAGA_MODE_REVISION: ${{ github.event_name == 'pull_request' && "
-        "github.event.pull_request.head.sha || github.sha }}" in workflow
-    )
-    assert "yaga mode check" in workflow
-    assert "--policy .yaga/mode-policy.toml" in workflow
-    assert '--revision "$YAGA_MODE_REVISION"' in workflow
-    assert '--revision "${{ github.' not in workflow
-    assert "fetch-depth: 0" in workflow
-    assert "persist-credentials: false" in workflow
-
-
-def test_mode_policy_contract_is_documented_and_kept_out_of_repo_plan_v1() -> None:
+def test_mode_policy_contract_is_documented_and_dogfooded_in_repo_plan_v2() -> None:
     documents = [read(path) for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md")]
     plan = tomllib.loads(read(".yaga/checks/ci.toml"))
 
@@ -279,7 +265,9 @@ def test_mode_policy_contract_is_documented_and_kept_out_of_repo_plan_v1() -> No
         assert "160000" in document
         assert "Shallow" in document or "shallow" in document
 
-    assert "mode" not in plan["checks"]
+    assert plan["plan-version"] == 2
+    assert "mode" in plan["checks"]
+    assert plan["mode-policy"] == ".yaga/mode-policy.toml"
 
 
 def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:

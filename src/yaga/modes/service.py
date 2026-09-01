@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from yaga.git import CommittedTreeIdentity
 from yaga.modes.checker import check_modes
 from yaga.modes.git import read_mode_selection
 from yaga.modes.models import ModeReport
@@ -30,9 +31,14 @@ def check_mode_policy(
     *,
     policy_path: Path,
     revision: str,
+    identity: CommittedTreeIdentity | None = None,
 ) -> CheckedMode:
     """Load policy, read one exact committed tree, and check its entry modes."""
     loaded = load_mode_policy(policy_path)
-    selection = read_mode_selection(repository, revision)
+    selection = (
+        read_mode_selection(repository, revision)
+        if identity is None
+        else read_mode_selection(repository, revision, identity=identity)
+    )
     report = check_modes(loaded.policy, selection)
     return CheckedMode(report=report, policy_path=loaded.path)

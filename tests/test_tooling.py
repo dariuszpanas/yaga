@@ -48,24 +48,40 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
     assert "uv run yaga workflow lint .github/workflows examples" in makefile
-    assert "uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD" in makefile
+    assert (
+        "uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD"
+        in makefile
+    )
     assert (
         "uv run yaga change check --policy .yaga/change-policy.toml --range HEAD^..HEAD" in makefile
     )
-    assert "uv run yaga mode check --policy .yaga/mode-policy.toml --revision HEAD" in makefile
-    assert "uv run yaga path check --policy .yaga/path-policy.toml --revision HEAD" in makefile
-    assert "uv run yaga size check --policy .yaga/size-policy.toml --revision HEAD" in makefile
-    assert "uv run yaga tree check --policy .yaga/tree-policy.toml --revision HEAD" in makefile
+    assert "uv run yaga mode check" not in makefile
+    assert "uv run yaga path check" not in makefile
+    assert "uv run yaga size check" not in makefile
+    assert "uv run yaga tree check" not in makefile
     assert "uv run yaga repo check --check" not in makefile
 
     repository_plan = tomllib.loads(
         (ROOT / ".yaga" / "checks" / "ci.toml").read_text(encoding="utf-8")
     )
     assert repository_plan == {
-        "plan-version": 1,
-        "checks": ["commit", "workflow", "workflow-security", "workflow-lint"],
+        "plan-version": 2,
+        "checks": [
+            "commit",
+            "workflow",
+            "workflow-security",
+            "workflow-lint",
+            "mode",
+            "path",
+            "size",
+            "tree",
+        ],
         "workflow-paths": [".github/workflows", "examples"],
         "workflow-security-profile": "recommended-v3",
+        "mode-policy": ".yaga/mode-policy.toml",
+        "path-policy": ".yaga/path-policy.toml",
+        "size-policy": ".yaga/size-policy.toml",
+        "tree-policy": ".yaga/tree-policy.toml",
     }
     change_policy = tomllib.loads(
         (ROOT / ".yaga" / "change-policy.toml").read_text(encoding="utf-8")
@@ -150,41 +166,21 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "YAGA_BRANCH_NAME: ${{ github.head_ref }}" in ci
     assert "YAGA_BRANCH_NAME: ${{ github.ref_name }}" in ci
     assert ci.count('--name "$YAGA_BRANCH_NAME"') == 2
-    assert "Check committed-tree policy" in ci
-    assert "yaga tree check" in ci
-    assert "--policy .yaga/tree-policy.toml" in ci
-    assert "YAGA_TREE_REVISION" in ci
-    assert '--revision "$YAGA_TREE_REVISION"' in ci
-    assert "Check committed path portability" in ci
-    assert "yaga path check" in ci
-    assert "--policy .yaga/path-policy.toml" in ci
-    assert (
-        "YAGA_PATH_REVISION: ${{ github.event_name == 'pull_request' && "
-        "github.event.pull_request.head.sha || github.sha }}" in ci
-    )
-    assert '--revision "$YAGA_PATH_REVISION"' in ci
-    assert "Check committed entry modes" in ci
-    assert "yaga mode check" in ci
-    assert "--policy .yaga/mode-policy.toml" in ci
-    assert (
-        "YAGA_MODE_REVISION: ${{ github.event_name == 'pull_request' && "
-        "github.event.pull_request.head.sha || github.sha }}" in ci
-    )
-    assert '--revision "$YAGA_MODE_REVISION"' in ci
-    assert "Check committed blob sizes" in ci
-    assert "yaga size check" in ci
-    assert "--policy .yaga/size-policy.toml" in ci
-    assert (
-        "YAGA_SIZE_REVISION: ${{ github.event_name == 'pull_request' && "
-        "github.event.pull_request.head.sha || github.sha }}" in ci
-    )
-    assert '--revision "$YAGA_SIZE_REVISION"' in ci
+    for command in ("tree check", "path check", "mode check", "size check"):
+        assert f"yaga {command}" not in ci
     assert "pre-commit try-repo . yaga-commit-check" in ci
     assert 'test "$YAGA_PRE_COMMIT_STATUS" -eq 1' in ci
     assert "grep -F -- '[syntax.header]'" in ci
     assert "Run aggregate repository checks" in ci
     assert "yaga repo check" in ci
     assert "--plan .yaga/checks/ci.toml" in ci
+    assert (
+        "YAGA_REPOSITORY_REVISION: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}" in ci
+    )
+    assert '--commit "$YAGA_REPOSITORY_REVISION"' in ci
+    assert '--revision "$YAGA_REPOSITORY_REVISION"' in ci
+    assert '--revision "${{ github.' not in ci
     assert "Run changed-path policy" in ci
     assert "yaga change check" in ci
     assert "--policy .yaga/change-policy.toml" in ci
@@ -228,6 +224,9 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"workflow",\n            "security"' in build_gate
     assert '"workflow", "lint", "--help"' in build_gate
     assert '"repo",\n            "check"' in build_gate
+    assert 'repository_plan_v2 = consumer / "repository-plan-v2.toml"' in build_gate
+    assert 'operation="repository check plan v2"' in build_gate
+    assert "repository plan v2 changed a standalone child report" in build_gate
     assert '"tree",\n            "check"' in build_gate
     assert '"mode",\n            "check"' in build_gate
     assert '"size",\n            "check"' in build_gate
@@ -242,6 +241,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/git/__init__.py"' in build_gate
     assert '"yaga/git/process.py"' in build_gate
     assert '"yaga/git/runtime.py"' in build_gate
+    assert '"yaga/git/tree.py"' in build_gate
     assert '"yaga/commits/service.py"' in build_gate
     assert '"yaga/changes/__init__.py"' in build_gate
     assert '"yaga/changes/checker.py"' in build_gate

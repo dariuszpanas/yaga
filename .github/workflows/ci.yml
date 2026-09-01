@@ -59,38 +59,6 @@ jobs:
           --policy .yaga/branch-policy.toml
           --name "$YAGA_BRANCH_NAME"
           --format github
-      - name: Check committed-tree policy
-        env:
-          YAGA_TREE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: >-
-          uv run --frozen --python 3.12 yaga tree check
-          --policy .yaga/tree-policy.toml
-          --revision "$YAGA_TREE_REVISION"
-          --format github
-      - name: Check committed path portability
-        env:
-          YAGA_PATH_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: >-
-          uv run --frozen --python 3.12 yaga path check
-          --policy .yaga/path-policy.toml
-          --revision "$YAGA_PATH_REVISION"
-          --format github
-      - name: Check committed entry modes
-        env:
-          YAGA_MODE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: >-
-          uv run --frozen --python 3.12 yaga mode check
-          --policy .yaga/mode-policy.toml
-          --revision "$YAGA_MODE_REVISION"
-          --format github
-      - name: Check committed blob sizes
-        env:
-          YAGA_SIZE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: >-
-          uv run --frozen --python 3.12 yaga size check
-          --policy .yaga/size-policy.toml
-          --revision "$YAGA_SIZE_REVISION"
-          --format github
       - name: Exercise the pre-commit provider
         run: |
           printf '%s\n' 'not conventional' > "$RUNNER_TEMP/YAGA_COMMIT_EDITMSG"
@@ -105,10 +73,13 @@ jobs:
           grep -F -- 'exit code: 1' "$RUNNER_TEMP/yaga-pre-commit.log"
           grep -F -- '[syntax.header]' "$RUNNER_TEMP/yaga-pre-commit.log"
       - name: Run aggregate repository checks
+        env:
+          YAGA_REPOSITORY_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: >-
           uv run --frozen --python 3.12 yaga repo check
           --plan .yaga/checks/ci.toml
-          --commit HEAD
+          --commit "$YAGA_REPOSITORY_REVISION"
+          --revision "$YAGA_REPOSITORY_REVISION"
           --format github
       - name: Run changed-path policy
         env:

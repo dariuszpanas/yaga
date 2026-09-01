@@ -117,6 +117,8 @@ def test_path_selection_rejects_noncanonical_or_unrepresentable_paths(
     [
         "",
         "-HEAD",
+        ":vendor",
+        "HEAD:vendor",
         "^HEAD",
         "main..HEAD",
         "main...HEAD",

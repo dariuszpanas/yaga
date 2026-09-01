@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from yaga.errors import GitError, InputError, safe_error_text
+from yaga.errors import GitError, InputError
 from yaga.git import (
+    CommittedTreeIdentity,
     GitRepository,
-    open_repository,
-    parse_object_id,
     require_no_legacy_grafts,
+    resolve_committed_tree,
     run_git,
     safe_git_error,
 )
+from yaga.git.tree import require_matching_identity
 from yaga.modes.models import (
     MAX_MODE_ENTRIES,
     MAX_MODE_PATH_BYTES,
@@ -26,7 +27,6 @@ from yaga.modes.models import (
 )
 
 MAX_GIT_MODE_BYTES = 64 * 1024 * 1024
-_MAX_GIT_IDENTITY_BYTES = 256
 _GRAFTS_MESSAGE = "committed-mode selection rejects legacy graft overlays"
 _MODE_TYPES = {
     "100644": "blob",
@@ -36,23 +36,36 @@ _MODE_TYPES = {
 }
 
 
-def read_mode_selection(repository: Path, revision: str) -> ModeSelection:
+def read_mode_selection(
+    repository: Path,
+    revision: str,
+    *,
+    identity: CommittedTreeIdentity | None = None,
+) -> ModeSelection:
     """Resolve one commit and return every leaf mode from its exact tree."""
     _validate_revision(revision)
-    repo = open_repository(repository)
+    if identity is None:
+        identity = resolve_committed_tree(
+            repository,
+            revision,
+            grafts_message=_GRAFTS_MESSAGE,
+        )
+    else:
+        require_matching_identity(identity, repository=repository, revision=revision)
+    repo = identity.repository
     require_no_legacy_grafts(repo, message=_GRAFTS_MESSAGE)
-    commit_sha = _resolve_object(repo, revision, object_type="commit")
-    tree_sha = _resolve_object(repo, commit_sha, object_type="tree")
-    if len(commit_sha) != len(tree_sha):
-        raise GitError("git returned inconsistent object identity lengths")
-    entries = _read_mode_output(repo, tree_sha, identity_length=len(tree_sha))
+    entries = _read_mode_output(
+        repo,
+        identity.tree_sha,
+        identity_length=len(identity.tree_sha),
+    )
     require_no_legacy_grafts(repo, message=_GRAFTS_MESSAGE)
     try:
         return ModeSelection(
             repository=repo.directory,
-            revision=revision,
-            commit_sha=commit_sha,
-            tree_sha=tree_sha,
+            revision=identity.revision,
+            commit_sha=identity.commit_sha,
+            tree_sha=identity.tree_sha,
             entries=entries,
         )
     except ValueError as error:
@@ -67,35 +80,6 @@ def _validate_revision(revision: str) -> None:
             "mode revision must be one bounded, non-option commit-ish "
             f"of at most {MAX_MODE_REVISION_CHARS} characters"
         ) from error
-
-
-def _resolve_object(
-    repo: GitRepository,
-    revision: str,
-    *,
-    object_type: str,
-) -> str:
-    if object_type not in {"commit", "tree"}:
-        raise ValueError("object type must be commit or tree")
-    result = run_git(
-        repo,
-        [
-            "rev-parse",
-            "--verify",
-            "--end-of-options",
-            f"{revision}^{{{object_type}}}",
-        ],
-        stdout_limit=_MAX_GIT_IDENTITY_BYTES,
-    )
-    if result.returncode != 0:
-        detail = safe_git_error(result.stderr)
-        if object_type == "commit":
-            label = safe_error_text(revision, maximum=160)
-            raise GitError(f"git could not resolve {label!r} as one commit: {detail}")
-        raise GitError(f"git could not resolve the selected commit tree: {detail}")
-    if result.stderr:
-        raise GitError(f"git returned unexpected error output while resolving {object_type}")
-    return parse_object_id(result.stdout, label=object_type)
 
 
 def _read_mode_output(

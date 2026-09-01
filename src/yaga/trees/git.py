@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from yaga.errors import GitError, InputError, safe_error_text
+from yaga.errors import GitError, InputError
 from yaga.git import (
+    CommittedTreeIdentity,
     GitRepository,
-    open_repository,
-    parse_object_id,
     require_no_legacy_grafts,
+    resolve_committed_tree,
     run_git,
     safe_git_error,
 )
+from yaga.git.tree import require_matching_identity
 from yaga.trees.models import (
     MAX_TREE_PATH_BYTES,
     MAX_TREE_PATH_COMPONENTS,
@@ -26,26 +27,34 @@ from yaga.trees.models import (
 )
 
 MAX_GIT_TREE_BYTES = 64 * 1024 * 1024
-_MAX_GIT_IDENTITY_BYTES = 256
 _GRAFTS_MESSAGE = "committed-tree selection rejects legacy graft overlays"
 
 
-def read_tree_paths(repository: Path, revision: str) -> TreeSelection:
+def read_tree_paths(
+    repository: Path,
+    revision: str,
+    *,
+    identity: CommittedTreeIdentity | None = None,
+) -> TreeSelection:
     """Resolve exactly one commit and return the leaf paths in its committed tree."""
     _validate_revision(revision)
-    repo = open_repository(repository)
+    if identity is None:
+        identity = resolve_committed_tree(
+            repository,
+            revision,
+            grafts_message=_GRAFTS_MESSAGE,
+        )
+    else:
+        require_matching_identity(identity, repository=repository, revision=revision)
+    repo = identity.repository
     require_no_legacy_grafts(repo, message=_GRAFTS_MESSAGE)
-    commit_sha = _resolve_object(repo, revision, object_type="commit")
-    tree_sha = _resolve_object(repo, commit_sha, object_type="tree")
-    if len(commit_sha) != len(tree_sha):
-        raise GitError("git returned inconsistent object identity lengths")
-    paths = _read_tree_path_output(repo, tree_sha)
+    paths = _read_tree_path_output(repo, identity.tree_sha)
     require_no_legacy_grafts(repo, message=_GRAFTS_MESSAGE)
     return TreeSelection(
         repository=repo.directory,
-        revision=revision,
-        commit_sha=commit_sha,
-        tree_sha=tree_sha,
+        revision=identity.revision,
+        commit_sha=identity.commit_sha,
+        tree_sha=identity.tree_sha,
         paths=paths,
     )
 
@@ -58,33 +67,6 @@ def _validate_revision(revision: str) -> None:
             "tree revision must be one bounded, non-option commit-ish "
             f"of at most {MAX_TREE_REVISION_CHARS} characters"
         ) from error
-
-
-def _resolve_object(
-    repo: GitRepository,
-    revision: str,
-    *,
-    object_type: str,
-) -> str:
-    if object_type not in {"commit", "tree"}:
-        raise ValueError("object type must be commit or tree")
-    result = run_git(
-        repo,
-        [
-            "rev-parse",
-            "--verify",
-            "--end-of-options",
-            f"{revision}^{{{object_type}}}",
-        ],
-        stdout_limit=_MAX_GIT_IDENTITY_BYTES,
-    )
-    if result.returncode != 0:
-        detail = safe_git_error(result.stderr)
-        if object_type == "commit":
-            label = safe_error_text(revision, maximum=160)
-            raise GitError(f"git could not resolve {label!r} as one commit: {detail}")
-        raise GitError(f"git could not resolve the selected commit tree: {detail}")
-    return parse_object_id(result.stdout, label=object_type)
 
 
 def _read_tree_path_output(repo: GitRepository, tree_sha: str) -> tuple[str, ...]:
@@ -104,6 +86,8 @@ def _read_tree_path_output(repo: GitRepository, tree_sha: str) -> tuple[str, ...
     if result.returncode != 0:
         detail = safe_git_error(result.stderr)
         raise GitError(f"git could not read the selected commit tree: {detail}")
+    if result.stderr:
+        raise GitError("git returned unexpected error output while reading the commit tree")
     return _parse_tree_paths(result.stdout)
 
 

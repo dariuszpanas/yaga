@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from yaga.git import CommittedTreeIdentity
 from yaga.paths.checker import check_paths
 from yaga.paths.git import read_path_selection
 from yaga.paths.models import PathReport
@@ -30,9 +31,14 @@ def check_path_policy(
     *,
     policy_path: Path,
     revision: str,
+    identity: CommittedTreeIdentity | None = None,
 ) -> CheckedPath:
     """Load policy, read one exact committed tree, and check its path names."""
     loaded = load_path_policy(policy_path)
-    selection = read_path_selection(repository, revision)
+    selection = (
+        read_path_selection(repository, revision)
+        if identity is None
+        else read_path_selection(repository, revision, identity=identity)
+    )
     report = check_paths(loaded.policy, selection)
     return CheckedPath(report=report, policy_path=loaded.path)
