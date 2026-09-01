@@ -11,6 +11,8 @@ from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from yaga.errors import InputError, safe_error_text
 from yaga.workflows.models import (
+    ActionManifestDependency,
+    ParsedActionManifest,
     ParsedWorkflow,
     ReferenceContext,
     WorkflowDiagnostic,
@@ -29,7 +31,15 @@ MAX_EXPANDED_VISITS = 50_000
 MAX_REFERENCES = 512
 MAX_DIAGNOSTICS = 512
 
+_ACTION_RUNTIME_FILE_FIELDS = frozenset(
+    {"main", "pre", "post", "image", "pre-entrypoint", "entrypoint", "post-entrypoint"}
+)
+
 type _EdgeKey = tuple[int, int, str]
+
+
+class WorkflowDocumentError(InputError):
+    """A malformed document actionlint may diagnose within its bounded runtime."""
 
 
 class _YamlLimitError(Exception):
@@ -345,6 +355,8 @@ class _Inspector:
                 context=context,
                 line=line,
                 column=column,
+                source_start=value.start_mark.index if value.start_mark is not None else None,
+                source_end=value.end_mark.index if value.end_mark is not None else None,
             )
         )
 
@@ -379,7 +391,7 @@ def parse_workflow(raw: bytes, *, label: str) -> ParsedWorkflow:
     try:
         text = raw.decode("utf-8-sig", errors="strict")
     except UnicodeDecodeError:
-        raise InputError(f"{safe_label} is not valid UTF-8") from None
+        raise WorkflowDocumentError(f"{safe_label} is not valid UTF-8") from None
 
     loader: _BoundedSafeLoader | None = None
     try:
@@ -392,16 +404,16 @@ def parse_workflow(raw: bytes, *, label: str) -> ParsedWorkflow:
         raise InputError(f"{safe_label} {error}") from None
     except yaml.YAMLError as error:
         if isinstance(error, ComposerError) and error.problem == "but found another document":
-            raise InputError(
+            raise WorkflowDocumentError(
                 f"{safe_label} must contain exactly one nonempty YAML document"
             ) from None
-        raise InputError(f"{safe_label} contains invalid YAML") from None
+        raise WorkflowDocumentError(f"{safe_label} contains invalid YAML") from None
     finally:
         if loader is not None:
             loader.dispose()
 
     if root is None or _is_empty_document(root):
-        raise InputError(f"{safe_label} must contain exactly one nonempty YAML document")
+        raise WorkflowDocumentError(f"{safe_label} must contain exactly one nonempty YAML document")
 
     inspector = _Inspector(
         label=safe_label,
@@ -412,6 +424,59 @@ def parse_workflow(raw: bytes, *, label: str) -> ParsedWorkflow:
     return ParsedWorkflow(
         references=references,
         diagnostics=diagnostics,
+        node_count=node_count,
+    )
+
+
+def parse_action_manifest(raw: bytes, *, label: str) -> ParsedActionManifest:
+    """Select actionlint's runtime-file fields through the bounded YAML composer."""
+    safe_label = safe_error_text(label, maximum=160) or "action manifest"
+    if not isinstance(raw, bytes):
+        raise InputError(f"{safe_label} must be provided as bytes")
+    if len(raw) > MAX_WORKFLOW_BYTES:
+        raise InputError(f"{safe_label} exceeds the hard {MAX_WORKFLOW_BYTES}-byte limit")
+    try:
+        text = raw.decode("utf-8-sig", errors="strict")
+    except UnicodeDecodeError:
+        raise WorkflowDocumentError(f"{safe_label} is not valid UTF-8") from None
+
+    loader: _BoundedSafeLoader | None = None
+    try:
+        loader = _BoundedSafeLoader(text)
+        root = loader.get_single_node()
+        node_count = loader.node_count
+    except _YamlLimitError as error:
+        raise InputError(f"{safe_label} {error}") from None
+    except yaml.YAMLError:
+        # actionlint owns malformed-metadata diagnostics. No dependency can be
+        # selected safely when its parser does not produce one complete graph.
+        return ParsedActionManifest(dependencies=(), node_count=0)
+    finally:
+        if loader is not None:
+            loader.dispose()
+
+    dependencies: list[ActionManifestDependency] = []
+    if isinstance(root, MappingNode):
+        for key, value in root.value:
+            if not isinstance(key, ScalarNode) or key.value != "runs":
+                continue
+            if not isinstance(value, MappingNode):
+                continue
+            for runs_key, runs_value in value.value:
+                if (
+                    isinstance(runs_key, ScalarNode)
+                    and runs_key.value in _ACTION_RUNTIME_FILE_FIELDS
+                    and isinstance(runs_value, ScalarNode)
+                ):
+                    dependencies.append(
+                        ActionManifestDependency(
+                            field=runs_key.value,
+                            value=runs_value.value,
+                        )
+                    )
+
+    return ParsedActionManifest(
+        dependencies=tuple(dependencies),
         node_count=node_count,
     )
 

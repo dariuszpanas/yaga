@@ -1,4 +1,4 @@
-"""Stable text, JSON, and GitHub reports for workflow policy checks."""
+"""Stable text, JSON, and GitHub reports for workflow checks."""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ from yaga.commits.reporting import (
 from yaga.errors import YagaError, safe_error_text
 from yaga.workflows.models import (
     WorkflowDiagnostic,
+    WorkflowLintReport,
+    WorkflowLintResult,
     WorkflowOutputFormat,
     WorkflowReport,
     WorkflowResult,
@@ -37,11 +39,40 @@ def render_workflow_report(
     return _render_text_report(report)
 
 
+def render_workflow_lint_report(
+    report: WorkflowLintReport,
+    output_format: WorkflowOutputFormat,
+) -> str:
+    """Render one complete actionlint report."""
+    if output_format is WorkflowOutputFormat.JSON:
+        return json.dumps(_lint_report_document(report), ensure_ascii=False, indent=2)
+    if output_format is WorkflowOutputFormat.GITHUB:
+        return _render_lint_github_report(report)
+    return _render_lint_text_report(report)
+
+
 def render_workflow_error(
     error: YagaError,
     output_format: WorkflowOutputFormat,
 ) -> str:
     """Render one expected workflow-policy operational error."""
+    return _render_workflow_error(error, output_format, github_title="YAGA workflow policy")
+
+
+def render_workflow_lint_error(
+    error: YagaError,
+    output_format: WorkflowOutputFormat,
+) -> str:
+    """Render one expected workflow-lint operational error."""
+    return _render_workflow_error(error, output_format, github_title="YAGA workflow lint")
+
+
+def _render_workflow_error(
+    error: YagaError,
+    output_format: WorkflowOutputFormat,
+    *,
+    github_title: str,
+) -> str:
     message = safe_error_text(error)
     if output_format is WorkflowOutputFormat.JSON:
         return json.dumps(
@@ -53,7 +84,7 @@ def render_workflow_error(
             indent=2,
         )
     if output_format is WorkflowOutputFormat.GITHUB:
-        title = _workflow_property("YAGA workflow policy", maximum=MAX_GITHUB_TITLE)
+        title = _workflow_property(github_title, maximum=MAX_GITHUB_TITLE)
         data = _workflow_data(
             f"YAGA {error.kind} error: {message}",
             maximum=MAX_DIAGNOSTIC_MESSAGE,
@@ -77,6 +108,21 @@ def _render_text_report(report: WorkflowReport) -> str:
     return "\n".join(lines)
 
 
+def _render_lint_text_report(report: WorkflowLintReport) -> str:
+    lines: list[str] = []
+    for result in report.results:
+        path = safe_text(result.path, maximum=MAX_DISPLAY_PATH)
+        lines.append(f"{result.status.upper():7} {path}  {len(result.diagnostics)} diagnostic(s)")
+        for diagnostic in result.diagnostics:
+            code = safe_text(diagnostic.code, maximum=MAX_DIAGNOSTIC_CODE)
+            message = safe_text(diagnostic.message, maximum=MAX_DIAGNOSTIC_MESSAGE)
+            lines.append(
+                f"         [{code}] line {diagnostic.line}, column {diagnostic.column}: {message}"
+            )
+    lines.append(_lint_summary(report, prefix="Linted"))
+    return "\n".join(lines)
+
+
 def _report_document(report: WorkflowReport) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -90,12 +136,34 @@ def _report_document(report: WorkflowReport) -> dict[str, Any]:
     }
 
 
+def _lint_report_document(report: WorkflowLintReport) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "github_workflow_lint",
+        "valid": report.valid,
+        "checked": report.checked,
+        "passed": report.passed,
+        "failed": report.failed,
+        "diagnostics": report.diagnostics,
+        "workflows": [_lint_result_document(result) for result in report.results],
+    }
+
+
 def _result_document(result: WorkflowResult) -> dict[str, Any]:
     return {
         "path": json_text(result.path, maximum=MAX_DISPLAY_PATH),
         "status": result.status,
         "valid": result.valid,
         "references_checked": result.references_checked,
+        "diagnostics": [_diagnostic_document(item) for item in result.diagnostics],
+    }
+
+
+def _lint_result_document(result: WorkflowLintResult) -> dict[str, Any]:
+    return {
+        "path": json_text(result.path, maximum=MAX_DISPLAY_PATH),
+        "status": result.status,
+        "valid": result.valid,
         "diagnostics": [_diagnostic_document(item) for item in result.diagnostics],
     }
 
@@ -131,8 +199,30 @@ def _render_github_report(report: WorkflowReport) -> str:
     return "\n".join(lines)
 
 
+def _render_lint_github_report(report: WorkflowLintReport) -> str:
+    diagnostics = [
+        (result, diagnostic) for result in report.results for diagnostic in result.diagnostics
+    ]
+    visible = diagnostics
+    omitted = 0
+    if len(diagnostics) > MAX_GITHUB_ANNOTATIONS:
+        visible = diagnostics[: MAX_GITHUB_ANNOTATIONS - 1]
+        omitted = len(diagnostics) - len(visible)
+
+    lines = [_github_annotation(result, diagnostic) for result, diagnostic in visible]
+    if omitted:
+        title = _workflow_property("YAGA workflow lint", maximum=MAX_GITHUB_TITLE)
+        data = _workflow_data(
+            f"{omitted} additional workflow lint diagnostic(s) omitted",
+            maximum=MAX_DIAGNOSTIC_MESSAGE,
+        )
+        lines.append(f"::error title={title}::{data}")
+    lines.append(_lint_summary(report, prefix="YAGA linted"))
+    return "\n".join(lines)
+
+
 def _github_annotation(
-    result: WorkflowResult,
+    result: WorkflowResult | WorkflowLintResult,
     diagnostic: WorkflowDiagnostic,
 ) -> str:
     path = _workflow_property(result.path, maximum=MAX_DISPLAY_PATH)
@@ -151,6 +241,13 @@ def _summary(report: WorkflowReport, *, prefix: str) -> str:
     return (
         f"{prefix} {report.checked} workflow file(s): {report.passed} passed, "
         f"{report.failed} failed; {report.references_checked} reference(s)."
+    )
+
+
+def _lint_summary(report: WorkflowLintReport, *, prefix: str) -> str:
+    return (
+        f"{prefix} {report.checked} workflow file(s): {report.passed} passed, "
+        f"{report.failed} failed; {report.diagnostics} diagnostic(s)."
     )
 
 

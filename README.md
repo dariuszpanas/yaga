@@ -29,6 +29,7 @@ yaga config init                   # create a safe standalone starter policy
 yaga config show                   # explain the effective policy and its source
 yaga github pull-request check     # validate one exact GitHub PR event
 yaga workflow check                # require immutable workflow references
+yaga workflow lint                 # lint workflow syntax with pinned actionlint
 yaga gate codex-review <operation> # run the retained review gate
 ```
 
@@ -205,7 +206,7 @@ immutable evidence. The copy-ready [commit-policy workflow](examples/commit-poli
 audited pre-release commit; review and deliberately replace that immutable SHA when adopting a
 newer YAGA revision.
 
-## GitHub workflow reference checks
+## GitHub workflow checks
 
 `yaga workflow check` catches mutable third-party Action and reusable-workflow references before
 they become a supply-chain regression. With no paths it checks direct `.yml` and `.yaml` children
@@ -234,9 +235,50 @@ duplicate keys and merge keys remain visible and fail closed. Text, versioned JS
 GitHub annotations use exit `0` for success, `1` for policy findings, and `2` for discovery, input,
 YAML, or resource-limit errors.
 
-This is an installed-CLI provider, not a composite Action. Run it after installing the locked YAGA
-environment in ordinary unprivileged CI. Keep actionlint as a separate syntax and GitHub-schema
-check; immutable reference policy does not replace it.
+`yaga workflow lint` complements that pure-Python reference policy with GitHub workflow syntax and
+schema checks. It accepts the same paths as `workflow check`: no paths selects direct `.yml` and
+`.yaml` children of `.github/workflows`, while explicit files or direct-child directories select
+other workflow sets.
+
+```bash
+yaga workflow lint
+yaga workflow lint .github/workflows examples --format github
+```
+
+Linting requires Docker and runs the exact
+`rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667`
+container. YAGA does not bind the checkout into that container. It builds a bounded synthetic
+repository containing the selected workflows, their transitive local reusable workflows, the one
+native actionlint configuration, and local Action metadata. For Action metadata, native precedence
+is preserved (`action.yaml` before `action.yml`); declared runtime files are represented only by
+zero-byte existence markers, so their source is neither copied nor parsed. At most one of
+`.github/actionlint.yaml` and `.github/actionlint.yml` may exist, and YAGA passes that file to
+actionlint explicitly. Ambiguous configurations fail instead of silently choosing one.
+
+The deterministic snapshot is streamed as an archive into a private, labeled Docker volume through
+a stopped staging container. Selected workflow content still reaches actionlint through standard
+input, while the read-only snapshot lets native local-workflow, local-Action, and configuration
+checks work without a host mount. Valid `$/` self-repository references are translated to `./` only
+inside this private snapshot because pinned actionlint predates that GitHub syntax; source-marked
+rewriting preserves locations and never changes the checked-out file or reported path. A scalar
+spelling that cannot be translated exactly fails closed.
+
+The lint container has networking disabled, a read-only root and snapshot, all capabilities
+dropped, `no-new-privileges`, fixed CPU and memory ceilings, a PID limit, and no Docker log driver.
+YAGA bounds discovery, support files, paths, YAML structure, archive entries and bytes, subprocess
+trees, time, output, diagnostics, and decoded JSON. It force-removes and verifies every labeled
+container and private volume, treating unconfirmed cleanup as an operational failure and naming the
+generated resource that needs manual removal. The configured Docker daemon or context may be
+remote and is therefore trusted with the bounded snapshot until cleanup is verified. An
+uncatchable process termination can bypass cleanup; leftover resources can be found
+with Docker's `label=io.yaga.actionlint.run` filter and should be inspected before removal. This is
+a pinned adapter around native actionlint, not a pure-Python schema linter. Sanitized text,
+versioned JSON, and escaped GitHub reports use exit `0` for success, `1` for lint findings, and `2`
+for Docker, snapshot, cleanup, input, or malformed-tool-output failures.
+
+Both workflow commands are installed-CLI providers, not composite Actions. Run them after installing
+the locked YAGA environment in ordinary unprivileged CI. Keep syntax linting and immutable-reference
+policy as separate checks; neither replaces the other.
 
 ## Gate commands and the composite Action
 

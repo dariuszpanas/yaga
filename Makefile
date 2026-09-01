@@ -1,7 +1,7 @@
 .PHONY: actionlint build check test ci
 
 actionlint:
-	uv run python scripts/run_actionlint.py
+	uv run yaga workflow lint .github/workflows examples
 
 build:
 	uv run python scripts/check_build.py
@@ -13,7 +13,7 @@ check:
 	uv run ty check
 	uv run pre-commit validate-manifest .pre-commit-hooks.yaml
 	uv run yaga workflow check .github/workflows examples
-	uv run python scripts/run_actionlint.py
+	uv run yaga workflow lint .github/workflows examples
 	bash -n scripts/composite_smoke_python
 
 test:

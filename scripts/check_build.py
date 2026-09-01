@@ -280,6 +280,20 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     ):
         raise SystemExit("installed wheel CLI workflow check emitted the wrong report contract")
 
+    lint_help = run_bounded(
+        [str(executable), "workflow", "lint", "--help"],
+        cwd=consumer,
+        env=child_environment,
+    )
+    if lint_help.returncode != 0 or lint_help.stderr:
+        raise SystemExit("installed wheel CLI workflow lint help failed")
+    try:
+        lint_help_text = lint_help.stdout.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise SystemExit("installed wheel CLI workflow lint help was not UTF-8") from error
+    if "pinned actionlint container" not in lint_help_text:
+        raise SystemExit("installed wheel CLI workflow lint help omitted its runtime contract")
+
     completed = run_bounded(
         [
             str(executable),
@@ -356,7 +370,11 @@ def main() -> int:
                 "yaga/commits/github_event.py",
                 "yaga/commits/github_reporting.py",
                 "yaga/files.py",
+                "yaga/workflows/actionlint_runtime.py",
+                "yaga/workflows/actionlint_snapshot.py",
                 "yaga/workflows/checker.py",
+                "yaga/workflows/inputs.py",
+                "yaga/workflows/lint.py",
                 "yaga/workflows/yaml.py",
             }
             if missing := sorted(required - names):

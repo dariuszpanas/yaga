@@ -21,6 +21,10 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
 - Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
   0/1/2, and the versioned JSON document are public pre-release contracts.
+- Keep `workflow check` and `workflow lint` on the same default and explicit path-selection
+  contract. The former is pure-Python immutable-reference policy; the latter is a pinned actionlint
+  adapter that requires Docker. Do not merge their diagnostics or imply that either replaces the
+  other.
 - Keep `.pre-commit-hooks.yaml` as one direct Python `commit-msg` adapter to
   `yaga commit check --file`. Do not add a wrapper, filters, policy arguments, or hook-only
   dependencies; local hooks are bypassable and cannot enforce merge parent policy.
@@ -92,3 +96,13 @@ Keep installed workflow-policy parsing and reporting under `src/yaga/workflows/`
 must remain resource-bounded, preserve duplicate mapping pairs, and never enter either
 dependency-free Action runtime. `$/` local references are commit-bound; `./` depends on the
 caller's trusted checkout and must not be described as independently immutable.
+
+Keep `workflow lint` installed-only and out of both Action import graphs. Its actionlint image
+digest and Docker hardening flags are fixed: no shell or host mount; use a deterministic bounded
+synthetic repository in a private labeled volume, a stopped staging container, and a read-only lint
+mount.
+Include transitive local reusable workflows, at most one native actionlint config, the
+`action.yaml`-before-`action.yml` local manifest, and only zero-byte file or empty-directory runtime
+presence entries. Keep `$/` translation exact and source-marked. Disable network and logging; bound
+CPU, memory, PIDs, process trees, time, archive, and output; and verify container/volume cleanup.
+Expose only sanitized text, versioned JSON, and escaped GitHub reports with exits 0/1/2.

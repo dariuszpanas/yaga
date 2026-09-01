@@ -9,10 +9,16 @@ import typer
 
 from yaga.errors import YagaError
 from yaga.workflows.checker import check_workflows
+from yaga.workflows.lint import lint_workflows
 from yaga.workflows.models import WorkflowOutputFormat
-from yaga.workflows.reporting import render_workflow_error, render_workflow_report
+from yaga.workflows.reporting import (
+    render_workflow_error,
+    render_workflow_lint_error,
+    render_workflow_lint_report,
+    render_workflow_report,
+)
 
-app = typer.Typer(help="Inspect GitHub workflow policy.", no_args_is_help=True)
+app = typer.Typer(help="Inspect GitHub workflows.", no_args_is_help=True)
 
 
 @app.command("check")
@@ -39,5 +45,33 @@ def check_workflow_references(
         typer.echo(render_workflow_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
     typer.echo(render_workflow_report(report, output_format))
+    if not report.valid:
+        raise typer.Exit(code=1)
+
+
+@app.command("lint")
+def lint_workflow_syntax(
+    paths: Annotated[
+        list[Path] | None,
+        typer.Argument(
+            help=("Workflow files or direct-child directories. Defaults to .github/workflows.")
+        ),
+    ] = None,
+    repository: Annotated[
+        Path,
+        typer.Option("--repo", help="Repository root for workflow path resolution."),
+    ] = Path("."),
+    output_format: Annotated[
+        WorkflowOutputFormat,
+        typer.Option("--format", case_sensitive=False, help="Report format."),
+    ] = WorkflowOutputFormat.TEXT,
+) -> None:
+    """Lint selected workflows with YAGA's pinned actionlint container."""
+    try:
+        report = lint_workflows(repository, paths or ())
+    except YagaError as error:
+        typer.echo(render_workflow_lint_error(error, output_format), err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(render_workflow_lint_report(report, output_format))
     if not report.valid:
         raise typer.Exit(code=1)

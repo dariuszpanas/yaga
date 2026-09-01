@@ -18,7 +18,7 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,7 +52,13 @@ jobs:
           grep -F -- 'hook id: yaga-commit-check' "$RUNNER_TEMP/yaga-pre-commit.log"
           grep -F -- 'exit code: 1' "$RUNNER_TEMP/yaga-pre-commit.log"
           grep -F -- '[syntax.header]' "$RUNNER_TEMP/yaga-pre-commit.log"
-      - run: uv run --frozen --python 3.12 python scripts/run_actionlint.py
+      - run: >-
+          uv run --frozen --python 3.12 yaga workflow lint
+          .github/workflows examples --format github
+      - name: Exercise the cached actionlint integration
+        run: >-
+          uv run --frozen --python 3.12 pytest -q
+          tests/test_workflow_lint.py tests/test_workflow_lint_hardening.py
       - run: bash -n scripts/composite_smoke_python
       - run: uv run --frozen --python 3.12 python scripts/check_build.py
       - name: Install the composite smoke interpreter
