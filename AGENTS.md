@@ -21,6 +21,9 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
 - Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
   0/1/2, and the versioned JSON document are public pre-release contracts.
+- Keep `.pre-commit-hooks.yaml` as one direct Python `commit-msg` adapter to
+  `yaga commit check --file`. Do not add a wrapper, filters, policy arguments, or hook-only
+  dependencies; local hooks are bypassable and cannot enforce merge parent policy.
 - The installed CLI may use the locked Typer dependency. The write-capable root Action may not
   import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
   the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the

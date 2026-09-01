@@ -168,6 +168,26 @@ def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:
         assert unsupported not in example
 
 
+def test_pre_commit_provider_is_one_closed_file_adapter() -> None:
+    manifest = read(".pre-commit-hooks.yaml")
+    readme = read("README.md")
+
+    assert manifest == (
+        "- id: yaga-commit-check\n"
+        "  name: YAGA commit check\n"
+        "  description: Validate the pending commit message with repository-local YAGA policy.\n"
+        "  entry: yaga commit check --file\n"
+        "  language: python\n"
+        "  stages: [commit-msg]\n"
+        "  pass_filenames: true\n"
+        '  minimum_pre_commit_version: "3.2.0"\n'
+    )
+    assert "repo: https://github.com/dariuszpanas/yaga" in readme
+    assert "rev: <AUDITED_40_CHARACTER_SHA>" in readme
+    assert "id: yaga-commit-check" in readme
+    assert "pre-commit install --hook-type commit-msg --install-hooks" in readme
+
+
 def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:
     ci = read(".github/workflows/ci.yml")
     readme = read("README.md")

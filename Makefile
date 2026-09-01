@@ -11,6 +11,7 @@ check:
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run ty check
+	uv run pre-commit validate-manifest .pre-commit-hooks.yaml
 	uv run python scripts/run_actionlint.py
 	bash -n scripts/composite_smoke_python
 
