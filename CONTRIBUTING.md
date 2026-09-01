@@ -44,6 +44,9 @@ Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or
 `.yaga.toml` root plus `[commit]`. Load exactly one nearest or explicit file, reject unknown keys and
 wrong types, and do not silently merge policies. Stable diagnostic identifiers and JSON schema
 fields are public pre-release interfaces; change them deliberately and test both text and JSON.
+`config init` creates only a new standalone `.yaga.toml` with exclusive no-overwrite semantics. It
+must refuse to shadow any effective discovered configuration, never edit `pyproject.toml`, and keep
+its deterministic starter template round-trippable through the strict loader.
 
 The pre-commit provider manifest exposes exactly one `commit-msg` hook. Keep it as a direct
 `language: python` adapter to `yaga commit check --file`; do not add shell indirection, filename

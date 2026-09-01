@@ -374,6 +374,57 @@ def test_config_show_reports_the_discovered_source(tmp_path: Path) -> None:
     assert document["config"]["allowed_types"] == ["feat"]
 
 
+def test_config_init_creates_and_reports_a_standalone_policy(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["config", "init", "--repo", str(tmp_path), "--format", "json"],
+    )
+    document = json.loads(result.stdout)
+    config = tmp_path / ".yaga.toml"
+
+    assert result.exit_code == 0
+    assert result.stderr == ""
+    assert config.is_file()
+    assert document["schema_version"] == 1
+    assert document["config_path"] == str(config)
+    assert document["config"]["allowed_types"] == [
+        "build",
+        "chore",
+        "ci",
+        "docs",
+        "feat",
+        "fix",
+        "perf",
+        "refactor",
+        "revert",
+        "style",
+        "test",
+    ]
+    assert document["config"]["merge_commits"] == "reject"
+
+
+def test_config_init_refuses_to_overwrite_and_uses_exit_two(tmp_path: Path) -> None:
+    config = tmp_path / ".yaga.toml"
+    original = 'config-version = 1\n[commit]\nallowed-types = ["docs"]\n'
+    config.write_text(original, encoding="utf-8")
+
+    result = runner.invoke(app, ["config", "init", "--repo", str(tmp_path)])
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "already applies" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert config.read_text(encoding="utf-8") == original
+
+
+def test_config_help_explains_safe_standalone_initialization() -> None:
+    result = runner.invoke(app, ["config", "init", "--help"])
+
+    assert result.exit_code == 0
+    assert "standalone .yaga.toml" in result.stdout
+    assert "without overwriting" in result.stdout
+
+
 def test_gate_help_lists_every_preserved_operation() -> None:
     result = runner.invoke(app, ["gate", "codex-review", "--help"])
 

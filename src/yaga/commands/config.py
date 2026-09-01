@@ -8,11 +8,35 @@ from typing import Annotated
 import typer
 
 from yaga.commits.config import load_config
+from yaga.commits.config_init import initialize_config
 from yaga.commits.models import OutputFormat
 from yaga.commits.reporting import render_config, render_error
 from yaga.errors import YagaError
 
 app = typer.Typer(help="Inspect YAGA configuration.", no_args_is_help=True)
+
+
+@app.command("init")
+def init_config(
+    repository: Annotated[
+        Path,
+        typer.Option(
+            "--repo",
+            help="Directory that will receive a standalone .yaga.toml.",
+        ),
+    ] = Path("."),
+    output_format: Annotated[
+        OutputFormat,
+        typer.Option("--format", case_sensitive=False, help="Report format."),
+    ] = OutputFormat.TEXT,
+) -> None:
+    """Create a recommended standalone .yaga.toml without overwriting."""
+    try:
+        loaded = initialize_config(repository)
+    except YagaError as error:
+        typer.echo(render_error(error, output_format), err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(render_config(loaded, output_format))
 
 
 @app.command("show")

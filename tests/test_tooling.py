@@ -116,6 +116,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"PYTHONPATH"' in build_gate
     assert '"YAGA_ACTION_RUNTIME"' in build_gate
     assert "cwd=consumer" in build_gate
+    assert '"config",\n            "init"' in build_gate
+    assert "config.write_text" not in build_gate
     assert 'completed.stdout.decode("utf-8")' in build_gate
     assert '"pip",\n            "check"' in build_gate
     assert '"--format",\n            "json"' in build_gate

@@ -86,6 +86,27 @@ def run_bounded(
     return subprocess.CompletedProcess(command, returncode, bytes(stdout), bytes(stderr))
 
 
+def successful_json(
+    completed: subprocess.CompletedProcess[bytes],
+    *,
+    operation: str,
+) -> dict[str, object]:
+    """Require one installed CLI operation to succeed with UTF-8 JSON only."""
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"installed wheel CLI {operation} exited with status {completed.returncode}"
+        )
+    if completed.stderr:
+        raise SystemExit(f"installed wheel CLI {operation} wrote to standard error")
+    try:
+        document = json.loads(completed.stdout.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise SystemExit(f"installed wheel CLI {operation} did not emit UTF-8 JSON") from error
+    if not isinstance(document, dict):
+        raise SystemExit(f"installed wheel CLI {operation} emitted a non-object JSON report")
+    return document
+
+
 def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     """Install the built wheel over its hash-locked runtime and execute its CLI."""
     runtime_requirements = output / "runtime-requirements.txt"
@@ -178,11 +199,6 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     consumer = output / "consumer"
     consumer.mkdir()
     config = consumer / ".yaga.toml"
-    config.write_text(
-        'config-version = 1\n[commit]\nallowed-types = ["feat"]\n',
-        encoding="utf-8",
-        newline="\n",
-    )
     executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
     if not executable.is_file():
         raise SystemExit("installed wheel does not expose the yaga executable")
@@ -197,6 +213,35 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         child_environment.pop(variable, None)
     child_environment["PYTHONNOUSERSITE"] = "1"
     child_environment["PYTHONSAFEPATH"] = "1"
+    initialized = run_bounded(
+        [
+            str(executable),
+            "config",
+            "init",
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    initialized_document = successful_json(initialized, operation="config init")
+    initialized_policy = initialized_document.get("config")
+    initialized_types = (
+        initialized_policy.get("allowed_types") if isinstance(initialized_policy, dict) else None
+    )
+    if not (
+        initialized_document.get("schema_version") == 1
+        and initialized_document.get("config_path") == str(config.resolve())
+        and isinstance(initialized_policy, dict)
+        and isinstance(initialized_types, list)
+        and "feat" in initialized_types
+        and initialized_policy.get("merge_commits") == "reject"
+        and config.is_file()
+    ):
+        raise SystemExit("installed wheel CLI config init emitted the wrong report contract")
+
     completed = run_bounded(
         [
             str(executable),
@@ -214,14 +259,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         cwd=consumer,
         env=child_environment,
     )
-    if completed.returncode != 0:
-        raise SystemExit(f"installed wheel CLI exited with status {completed.returncode}")
-    if completed.stderr:
-        raise SystemExit("installed wheel CLI wrote to standard error")
-    try:
-        document = json.loads(completed.stdout.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise SystemExit("installed wheel CLI did not emit UTF-8 JSON") from error
+    document = successful_json(completed, operation="commit check")
     commits = document.get("commits") if isinstance(document, dict) else None
     if not (
         isinstance(document, dict)
