@@ -109,3 +109,21 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "from yaga.cli" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.commits" not in source, path
+
+
+def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
+    paths = [
+        ROOT / "src" / "yaga" / "commit_action_cli.py",
+        ROOT / "src" / "yaga" / "commit_action_runtime.py",
+        ROOT / "src" / "yaga" / "files.py",
+        *(ROOT / "src" / "yaga" / "commits").glob("*.py"),
+    ]
+
+    for path in paths:
+        source = path.read_text(encoding="utf-8")
+        assert "import typer" not in source, path
+        assert "from yaga.cli" not in source, path
+        assert "from yaga.commands" not in source, path
+        assert "from yaga.codex" not in source, path
+        assert "from yaga.github import" not in source, path
+        assert "GITHUB_TOKEN" not in source, path

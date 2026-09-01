@@ -109,6 +109,34 @@ def test_action_has_one_closed_direct_publisher_interface() -> None:
     assert "default:" not in owner.group("body")
 
 
+def test_commit_action_is_a_separate_read_only_closed_interface() -> None:
+    action = read("actions/commit-check/action.yml")
+    workflow = read(".github/workflows/commit-policy.yml")
+
+    assert "inputs:" not in action
+    assert "outputs:" not in action
+    assert re.search(r"actions/setup-python@[0-9a-f]{40}", action)
+    assert 'token: ""' in action
+    assert 'YAGA_COMMIT_ACTION_RUNTIME: "1"' in action
+    assert "YAGA_ACTION_RUNTIME" not in action
+    assert "github-token" not in action.casefold()
+    assert "GITHUB_TOKEN" not in action
+    assert "pip install" not in action
+    assert "uv " not in action
+    assert "python -P -S -m yaga github pull-request check" in action
+
+    assert "types: [opened, synchronize, reopened, edited, ready_for_review]" in workflow
+    assert "permissions:\n  contents: read" in workflow
+    assert "pull-requests: write" not in workflow
+    assert "statuses: write" not in workflow
+    assert "secrets:" not in workflow
+    assert "cancel-in-progress: true" in workflow
+    assert "ref: ${{ github.event.pull_request.head.sha }}" in workflow
+    assert "fetch-depth: 0" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "uses: ./actions/commit-check" in workflow
+
+
 def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:
     ci = read(".github/workflows/ci.yml")
     readme = read("README.md")
