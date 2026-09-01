@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 
+from yaga.git import CommittedTreeIdentity
 from yaga.modes import service
 from yaga.modes.checker import check_modes
 from yaga.modes.models import (
@@ -30,9 +31,11 @@ def _selection(repository: Path) -> ModeSelection:
     )
 
 
+@pytest.mark.parametrize("reuse_identity", [False, True])
 def test_mode_service_composes_loader_git_and_checker_in_order(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    reuse_identity: bool,
 ) -> None:
     repository = tmp_path / "repository"
     policy_path = (tmp_path / "mode-policy.toml").resolve()
@@ -40,14 +43,20 @@ def test_mode_service_composes_loader_git_and_checker_in_order(
     loaded = LoadedModePolicy(policy=policy, path=policy_path)
     selection = _selection(repository)
     report = check_modes(policy, selection)
+    identity = cast(CommittedTreeIdentity, object())
     calls: list[tuple[object, ...]] = []
 
     def fake_load(selected_path: Path) -> LoadedModePolicy:
         calls.append(("load", selected_path))
         return loaded
 
-    def fake_read(selected_repository: Path, revision: str) -> ModeSelection:
-        calls.append(("git", selected_repository, revision))
+    def fake_read(
+        selected_repository: Path,
+        revision: str,
+        *,
+        identity: CommittedTreeIdentity | None = None,
+    ) -> ModeSelection:
+        calls.append(("git", selected_repository, revision, identity))
         return selection
 
     def fake_check(selected_policy: ModePolicy, selected_tree: ModeSelection) -> ModeReport:
@@ -62,12 +71,13 @@ def test_mode_service_composes_loader_git_and_checker_in_order(
         repository,
         policy_path=Path("mode-policy.toml"),
         revision="release-candidate",
+        identity=identity if reuse_identity else None,
     )
 
     assert checked == CheckedMode(report=report, policy_path=policy_path)
     assert calls == [
         ("load", Path("mode-policy.toml")),
-        ("git", repository, "release-candidate"),
+        ("git", repository, "release-candidate", identity if reuse_identity else None),
         ("check", policy, selection),
     ]
 

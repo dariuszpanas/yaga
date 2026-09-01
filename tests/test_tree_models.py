@@ -124,6 +124,8 @@ def test_tree_policy_rejects_noncanonical_required_paths(path: str) -> None:
     [
         "",
         "-HEAD",
+        ":vendor",
+        "HEAD:vendor",
         "^HEAD",
         "main..HEAD",
         "main...HEAD",

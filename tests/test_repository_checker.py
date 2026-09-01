@@ -8,8 +8,18 @@ import pytest
 
 from yaga.commits.models import CheckResult, CommitTarget, Diagnostic, ValidationReport
 from yaga.errors import GitError, InputError
+from yaga.modes.checker import check_modes
+from yaga.modes.models import ModeEntry, ModeKind, ModePolicy, ModeSelection
+from yaga.modes.service import CheckedMode
+from yaga.paths.checker import check_paths
+from yaga.paths.models import PathPolicy, PathSelection
+from yaga.paths.service import CheckedPath
 from yaga.repository import checker
 from yaga.repository.models import RepositoryCheckStatus, RepositoryProvider
+from yaga.sizes.models import BlobEntry, SizePolicy, SizeReport, SizeSelection
+from yaga.sizes.service import CheckedSize
+from yaga.trees.models import TreePolicy, TreeReport, TreeSelection
+from yaga.trees.service import CheckedTree
 from yaga.workflows.inputs import WorkflowInput
 from yaga.workflows.models import (
     WorkflowDiagnostic,
@@ -85,6 +95,71 @@ def passing_security_report() -> WorkflowSecurityReport:
     )
 
 
+def passing_mode_check(tmp_path: Path) -> CheckedMode:
+    selection = ModeSelection(
+        repository=tmp_path.resolve(),
+        revision="release-candidate",
+        commit_sha="a" * 40,
+        tree_sha="b" * 40,
+        entries=(ModeEntry("README.md", "c" * 40, "100644", "blob"),),
+    )
+    return CheckedMode(
+        report=check_modes(ModePolicy(1, (ModeKind.REGULAR,)), selection),
+        policy_path=(tmp_path / "mode.toml").resolve(),
+    )
+
+
+def passing_path_check(tmp_path: Path) -> CheckedPath:
+    selection = PathSelection(
+        repository=tmp_path.resolve(),
+        revision="release-candidate",
+        commit_sha="a" * 40,
+        tree_sha="b" * 40,
+        paths=("README.md",),
+    )
+    return CheckedPath(
+        report=check_paths(PathPolicy(1, rules=("windows-reserved",)), selection),
+        policy_path=(tmp_path / "path.toml").resolve(),
+    )
+
+
+def passing_size_check(tmp_path: Path) -> CheckedSize:
+    selection = SizeSelection(
+        repository=tmp_path.resolve(),
+        revision="release-candidate",
+        commit_sha="a" * 40,
+        tree_sha="b" * 40,
+        blobs=(BlobEntry("README.md", "c" * 40, "100644", 5),),
+        gitlinks=(),
+    )
+    return CheckedSize(
+        report=SizeReport(
+            policy=SizePolicy(1, default_max_blob_bytes=10),
+            selection=selection,
+            diagnostics=(),
+        ),
+        policy_path=(tmp_path / "size.toml").resolve(),
+    )
+
+
+def passing_tree_check(tmp_path: Path) -> CheckedTree:
+    selection = TreeSelection(
+        repository=tmp_path.resolve(),
+        revision="release-candidate",
+        commit_sha="a" * 40,
+        tree_sha="b" * 40,
+        paths=("README.md",),
+    )
+    return CheckedTree(
+        report=TreeReport(
+            policy=TreePolicy(1, required_paths=("README.md",), forbidden_patterns=()),
+            selection=selection,
+            diagnostics=(),
+        ),
+        policy_path=(tmp_path / "tree.toml").resolve(),
+    )
+
+
 @pytest.mark.parametrize(
     ("providers", "message"),
     [
@@ -92,7 +167,17 @@ def passing_security_report() -> WorkflowSecurityReport:
         (["unknown"], "unknown repository check provider"),
         (["commit", "commit"], "must not be repeated"),
         (
-            ["commit", "workflow", "workflow-security", "workflow-lint", "commit"],
+            [
+                "commit",
+                "workflow",
+                "workflow-security",
+                "workflow-lint",
+                "mode",
+                "path",
+                "size",
+                "tree",
+                "commit",
+            ],
             "hard limit",
         ),
     ],
@@ -487,3 +572,221 @@ def test_parse_error_is_shared_by_pure_providers_while_lint_still_runs(
         RepositoryCheckStatus.ERROR,
         RepositoryCheckStatus.PASSED,
     ]
+
+
+@pytest.mark.parametrize(
+    ("provider", "policy_option"),
+    [
+        ("mode", "mode-policy"),
+        ("path", "path-policy"),
+        ("size", "size-policy"),
+        ("tree", "tree-policy"),
+    ],
+)
+def test_committed_providers_require_revision_and_their_own_policy(
+    provider: str,
+    policy_option: str,
+) -> None:
+    with pytest.raises(InputError, match="--revision is required"):
+        checker.check_repository(Path("."), [provider])
+
+    with pytest.raises(InputError, match=policy_option):
+        checker.check_repository(Path("."), [provider], revision="HEAD")
+
+
+@pytest.mark.parametrize(
+    ("provider", "policy_option"),
+    [
+        ("mode", "mode-policy"),
+        ("path", "path-policy"),
+        ("size", "size-policy"),
+        ("tree", "tree-policy"),
+    ],
+)
+def test_committed_policy_arguments_are_rejected_when_unused(
+    provider: str,
+    policy_option: str,
+) -> None:
+    with pytest.raises(InputError, match=f"{policy_option} requires the {provider} provider"):
+        _check_with_unused_policy(provider)
+
+
+def _check_with_unused_policy(provider: str) -> None:
+    if provider == "mode":
+        checker.check_repository(Path("."), ["commit"], mode_policy_path=Path("policy.toml"))
+    elif provider == "path":
+        checker.check_repository(Path("."), ["commit"], path_policy_path=Path("policy.toml"))
+    elif provider == "size":
+        checker.check_repository(Path("."), ["commit"], size_policy_path=Path("policy.toml"))
+    elif provider == "tree":
+        checker.check_repository(Path("."), ["commit"], tree_policy_path=Path("policy.toml"))
+    else:
+        raise AssertionError("test provider is not recognized")
+
+
+def test_revision_is_rejected_without_a_committed_provider() -> None:
+    with pytest.raises(InputError, match="--revision requires a committed-tree provider"):
+        checker.check_repository(Path("."), ["commit"], revision="HEAD")
+
+
+def test_committed_providers_share_one_identity_and_run_in_canonical_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = object()
+    events: list[str] = []
+    policy_paths = {
+        "mode": tmp_path / "mode.toml",
+        "path": tmp_path / "path.toml",
+        "size": tmp_path / "size.toml",
+        "tree": tmp_path / "tree.toml",
+    }
+
+    def fake_commit(*args: object, **kwargs: object) -> ValidationReport:
+        events.append("commit")
+        assert kwargs["commit"] == "commit-source"
+        return passing_commit_report()
+
+    def fake_resolve(repository: Path, revision: str, **kwargs: object) -> object:
+        events.append("resolve")
+        assert repository == tmp_path
+        assert revision == "release-candidate"
+        assert kwargs == {
+            "grafts_message": "repository committed-tree selection rejects legacy graft overlays"
+        }
+        return identity
+
+    def fake_provider(
+        name: str,
+        result: CheckedMode | CheckedPath | CheckedSize | CheckedTree,
+    ) -> object:
+        def run(repository: Path, **kwargs: object) -> object:
+            events.append(name)
+            assert repository == tmp_path
+            assert kwargs == {
+                "policy_path": policy_paths[name],
+                "revision": "release-candidate",
+                "identity": identity,
+            }
+            return result
+
+        return run
+
+    monkeypatch.setattr(checker, "check_git_commits", fake_commit)
+    monkeypatch.setattr(checker, "resolve_committed_tree", fake_resolve)
+    monkeypatch.setattr(
+        checker,
+        "check_mode_policy",
+        fake_provider("mode", passing_mode_check(tmp_path)),
+    )
+    monkeypatch.setattr(
+        checker,
+        "check_path_policy",
+        fake_provider("path", passing_path_check(tmp_path)),
+    )
+    monkeypatch.setattr(
+        checker,
+        "check_size_policy",
+        fake_provider("size", passing_size_check(tmp_path)),
+    )
+    monkeypatch.setattr(
+        checker,
+        "check_tree_policy",
+        fake_provider("tree", passing_tree_check(tmp_path)),
+    )
+
+    report = checker.check_repository(
+        tmp_path,
+        ["tree", "size", "path", "mode", "commit"],
+        commit="commit-source",
+        revision="release-candidate",
+        mode_policy_path=policy_paths["mode"],
+        path_policy_path=policy_paths["path"],
+        size_policy_path=policy_paths["size"],
+        tree_policy_path=policy_paths["tree"],
+    )
+
+    assert events == ["commit", "resolve", "mode", "path", "size", "tree"]
+    assert [check.provider for check in report.checks] == [
+        RepositoryProvider.COMMIT,
+        RepositoryProvider.MODE,
+        RepositoryProvider.PATH,
+        RepositoryProvider.SIZE,
+        RepositoryProvider.TREE,
+    ]
+    assert report.passed == 5
+
+
+def test_shared_committed_identity_error_marks_every_selected_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = GitError("selected tree is missing")
+    calls = {"resolve": 0}
+
+    def fail_resolve(*args: object, **kwargs: object) -> object:
+        calls["resolve"] += 1
+        raise error
+
+    monkeypatch.setattr(checker, "resolve_committed_tree", fail_resolve)
+    for name in (
+        "check_mode_policy",
+        "check_path_policy",
+        "check_size_policy",
+        "check_tree_policy",
+    ):
+        monkeypatch.setattr(
+            checker,
+            name,
+            lambda *args, **kwargs: pytest.fail("provider must not run after identity failure"),
+        )
+
+    report = checker.check_repository(
+        tmp_path,
+        ["mode", "path", "size", "tree"],
+        revision="missing",
+        mode_policy_path=Path("mode.toml"),
+        path_policy_path=Path("path.toml"),
+        size_policy_path=Path("size.toml"),
+        tree_policy_path=Path("tree.toml"),
+    )
+
+    assert calls == {"resolve": 1}
+    assert report.errored == 4
+    assert all(check.error is error for check in report.checks)
+
+
+def test_committed_policy_error_does_not_stop_sibling_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = object()
+    calls: list[str] = []
+    monkeypatch.setattr(checker, "resolve_committed_tree", lambda *args, **kwargs: identity)
+
+    def fail_mode(*args: object, **kwargs: object) -> CheckedMode:
+        calls.append("mode")
+        raise InputError("invalid mode policy")
+
+    def pass_path(*args: object, **kwargs: object) -> CheckedPath:
+        calls.append("path")
+        assert kwargs["identity"] is identity
+        return passing_path_check(tmp_path)
+
+    monkeypatch.setattr(checker, "check_mode_policy", fail_mode)
+    monkeypatch.setattr(checker, "check_path_policy", pass_path)
+
+    report = checker.check_repository(
+        tmp_path,
+        ["path", "mode"],
+        revision="release-candidate",
+        mode_policy_path=Path("mode.toml"),
+        path_policy_path=Path("path.toml"),
+    )
+
+    assert calls == ["mode", "path"]
+    assert [check.status for check in report.checks] == [
+        RepositoryCheckStatus.ERROR,
+        RepositoryCheckStatus.PASSED,
+    ]
+    assert report.status is RepositoryCheckStatus.ERROR

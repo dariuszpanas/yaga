@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from itertools import islice
 from typing import Any
 
 from yaga.commits.models import OutputFormat, ValidationReport
@@ -16,11 +17,47 @@ from yaga.commits.reporting import (
     safe_text,
 )
 from yaga.errors import YagaError, safe_error_text
+from yaga.modes.reporting import (
+    ModeOutputFormat,
+    mode_report_document,
+    render_mode_report,
+)
+from yaga.modes.reporting import (
+    _github_annotation as _mode_github_annotation,
+)
+from yaga.modes.service import CheckedMode
+from yaga.paths.reporting import (
+    PathOutputFormat,
+    path_report_document,
+    render_path_report,
+)
+from yaga.paths.reporting import (
+    _github_annotation as _path_github_annotation,
+)
+from yaga.paths.service import CheckedPath
 from yaga.repository.models import (
     RepositoryCheckResult,
     RepositoryOutputFormat,
     RepositoryReport,
 )
+from yaga.sizes.reporting import (
+    SizeOutputFormat,
+    render_size_report,
+    size_report_document,
+)
+from yaga.sizes.reporting import (
+    _github_annotation as _size_github_annotation,
+)
+from yaga.sizes.service import CheckedSize
+from yaga.trees.reporting import (
+    TreeOutputFormat,
+    render_tree_report,
+    tree_report_document,
+)
+from yaga.trees.reporting import (
+    _github_annotation as _tree_github_annotation,
+)
+from yaga.trees.service import CheckedTree
 from yaga.workflows.models import (
     WorkflowDiagnostic,
     WorkflowLintReport,
@@ -128,6 +165,14 @@ def _provider_document(check: RepositoryCheckResult) -> dict[str, Any]:
         return workflow_security_report_document(report)
     if isinstance(report, WorkflowReport):
         return workflow_report_document(report)
+    if isinstance(report, CheckedMode):
+        return mode_report_document(report)
+    if isinstance(report, CheckedPath):
+        return path_report_document(report)
+    if isinstance(report, CheckedSize):
+        return size_report_document(report)
+    if isinstance(report, CheckedTree):
+        return tree_report_document(report)
     raise AssertionError("repository provider report has an unknown type")
 
 
@@ -155,6 +200,14 @@ def _provider_text(check: RepositoryCheckResult) -> str:
         return render_workflow_security_report(report, WorkflowOutputFormat.TEXT)
     if isinstance(report, WorkflowReport):
         return render_workflow_report(report, WorkflowOutputFormat.TEXT)
+    if isinstance(report, CheckedMode):
+        return render_mode_report(report, ModeOutputFormat.TEXT)
+    if isinstance(report, CheckedPath):
+        return render_path_report(report, PathOutputFormat.TEXT)
+    if isinstance(report, CheckedSize):
+        return render_size_report(report, SizeOutputFormat.TEXT)
+    if isinstance(report, CheckedTree):
+        return render_tree_report(report, TreeOutputFormat.TEXT)
     raise AssertionError("repository provider report has an unknown type")
 
 
@@ -167,14 +220,21 @@ def _render_github_report(report: RepositoryReport) -> str:
         )
         lines.extend((f"::group::{group}", _provider_text(check), "::endgroup::"))
 
-    annotations = [
-        annotation for check in report.checks for annotation in _provider_annotations(check)
-    ]
-    visible = annotations
-    omitted = 0
-    if len(annotations) > MAX_REPOSITORY_ANNOTATIONS:
-        visible = annotations[: MAX_REPOSITORY_ANNOTATIONS - 1]
-        omitted = len(annotations) - len(visible)
+    annotation_count = sum(_provider_annotation_count(check) for check in report.checks)
+    visible_limit = (
+        annotation_count
+        if annotation_count <= MAX_REPOSITORY_ANNOTATIONS
+        else MAX_REPOSITORY_ANNOTATIONS - 1
+    )
+    visible: list[str] = []
+    for check in report.checks:
+        remaining = visible_limit - len(visible)
+        if remaining <= 0:
+            break
+        visible.extend(_provider_annotations(check, limit=remaining))
+    if len(visible) != visible_limit:
+        raise AssertionError("repository report has an inconsistent diagnostic count")
+    omitted = annotation_count - len(visible)
     lines.extend(visible)
     if omitted:
         title = _github_property("YAGA repository check", maximum=MAX_GITHUB_TITLE)
@@ -187,7 +247,30 @@ def _render_github_report(report: RepositoryReport) -> str:
     return "\n".join(lines)
 
 
-def _provider_annotations(check: RepositoryCheckResult) -> list[str]:
+def _provider_annotation_count(check: RepositoryCheckResult) -> int:
+    if check.error is not None:
+        return 1
+    report = check.report
+    if isinstance(report, ValidationReport):
+        return sum(len(result.diagnostics) for result in report.results)
+    if isinstance(report, WorkflowLintReport | WorkflowSecurityReport | WorkflowReport):
+        return sum(len(result.diagnostics) for result in report.results)
+    if isinstance(report, CheckedMode | CheckedPath):
+        return report.report.finding_count
+    if isinstance(report, CheckedSize | CheckedTree):
+        return len(report.report.diagnostics)
+    raise AssertionError("repository provider report has an unknown type")
+
+
+def _provider_annotations(
+    check: RepositoryCheckResult,
+    *,
+    limit: int,
+) -> tuple[str, ...]:
+    if not 0 <= limit <= MAX_REPOSITORY_ANNOTATIONS:
+        raise ValueError("repository annotation limit is out of bounds")
+    if limit == 0:
+        return ()
     if check.error is not None:
         title = _github_property(
             f"YAGA {check.provider.value}",
@@ -197,7 +280,7 @@ def _provider_annotations(check: RepositoryCheckResult) -> list[str]:
             f"YAGA {check.error.kind} error: {safe_error_text(check.error)}",
             maximum=MAX_DIAGNOSTIC_MESSAGE,
         )
-        return [f"::error title={title}::{data}"]
+        return (f"::error title={title}::{data}",)
 
     report = check.report
     if isinstance(report, ValidationReport):
@@ -215,25 +298,50 @@ def _provider_annotations(check: RepositoryCheckResult) -> list[str]:
                     maximum=MAX_DISPLAY_HEADER + MAX_DIAGNOSTIC_MESSAGE,
                 )
                 annotations.append(f"::error title={title}::{data}")
-        return annotations
+                if len(annotations) == limit:
+                    return tuple(annotations)
+        return tuple(annotations)
     if isinstance(report, WorkflowLintReport):
-        return [
-            _workflow_annotation(result, diagnostic)
-            for result in report.results
-            for diagnostic in result.diagnostics
-        ]
+        return tuple(
+            islice(
+                (
+                    _workflow_annotation(result, diagnostic)
+                    for result in report.results
+                    for diagnostic in result.diagnostics
+                ),
+                limit,
+            )
+        )
     if isinstance(report, WorkflowSecurityReport):
-        return [
-            _workflow_annotation(result, diagnostic)
-            for result in report.results
-            for diagnostic in result.diagnostics
-        ]
+        return tuple(
+            islice(
+                (
+                    _workflow_annotation(result, diagnostic)
+                    for result in report.results
+                    for diagnostic in result.diagnostics
+                ),
+                limit,
+            )
+        )
     if isinstance(report, WorkflowReport):
-        return [
-            _workflow_annotation(result, diagnostic)
-            for result in report.results
-            for diagnostic in result.diagnostics
-        ]
+        return tuple(
+            islice(
+                (
+                    _workflow_annotation(result, diagnostic)
+                    for result in report.results
+                    for diagnostic in result.diagnostics
+                ),
+                limit,
+            )
+        )
+    if isinstance(report, CheckedMode):
+        return tuple(_mode_github_annotation(item) for item in report.report.diagnostics[:limit])
+    if isinstance(report, CheckedPath):
+        return tuple(_path_github_annotation(item) for item in report.report.diagnostics[:limit])
+    if isinstance(report, CheckedSize):
+        return tuple(_size_github_annotation(item) for item in report.report.diagnostics[:limit])
+    if isinstance(report, CheckedTree):
+        return tuple(_tree_github_annotation(item) for item in report.report.diagnostics[:limit])
     raise AssertionError("repository provider report has an unknown type")
 
 

@@ -300,6 +300,7 @@ def _validate_path_revision(value: object) -> str:
         or not value
         or len(value) > MAX_PATH_REVISION_CHARS
         or value.startswith(("-", "^"))
+        or ":" in value
         or ".." in value
         or any(selector in value for selector in ("^@", "^!", "^-"))
         or any(character.isspace() or _unsafe_revision_character(character) for character in value)

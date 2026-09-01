@@ -70,7 +70,16 @@ def test_repo_help_exposes_closed_explicit_provider_contract() -> None:
     assert "Run explicit repository check providers" in group.stdout
     assert command.exit_code == 0
     command_help = unstyle(command.stdout)
-    for provider in ("commit", "workflow", "workflow-security", "workflow-lint"):
+    for provider in (
+        "commit",
+        "workflow",
+        "workflow-security",
+        "workflow-lint",
+        "mode",
+        "path",
+        "size",
+        "tree",
+    ):
         assert provider in command_help
     assert "Repeat" in command_help
     assert "explicitly." in command_help
@@ -80,6 +89,9 @@ def test_repo_help_exposes_closed_explicit_provider_contract() -> None:
     assert "recommended-v2" in command_help
     assert "recommended-v3" in command_help
     assert "--plan" in command_help
+    assert "--revision" in command_help
+    for option in ("--mode-policy", "--path-policy", "--size-policy", "--tree-policy"):
+        assert option in command_help
 
 
 @pytest.mark.parametrize(
@@ -109,6 +121,10 @@ def test_repo_plan_supplies_selection_and_preserves_runtime_flags(
             workflow_paths=(PurePosixPath(".github/workflows/ci.yml"),),
             workflow_security_profile=WorkflowSecurityProfile.RECOMMENDED_V3,
             workflow_security_rules=(),
+            mode_policy_path=None,
+            path_policy_path=None,
+            size_policy_path=None,
+            tree_policy_path=None,
         )
 
     def fake_check_repository(
@@ -160,9 +176,14 @@ def test_repo_plan_supplies_selection_and_preserves_runtime_flags(
         "config": config_path,
         "commit": expected_commit,
         "revision_range": expected_range,
+        "revision": None,
         "workflow_paths": (Path(".github/workflows/ci.yml"),),
         "workflow_security_profile": WorkflowSecurityProfile.RECOMMENDED_V3,
         "workflow_security_rules": (),
+        "mode_policy_path": None,
+        "path_policy_path": None,
+        "size_policy_path": None,
+        "tree_policy_path": None,
     }
 
 
@@ -173,6 +194,10 @@ def test_repo_plan_supplies_selection_and_preserves_runtime_flags(
         ["--workflow-path", ".github/workflows/ci.yml"],
         ["--workflow-security-profile", "recommended-v3"],
         ["--workflow-security-rule", "permissions.explicit"],
+        ["--mode-policy", ".yaga/mode-policy.toml"],
+        ["--path-policy", ".yaga/path-policy.toml"],
+        ["--size-policy", ".yaga/size-policy.toml"],
+        ["--tree-policy", ".yaga/tree-policy.toml"],
     ],
 )
 def test_repo_plan_rejects_every_command_line_selection_option_before_loading(
@@ -204,7 +229,8 @@ def test_repo_plan_rejects_every_command_line_selection_option_before_loading(
     document = json.loads(result.stderr)
     assert document["error"]["message"] == (
         "--plan cannot be combined with --check, --workflow-path, "
-        "--workflow-security-profile, or --workflow-security-rule"
+        "--workflow-security-profile, --workflow-security-rule, --mode-policy, "
+        "--path-policy, --size-policy, or --tree-policy"
     )
 
 
@@ -351,6 +377,119 @@ def test_repo_plan_workflow_paths_resolve_under_repo_not_plan_directory(
             "diagnostics": [],
         }
     ]
+
+
+def test_repo_plan_v2_policy_paths_resolve_under_runtime_repository(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    plan_directory = tmp_path / "plans" / "nested"
+    plan_directory.mkdir(parents=True)
+    plan = plan_directory / "checks.toml"
+    plan.write_text(
+        "plan-version = 2\n"
+        'checks = ["tree", "size", "path", "mode"]\n'
+        'mode-policy = ".yaga/mode-policy.toml"\n'
+        'path-policy = ".yaga/path-policy.toml"\n'
+        'size-policy = ".yaga/size-policy.toml"\n'
+        'tree-policy = ".yaga/tree-policy.toml"\n',
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_check_repository(
+        selected_repository: Path,
+        providers: object,
+        **kwargs: object,
+    ) -> RepositoryReport:
+        captured["repository"] = selected_repository
+        captured["providers"] = providers
+        captured.update(kwargs)
+        return RepositoryReport(checks=())
+
+    monkeypatch.setattr(repo_commands, "check_repository", fake_check_repository)
+
+    result = runner.invoke(
+        app,
+        [
+            "repo",
+            "check",
+            "--plan",
+            str(plan),
+            "--repo",
+            str(repository),
+            "--revision",
+            "deadbeef",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert captured["repository"] == repository
+    assert captured["providers"] == (
+        RepositoryProvider.MODE,
+        RepositoryProvider.PATH,
+        RepositoryProvider.SIZE,
+        RepositoryProvider.TREE,
+    )
+    assert captured["revision"] == "deadbeef"
+    for provider in ("mode", "path", "size", "tree"):
+        assert captured[f"{provider}_policy_path"] == (
+            repository / ".yaga" / f"{provider}-policy.toml"
+        )
+
+
+def test_repo_plan_v2_policy_path_cannot_escape_repository_through_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = tmp_path / "repository"
+    policy_directory = repository / ".yaga"
+    policy_directory.mkdir(parents=True)
+    outside_policy = tmp_path / "outside-mode-policy.toml"
+    outside_policy.write_text("policy-version = 1\n", encoding="utf-8")
+    linked_policy = policy_directory / "mode-policy.toml"
+    try:
+        linked_policy.symlink_to(outside_policy)
+    except OSError:
+        pytest.skip("symlink creation is unavailable")
+
+    plan = tmp_path / "checks.toml"
+    plan.write_text(
+        'plan-version = 2\nchecks = ["mode"]\nmode-policy = ".yaga/mode-policy.toml"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        repo_commands,
+        "check_repository",
+        lambda *args, **kwargs: pytest.fail("an escaping policy path must not run providers"),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "repo",
+            "check",
+            "--plan",
+            str(plan),
+            "--repo",
+            str(repository),
+            "--revision",
+            "deadbeef",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert json.loads(result.stderr)["error"] == {
+        "kind": "input",
+        "message": "repository plan policy paths must resolve inside the repository",
+    }
 
 
 def test_repo_check_never_discovers_a_conventional_plan_implicitly(

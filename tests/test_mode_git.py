@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from yaga.errors import GitError, InputError
-from yaga.git import GitRepository, ProcessResult
+from yaga.git import GitRepository, ProcessResult, resolve_committed_tree
 from yaga.modes import git as mode_git
 from yaga.modes.models import ModeEntry, ModeSelection
 
@@ -183,6 +183,8 @@ def test_empty_committed_tree_is_accepted(repository: tuple[Path, str]) -> None:
     [
         "",
         "--all",
+        ":vendor",
+        "HEAD:vendor",
         "HEAD..main",
         "HEAD...main",
         "^HEAD",
@@ -214,34 +216,16 @@ def test_missing_repository_and_revision_fail_closed(
     assert "\n" not in str(raised.value)
 
 
-def test_resolution_and_enumeration_use_exact_fixed_commands(
-    tmp_path: Path,
+def test_enumeration_reuses_exact_committed_tree_identity(
+    repository: tuple[Path, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tmp_path.mkdir(exist_ok=True)
-    executable = tmp_path.parent / "trusted-git.exe"
-    executable.write_bytes(b"placeholder")
-    commit_sha = "a" * 40
-    tree_sha = "b" * 40
-    blob_oid = "c" * 40
+    path, _ = repository
+    identity = resolve_committed_tree(path, "HEAD")
+    blob_oid = "c" * len(identity.commit_sha)
     calls: list[tuple[list[str], int]] = []
     graft_checks: list[str] = []
     events: list[tuple[str, object]] = []
-    results = iter(
-        [
-            ProcessResult(0, f"{commit_sha}\n".encode(), b"", False, False, False),
-            ProcessResult(0, f"{tree_sha}\n".encode(), b"", False, False, False),
-            ProcessResult(
-                0,
-                _record("z.txt", oid=blob_oid) + _record("a.txt", oid=blob_oid),
-                b"",
-                False,
-                False,
-                False,
-            ),
-        ]
-    )
-    selected_repository = GitRepository(tmp_path.resolve(), str(executable.resolve()))
 
     def fake_run(
         selected: GitRepository,
@@ -249,33 +233,32 @@ def test_resolution_and_enumeration_use_exact_fixed_commands(
         *,
         stdout_limit: int,
     ) -> ProcessResult:
-        assert selected == selected_repository
+        assert selected == identity.repository
         calls.append((arguments, stdout_limit))
         events.append(("git", tuple(arguments)))
-        return next(results)
+        return ProcessResult(
+            0,
+            _record("z.txt", oid=blob_oid) + _record("a.txt", oid=blob_oid),
+            b"",
+            False,
+            False,
+            False,
+        )
 
     def fake_graft_check(selected: GitRepository, *, message: str) -> None:
-        assert selected == selected_repository
+        assert selected == identity.repository
         graft_checks.append(message)
         events.append(("graft", message))
 
-    monkeypatch.setattr(mode_git, "open_repository", lambda _path: selected_repository)
     monkeypatch.setattr(mode_git, "run_git", fake_run)
     monkeypatch.setattr(mode_git, "require_no_legacy_grafts", fake_graft_check)
 
-    selection = mode_git.read_mode_selection(tmp_path, "topic")
+    selection = mode_git.read_mode_selection(path, "HEAD", identity=identity)
 
     assert tuple(entry.path for entry in selection.entries) == ("a.txt", "z.txt")
+    assert selection.revision == "HEAD"
     assert graft_checks == [mode_git._GRAFTS_MESSAGE, mode_git._GRAFTS_MESSAGE]
     assert calls == [
-        (
-            ["rev-parse", "--verify", "--end-of-options", "topic^{commit}"],
-            mode_git._MAX_GIT_IDENTITY_BYTES,
-        ),
-        (
-            ["rev-parse", "--verify", "--end-of-options", f"{commit_sha}^{{tree}}"],
-            mode_git._MAX_GIT_IDENTITY_BYTES,
-        ),
         (
             [
                 "ls-tree",
@@ -283,7 +266,7 @@ def test_resolution_and_enumeration_use_exact_fixed_commands(
                 "-z",
                 "--full-tree",
                 "--format=%(objectmode)%x20%(objecttype)%x20%(objectname)%x09%(path)",
-                tree_sha,
+                identity.tree_sha,
                 "--",
             ],
             mode_git.MAX_GIT_MODE_BYTES,
@@ -292,62 +275,25 @@ def test_resolution_and_enumeration_use_exact_fixed_commands(
     assert events == [
         ("graft", mode_git._GRAFTS_MESSAGE),
         ("git", tuple(calls[0][0])),
-        ("git", tuple(calls[1][0])),
-        ("git", tuple(calls[2][0])),
         ("graft", mode_git._GRAFTS_MESSAGE),
     ]
 
 
-def test_commit_and_tree_hash_formats_must_match(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    executable = tmp_path.parent / "trusted-git.exe"
-    executable.write_bytes(b"placeholder")
-    results = iter(
-        [
-            ProcessResult(0, b"a" * 40 + b"\n", b"", False, False, False),
-            ProcessResult(0, b"b" * 64 + b"\n", b"", False, False, False),
-        ]
-    )
-    selected_repository = GitRepository(tmp_path.resolve(), str(executable.resolve()))
-    monkeypatch.setattr(mode_git, "open_repository", lambda _path: selected_repository)
-    monkeypatch.setattr(mode_git, "run_git", lambda *_args, **_kwargs: next(results))
-    monkeypatch.setattr(mode_git, "require_no_legacy_grafts", lambda *_args, **_kwargs: None)
-
-    with pytest.raises(GitError, match="inconsistent object identity lengths"):
-        mode_git.read_mode_selection(tmp_path, "HEAD")
-
-
-@pytest.mark.parametrize("call_index", [0, 1, 2])
 def test_successful_git_commands_must_not_write_stderr(
-    tmp_path: Path,
+    repository: tuple[Path, str],
     monkeypatch: pytest.MonkeyPatch,
-    call_index: int,
 ) -> None:
-    executable = tmp_path.parent / "trusted-git.exe"
-    executable.write_bytes(b"placeholder")
-    values = [
-        ProcessResult(0, b"a" * 40 + b"\n", b"", False, False, False),
-        ProcessResult(0, b"b" * 40 + b"\n", b"", False, False, False),
-        ProcessResult(0, b"", b"", False, False, False),
-    ]
-    values[call_index] = ProcessResult(
-        values[call_index].returncode,
-        values[call_index].stdout,
-        b"warning\n",
-        False,
-        False,
-        False,
+    path, _ = repository
+    identity = resolve_committed_tree(path, "HEAD")
+    monkeypatch.setattr(
+        mode_git,
+        "run_git",
+        lambda *_args, **_kwargs: ProcessResult(0, b"", b"warning\n", False, False, False),
     )
-    results = iter(values)
-    selected_repository = GitRepository(tmp_path.resolve(), str(executable.resolve()))
-    monkeypatch.setattr(mode_git, "open_repository", lambda _path: selected_repository)
-    monkeypatch.setattr(mode_git, "run_git", lambda *_args, **_kwargs: next(results))
     monkeypatch.setattr(mode_git, "require_no_legacy_grafts", lambda *_args, **_kwargs: None)
 
     with pytest.raises(GitError, match="unexpected error output"):
-        mode_git.read_mode_selection(tmp_path, "HEAD")
+        mode_git.read_mode_selection(path, "HEAD", identity=identity)
 
 
 def test_parser_accepts_all_modes_sha256_and_structural_policy_characters() -> None:

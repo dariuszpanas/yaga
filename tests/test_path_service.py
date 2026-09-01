@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 
+from yaga.git import CommittedTreeIdentity
 from yaga.paths import service
 from yaga.paths.checker import check_paths
 from yaga.paths.models import LoadedPathPolicy, PathPolicy, PathReport, PathSelection
@@ -23,9 +24,11 @@ def _selection(repository: Path) -> PathSelection:
     )
 
 
+@pytest.mark.parametrize("reuse_identity", [False, True])
 def test_path_service_composes_loader_git_and_checker_in_order(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    reuse_identity: bool,
 ) -> None:
     repository = tmp_path / "repository"
     policy_path = (tmp_path / "path-policy.toml").resolve()
@@ -33,14 +36,20 @@ def test_path_service_composes_loader_git_and_checker_in_order(
     loaded = LoadedPathPolicy(policy=policy, path=policy_path)
     selection = _selection(repository)
     report = check_paths(policy, selection)
+    identity = cast(CommittedTreeIdentity, object())
     calls: list[tuple[object, ...]] = []
 
     def fake_load(selected_path: Path) -> LoadedPathPolicy:
         calls.append(("load", selected_path))
         return loaded
 
-    def fake_read(selected_repository: Path, revision: str) -> PathSelection:
-        calls.append(("git", selected_repository, revision))
+    def fake_read(
+        selected_repository: Path,
+        revision: str,
+        *,
+        identity: CommittedTreeIdentity | None = None,
+    ) -> PathSelection:
+        calls.append(("git", selected_repository, revision, identity))
         return selection
 
     def fake_check(
@@ -58,12 +67,13 @@ def test_path_service_composes_loader_git_and_checker_in_order(
         repository,
         policy_path=Path("path-policy.toml"),
         revision="release-candidate",
+        identity=identity if reuse_identity else None,
     )
 
     assert checked == CheckedPath(report=report, policy_path=policy_path)
     assert calls == [
         ("load", Path("path-policy.toml")),
-        ("git", repository, "release-candidate"),
+        ("git", repository, "release-candidate", identity if reuse_identity else None),
         ("check", policy, selection),
     ]
 

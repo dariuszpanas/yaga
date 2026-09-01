@@ -1,4 +1,17 @@
-plan-version = 1
-checks = ["commit", "workflow", "workflow-security", "workflow-lint"]
+plan-version = 2
+checks = [
+  "commit",
+  "workflow",
+  "workflow-security",
+  "workflow-lint",
+  "mode",
+  "path",
+  "size",
+  "tree",
+]
 workflow-paths = [".github/workflows", "examples"]
 workflow-security-profile = "recommended-v3"
+mode-policy = ".yaga/mode-policy.toml"
+path-policy = ".yaga/path-policy.toml"
+size-policy = ".yaga/size-policy.toml"
+tree-policy = ".yaga/tree-policy.toml"

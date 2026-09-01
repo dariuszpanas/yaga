@@ -14,10 +14,12 @@ uv sync --group dev
 uv run make ci
 ```
 
-The full gate invokes `yaga repo check --plan .yaga/checks/ci.toml --commit HEAD`; that explicit
-versioned plan selects the same providers and workflow paths locally and in CI, including the
-Docker-backed `workflow-lint` provider. The installed CLI uses the locked Typer dependency. The
-write-capable root Action import graph—`__main__` in gate mode, `action_cli`, `action`, `codex`, and
+The full gate invokes
+`yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD`; that explicit
+versioned plan selects the same providers, workflow paths, and committed-tree policies locally and
+in CI, including the Docker-backed `workflow-lint` provider. The installed CLI uses the locked
+Typer dependency. The write-capable root Action import graph—`__main__` in gate mode, `action_cli`,
+`action`, `codex`, and
 the generic GitHub primitives—must remain Python-standard-library-only and must not import the
 installed CLI, command, commit-policy, or presentation modules. The separate read-only commit
 Action may import dependency-light commit modules, but never Typer, command modules, Codex policy,
@@ -276,24 +278,30 @@ for success, `1` for lint findings, and `2` for operational failure. The lint co
 must remain absent from both dependency-free composite Action import graphs.
 
 The installed-only `repo check` aggregate lives under `src/yaga/repository/`. It requires an
-explicit, unique provider list closed to `commit`, `workflow`, `workflow-security`, and
-`workflow-lint`; never add an implicit `all` path that changes when a provider is introduced.
-Execute in that canonical order, load workflow inputs once, share one bounded composition between
-the pure workflow providers, keep provider reports separate, and continue independent providers
-after expected operational errors. A pure parse error belongs to the selected pure providers but
-must not suppress independent actionlint. Preserve one global GitHub annotation budget and exits
-`0` for all passed, `1` for findings only, and `2` when any provider errors. Provider-specific
-arguments must fail when their provider is absent. The aggregate remains outside both Action import
-graphs and does not replace the event-bound commit Action.
+explicit, unique provider list closed to `commit`, `workflow`, `workflow-security`,
+`workflow-lint`, `mode`, `path`, `size`, and `tree`; never add an implicit `all` path that changes
+when a provider is introduced. Execute in that canonical order, load workflow inputs once, share
+one bounded composition between the pure workflow providers, keep provider reports separate, and
+continue independent providers after expected operational errors. A pure parse error belongs to
+the selected pure providers but must not suppress independent actionlint. For one or more
+committed-tree providers, require one exact runtime `--revision`, resolve its commit/tree identity
+once, and retain each provider's independent enumeration and parsing contract. Never infer `HEAD`
+or reuse the commit provider source as that revision. Preserve one global GitHub annotation budget
+and exits `0` for all passed, `1` for findings only, and `2` when any provider errors. Provider-
+specific arguments must fail when their provider is absent. The aggregate remains outside both
+Action import graphs and does not replace the event-bound commit Action.
 
 Repository check plans are explicit saved provider selections, never implicit configuration. Keep
 their TOML schema versioned, closed, portable, and strictly bounded; reject unknown keys and
-versions, unsafe workflow paths, duplicate values, and inconsistent provider arguments. Plans may
-hold only checks, workflow paths, and a workflow-security profile or exact rules. Keep repository,
-commit configuration, commit/range selection, and output format as runtime CLI options. Do not add
-includes, discovery, environment interpolation, expressions, commands, or secret fields. Resolve
-plan workflow paths only under the runtime repository, never relative to the plan file. A
-pull-request-controlled plan remains an unprivileged quality policy, not a security authority.
+versions, unsafe paths, duplicate values, and inconsistent provider arguments. Plan v1 remains
+frozen to the original four providers, workflow paths, and workflow-security selection. Plan v2
+adds the committed-tree providers plus one exact repository-relative policy path per selected
+provider. Keep repository, commit configuration, commit/range selection, committed-tree revision,
+and output format as runtime CLI options. Do not add includes, discovery, environment
+interpolation, expressions, commands, or secret fields. Resolve every plan path only under the
+runtime repository, never relative to the plan file, and reject policy paths that resolve outside
+it through a symlink or junction. A pull-request-controlled plan remains an unprivileged quality
+policy, not a security authority.
 
 The pre-commit provider manifest exposes exactly one `commit-msg` hook. Keep it as a direct
 `language: python` adapter to `yaga commit check --file`; do not add shell indirection, filename

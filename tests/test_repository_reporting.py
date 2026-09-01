@@ -14,6 +14,14 @@ from yaga.commits.models import (
     ValidationReport,
 )
 from yaga.errors import InputError
+from yaga.modes.checker import check_modes
+from yaga.modes.models import ModeEntry, ModeKind, ModePolicy, ModeSelection
+from yaga.modes.reporting import ModeOutputFormat, mode_report_document, render_mode_report
+from yaga.modes.service import CheckedMode
+from yaga.paths.checker import check_paths
+from yaga.paths.models import PathPolicy, PathSelection
+from yaga.paths.reporting import PathOutputFormat, path_report_document, render_path_report
+from yaga.paths.service import CheckedPath
 from yaga.repository.models import (
     RepositoryCheckResult,
     RepositoryCheckStatus,
@@ -26,6 +34,12 @@ from yaga.repository.reporting import (
     render_repository_error,
     render_repository_report,
 )
+from yaga.sizes.models import BlobEntry, SizePolicy, SizeReport, SizeSelection
+from yaga.sizes.reporting import SizeOutputFormat, render_size_report, size_report_document
+from yaga.sizes.service import CheckedSize
+from yaga.trees.models import TreePolicy, TreeReport, TreeSelection
+from yaga.trees.reporting import TreeOutputFormat, render_tree_report, tree_report_document
+from yaga.trees.service import CheckedTree
 from yaga.workflows.models import (
     WorkflowDiagnostic,
     WorkflowLintReport,
@@ -98,6 +112,82 @@ def security_report(
                 diagnostics=diagnostics,
             ),
         ),
+    )
+
+
+def mode_check(tmp_path: Path, *, findings: int = 0) -> CheckedMode:
+    entries = (
+        tuple(
+            ModeEntry(f"bin/run-{index:03d}", "c" * 40, "100755", "blob")
+            for index in range(findings)
+        )
+        if findings
+        else (ModeEntry("README.md", "c" * 40, "100644", "blob"),)
+    )
+    selection = ModeSelection(
+        repository=(tmp_path / "repository").resolve(),
+        revision="release-candidate",
+        commit_sha="a" * 40,
+        tree_sha="b" * 40,
+        entries=entries,
+    )
+    return CheckedMode(
+        report=check_modes(ModePolicy(1, (ModeKind.REGULAR,)), selection),
+        policy_path=(tmp_path / "mode-policy.toml").resolve(),
+    )
+
+
+def path_check(tmp_path: Path, *, findings: int = 0) -> CheckedPath:
+    paths = (
+        tuple(f"bad-{index:03d}?.txt" for index in range(findings)) if findings else ("README.md",)
+    )
+    selection = PathSelection(
+        repository=(tmp_path / "repository").resolve(),
+        revision="release-candidate",
+        commit_sha="a" * 40,
+        tree_sha="b" * 40,
+        paths=paths,
+    )
+    return CheckedPath(
+        report=check_paths(PathPolicy(1, rules=("windows-characters",)), selection),
+        policy_path=(tmp_path / "path-policy.toml").resolve(),
+    )
+
+
+def size_check(tmp_path: Path) -> CheckedSize:
+    selection = SizeSelection(
+        repository=(tmp_path / "repository").resolve(),
+        revision="release-candidate",
+        commit_sha="a" * 40,
+        tree_sha="b" * 40,
+        blobs=(BlobEntry("README.md", "c" * 40, "100644", 5),),
+        gitlinks=(),
+    )
+    return CheckedSize(
+        report=SizeReport(
+            policy=SizePolicy(1, default_max_blob_bytes=10),
+            selection=selection,
+            diagnostics=(),
+        ),
+        policy_path=(tmp_path / "size-policy.toml").resolve(),
+    )
+
+
+def tree_check(tmp_path: Path) -> CheckedTree:
+    selection = TreeSelection(
+        repository=(tmp_path / "repository").resolve(),
+        revision="release-candidate",
+        commit_sha="a" * 40,
+        tree_sha="b" * 40,
+        paths=("README.md",),
+    )
+    return CheckedTree(
+        report=TreeReport(
+            policy=TreePolicy(1, required_paths=("README.md",), forbidden_patterns=()),
+            selection=selection,
+            diagnostics=(),
+        ),
+        policy_path=(tmp_path / "tree-policy.toml").resolve(),
     )
 
 
@@ -345,3 +435,88 @@ def test_repository_json_invocation_error_has_a_stable_kind() -> None:
         "valid": False,
         "error": {"kind": "input", "message": "bad?path"},
     }
+
+
+def test_repository_json_embeds_standalone_committed_provider_documents_unchanged(
+    tmp_path: Path,
+) -> None:
+    checked = (
+        (RepositoryProvider.MODE, mode_check(tmp_path)),
+        (RepositoryProvider.PATH, path_check(tmp_path)),
+        (RepositoryProvider.SIZE, size_check(tmp_path)),
+        (RepositoryProvider.TREE, tree_check(tmp_path)),
+    )
+    report = RepositoryReport(
+        checks=tuple(
+            RepositoryCheckResult(provider=provider, report=provider_report)
+            for provider, provider_report in checked
+        )
+    )
+
+    document = json.loads(render_repository_report(report, RepositoryOutputFormat.JSON))
+
+    assert [item["provider"] for item in document["checks"]] == [
+        "mode",
+        "path",
+        "size",
+        "tree",
+    ]
+    assert document["checks"][0]["report"] == mode_report_document(checked[0][1])
+    assert document["checks"][1]["report"] == path_report_document(checked[1][1])
+    assert document["checks"][2]["report"] == size_report_document(checked[2][1])
+    assert document["checks"][3]["report"] == tree_report_document(checked[3][1])
+
+
+def test_repository_text_uses_standalone_committed_provider_text(
+    tmp_path: Path,
+) -> None:
+    mode = mode_check(tmp_path)
+    path = path_check(tmp_path)
+    size = size_check(tmp_path)
+    tree = tree_check(tmp_path)
+    report = RepositoryReport(
+        checks=(
+            RepositoryCheckResult(RepositoryProvider.MODE, report=mode),
+            RepositoryCheckResult(RepositoryProvider.PATH, report=path),
+            RepositoryCheckResult(RepositoryProvider.SIZE, report=size),
+            RepositoryCheckResult(RepositoryProvider.TREE, report=tree),
+        )
+    )
+
+    rendered = render_repository_report(report, RepositoryOutputFormat.TEXT)
+
+    assert render_mode_report(mode, ModeOutputFormat.TEXT) in rendered
+    assert render_path_report(path, PathOutputFormat.TEXT) in rendered
+    assert render_size_report(size, SizeOutputFormat.TEXT) in rendered
+    assert render_tree_report(tree, TreeOutputFormat.TEXT) in rendered
+    assert rendered.endswith("Repository checks: 4 selected; 4 passed, 0 failed, 0 errored.")
+
+
+def test_repository_github_budget_counts_bounded_mode_and_path_diagnostics_exactly(
+    tmp_path: Path,
+) -> None:
+    mode = mode_check(tmp_path, findings=300)
+    path = path_check(tmp_path, findings=300)
+    assert len(mode.report.diagnostics) == 256
+    assert mode.report.finding_count == 300
+    assert len(path.report.diagnostics) == 256
+    assert path.report.finding_count == 300
+    report = RepositoryReport(
+        checks=(
+            RepositoryCheckResult(RepositoryProvider.MODE, report=mode),
+            RepositoryCheckResult(RepositoryProvider.PATH, report=path),
+        )
+    )
+
+    rendered = render_repository_report(report, RepositoryOutputFormat.GITHUB)
+    annotations = [line for line in rendered.splitlines() if line.startswith("::error")]
+
+    assert len(annotations) == MAX_REPOSITORY_ANNOTATIONS
+    assert all("title=YAGA mode.disallowed" in line for line in annotations[:-1])
+    assert annotations[-1] == (
+        "::error title=YAGA repository check::551 additional repository diagnostic(s) omitted"
+    )
+    assert rendered.count("::group::") == 2
+    assert rendered.count("::endgroup::") == 2
+    assert "292 additional diagnostic(s) omitted" in rendered
+    assert rendered.endswith("YAGA repository checks: 2 selected; 0 passed, 2 failed, 0 errored.")

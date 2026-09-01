@@ -79,6 +79,12 @@ def test_blob_entry_and_selection_preserve_logical_duplicate_oid_paths(
     assert selection.gitlinks == ("vendor/submodule",)
 
 
+@pytest.mark.parametrize("revision", [":vendor", "HEAD:vendor"])
+def test_size_selection_rejects_git_path_revision(tmp_path: Path, revision: str) -> None:
+    with pytest.raises(ValueError, match="size revision"):
+        SizeSelection(tmp_path.resolve(), revision, OID, TREE_OID, (), ())
+
+
 @pytest.mark.parametrize("mode", ["100600", "040000", "160000", "blob"])
 def test_blob_entry_rejects_non_blob_modes(mode: str) -> None:
     with pytest.raises(ValueError, match="mode"):

@@ -12,12 +12,8 @@ check:
 	uv run ruff format --check .
 	uv run ty check
 	uv run pre-commit validate-manifest .pre-commit-hooks.yaml
-	uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD
+	uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD
 	uv run yaga change check --policy .yaga/change-policy.toml --range HEAD^..HEAD
-	uv run yaga mode check --policy .yaga/mode-policy.toml --revision HEAD
-	uv run yaga path check --policy .yaga/path-policy.toml --revision HEAD
-	uv run yaga size check --policy .yaga/size-policy.toml --revision HEAD
-	uv run yaga tree check --policy .yaga/tree-policy.toml --revision HEAD
 	bash -n scripts/composite_smoke_python
 
 test:
