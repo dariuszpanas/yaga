@@ -75,6 +75,14 @@ jobs:
           --policy .yaga/path-policy.toml
           --revision "$YAGA_PATH_REVISION"
           --format github
+      - name: Check committed entry modes
+        env:
+          YAGA_MODE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          uv run --frozen --python 3.12 yaga mode check
+          --policy .yaga/mode-policy.toml
+          --revision "$YAGA_MODE_REVISION"
+          --format github
       - name: Check committed blob sizes
         env:
           YAGA_SIZE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}

@@ -144,6 +144,24 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   diagnostic, and exact-count boundaries. Reject legacy graft overlays before resolution and
   recheck after enumeration. Shallow repositories are allowed when selected objects exist. Keep
   the provider out of both Action graphs and repository-plan v1.
+- Keep `mode check` installed-only and require an explicit versioned policy plus exact commit-ish;
+  only `--repo` may default to `.`. Never infer HEAD, discover policy, fetch, parse events, inspect
+  the worktree/index/untracked state, read tracked content or symlink targets, or recurse into
+  gitlinks. Schema v1 requires a nonempty unique `default-allowed-modes` list and permits at most
+  128 ordered, first-match `path-overrides` with unique case-sensitive patterns and nonempty unique
+  `allowed-modes`. Preserve the closed canonical modes `regular` (`100644`), `executable`
+  (`100755`), `symlink` (`120000`), and `gitlink` (`160000`), the anchored
+  literal/component-`*`/whole-component-`**` grammar, the shared 10,000,000-unit match-work
+  ceiling, and stable `mode.disallowed` findings. Resolve one commit and tree, then strictly parse
+  bounded recursive full-tree NUL-delimited mode, type, object-ID, and path records. Preserve
+  structurally valid names that another provider may diagnose, but reject malformed UTF-8,
+  absolute or structurally invalid paths, duplicates, inconsistent topology, and incompatible
+  mode/type pairs. Keep the 4,096-byte, 64-component, 50,000-entry, 64 MiB, 30-second, and
+  256-stored-diagnostic boundaries. Reject legacy graft overlays before resolution and recheck
+  after enumeration; shallow repositories are allowed when selected objects exist. Allowing a
+  mode does not validate shebangs, ACLs, ownership, symlink targets, `.gitmodules`, submodule
+  provenance, or object availability. Keep the provider out of both Action graphs and
+  repository-plan v1.
 - The installed CLI may use the locked Typer dependency. The write-capable root Action may not
   import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
   the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the

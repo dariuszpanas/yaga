@@ -202,6 +202,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     branch_policy = consumer / "branch-policy.toml"
     change_policy = consumer / "change-policy.toml"
     repository_plan = consumer / "repository-plan.toml"
+    mode_policy = consumer / "mode-policy.toml"
     path_policy = consumer / "path-policy.toml"
     size_policy = consumer / "size-policy.toml"
     tree_policy = consumer / "tree-policy.toml"
@@ -413,6 +414,15 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         encoding="utf-8",
         newline="\n",
     )
+    mode_policy.write_text(
+        "mode-policy-version = 1\n"
+        'default-allowed-modes = ["regular"]\n\n'
+        "[[path-overrides]]\n"
+        'pattern = "src/package.py"\n'
+        'allowed-modes = ["executable"]\n',
+        encoding="utf-8",
+        newline="\n",
+    )
     path_policy.write_text(
         'path-policy-version = 1\nprofile = "windows-compatible-v1"\n',
         encoding="utf-8",
@@ -430,6 +440,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     )
     tree_required_paths = [
         ".yaga.toml",
+        "mode-policy.toml",
         "path-policy.toml",
         "size-policy.toml",
         "tree-policy.toml",
@@ -439,7 +450,8 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     tree_forbidden_patterns = ["**/.env", "**/*.pyc", "dist/**"]
     tree_policy.write_text(
         "tree-policy-version = 1\n"
-        'required-paths = [".yaga.toml", "path-policy.toml", "size-policy.toml", "tree-policy.toml", '
+        'required-paths = [".yaga.toml", "mode-policy.toml", "path-policy.toml", '
+        '"size-policy.toml", "tree-policy.toml", '
         '"src/package.py", "tests/test_package.py"]\n'
         'forbidden-patterns = ["**/.env", "**/*.pyc", "dist/**"]\n',
         encoding="utf-8",
@@ -474,6 +486,10 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     test.write_text("def test_value():\n    assert 1 == 1\n", encoding="utf-8", newline="\n")
     subprocess.run([git, "-C", str(consumer), "add", "--all"], check=True)
     subprocess.run(
+        [git, "-C", str(consumer), "update-index", "--chmod=+x", "src/package.py"],
+        check=True,
+    )
+    subprocess.run(
         [
             git,
             "-C",
@@ -500,6 +516,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
             ".yaga.toml",
             "branch-policy.toml",
             "change-policy.toml",
+            "mode-policy.toml",
             "repository-plan.toml",
             "path-policy.toml",
             "size-policy.toml",
@@ -526,7 +543,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
             {
                 "path": relative_path,
                 "oid": oid,
-                "mode": "100644",
+                "mode": "100755" if relative_path == "src/package.py" else "100644",
                 "size_bytes": committed_size,
                 "max_blob_bytes": 128 if relative_path.startswith("src/") else 4096,
                 "pattern": "src/**" if relative_path.startswith("src/") else None,
@@ -567,7 +584,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and tree_document.get("revision") == head_sha
         and tree_document.get("commit_sha") == head_sha
         and tree_document.get("tree_sha") == tree_sha
-        and tree_document.get("entries_checked") == 10
+        and tree_document.get("entries_checked") == len(size_expected_paths)
         and tree_document.get("required_paths") == tree_required_paths
         and tree_document.get("forbidden_patterns") == tree_forbidden_patterns
         and tree_document.get("diagnostics") == []
@@ -632,6 +649,61 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and path_document.get("diagnostics_omitted") == 0
     ):
         raise SystemExit("installed wheel CLI path check emitted the wrong report contract")
+    mode_completed = run_bounded(
+        [
+            str(executable),
+            "mode",
+            "check",
+            "--policy",
+            str(mode_policy),
+            "--revision",
+            head_sha,
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    mode_document = successful_json(mode_completed, operation="mode check")
+    mode_identity = mode_document.get("identity")
+    mode_policy_report = mode_document.get("policy")
+    mode_counts = mode_document.get("counts")
+    if not (
+        mode_document.get("schema_version") == 1
+        and mode_document.get("kind") == "mode_policy"
+        and mode_document.get("status") == "passed"
+        and mode_document.get("valid") is True
+        and mode_identity
+        == {
+            "policy_path": str(mode_policy.resolve()),
+            "repository_path": str(consumer.resolve()),
+            "revision": head_sha,
+            "commit_sha": head_sha,
+            "tree_sha": tree_sha,
+        }
+        and mode_policy_report
+        == {
+            "mode_policy_version": 1,
+            "default_allowed_modes": ["regular"],
+            "path_overrides": [{"pattern": "src/package.py", "allowed_modes": ["executable"]}],
+        }
+        and mode_counts
+        == {
+            "entries": len(size_expected_paths),
+            "by_mode": {
+                "regular": len(size_expected_paths) - 1,
+                "executable": 1,
+                "symlink": 0,
+                "gitlink": 0,
+            },
+            "findings": 0,
+        }
+        and mode_document.get("diagnostics") == []
+        and mode_document.get("diagnostics_omitted") == 0
+    ):
+        raise SystemExit("installed wheel CLI mode check emitted the wrong report contract")
     size_completed = run_bounded(
         [
             str(executable),
@@ -675,7 +747,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
             "max_total_blob_bytes": 65536,
             "path_limits": [{"pattern": "src/**", "max_blob_bytes": 128}],
         }
-        and size_counts == {"blobs": 10, "gitlinks": 0, "oversized_blobs": 0}
+        and size_counts == {"blobs": len(size_expected_paths), "gitlinks": 0, "oversized_blobs": 0}
         and size_total
         == {
             "blob_bytes": size_expected_total,
@@ -820,6 +892,7 @@ def main() -> int:
                 "yaga/commands/change.py",
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
+                "yaga/commands/mode.py",
                 "yaga/commands/repo.py",
                 "yaga/commands/path.py",
                 "yaga/commands/size.py",
@@ -852,6 +925,14 @@ def main() -> int:
                 "yaga/trees/policy.py",
                 "yaga/trees/reporting.py",
                 "yaga/trees/service.py",
+                "yaga/modes/__init__.py",
+                "yaga/modes/checker.py",
+                "yaga/modes/git.py",
+                "yaga/modes/models.py",
+                "yaga/modes/patterns.py",
+                "yaga/modes/policy.py",
+                "yaga/modes/reporting.py",
+                "yaga/modes/service.py",
                 "yaga/sizes/__init__.py",
                 "yaga/sizes/checker.py",
                 "yaga/sizes/git.py",

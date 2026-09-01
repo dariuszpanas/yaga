@@ -243,6 +243,45 @@ def test_tree_policy_contract_is_documented_and_kept_out_of_repo_plan_v1() -> No
     assert "tree" not in tomllib.loads(plan)["checks"]
 
 
+def test_ci_mode_policy_uses_the_exact_unprivileged_source_commit() -> None:
+    workflow = read(".github/workflows/ci.yml")
+
+    assert section_keys(workflow, "permissions") == {"contents"}
+    assert "pull_request_target:" not in workflow
+    assert "workflow_run:" not in workflow
+    assert "name: Check committed entry modes" in workflow
+    assert (
+        "YAGA_MODE_REVISION: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}" in workflow
+    )
+    assert "yaga mode check" in workflow
+    assert "--policy .yaga/mode-policy.toml" in workflow
+    assert '--revision "$YAGA_MODE_REVISION"' in workflow
+    assert '--revision "${{ github.' not in workflow
+    assert "fetch-depth: 0" in workflow
+    assert "persist-credentials: false" in workflow
+
+
+def test_mode_policy_contract_is_documented_and_kept_out_of_repo_plan_v1() -> None:
+    documents = [read(path) for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md")]
+    plan = tomllib.loads(read(".yaga/checks/ci.toml"))
+
+    for document in documents:
+        assert "mode check" in document
+        assert "`mode.disallowed`" in document
+        assert "default-allowed-modes" in document
+        assert "path-overrides" in document
+        assert "10,000,000" in document
+        assert "50,000" in document
+        assert "100644" in document
+        assert "100755" in document
+        assert "120000" in document
+        assert "160000" in document
+        assert "Shallow" in document or "shallow" in document
+
+    assert "mode" not in plan["checks"]
+
+
 def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:
     example = read("examples/commit-policy.yml")
     readme = read("README.md")
