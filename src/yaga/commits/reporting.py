@@ -48,7 +48,7 @@ def render_config(config: LoadedConfig, output_format: OutputFormat) -> str:
     policy = policy_document(config.policy)
     document: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
-        "config_path": _json_text(str(config.path), maximum=MAX_DISPLAY_PATH)
+        "config_path": json_text(str(config.path), maximum=MAX_DISPLAY_PATH)
         if config.path
         else None,
         "config": policy,
@@ -133,28 +133,29 @@ def _report_document(report: ValidationReport) -> dict[str, Any]:
         "failed": report.failed,
         "skipped": report.skipped,
         "config_path": (
-            _json_text(str(report.config_path), maximum=MAX_DISPLAY_PATH)
+            json_text(str(report.config_path), maximum=MAX_DISPLAY_PATH)
             if report.config_path
             else None
         ),
-        "commits": [_result_document(result) for result in report.results],
+        "commits": [result_document(result) for result in report.results],
     }
 
 
-def _result_document(result: CheckResult) -> dict[str, Any]:
+def result_document(result: CheckResult) -> dict[str, Any]:
+    """Return the bounded JSON representation of one check result."""
     return {
-        "source": _json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
-        "sha": _json_text(result.target.sha, maximum=64) if result.target.sha else None,
-        "header": _json_text(result.header, maximum=MAX_DISPLAY_HEADER),
+        "source": json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
+        "sha": json_text(result.target.sha, maximum=64) if result.target.sha else None,
+        "header": json_text(result.header, maximum=MAX_DISPLAY_HEADER),
         "status": result.status,
         "valid": result.valid,
         "skipped_reason": (
-            _json_text(result.skipped_reason, maximum=100) if result.skipped_reason else None
+            json_text(result.skipped_reason, maximum=100) if result.skipped_reason else None
         ),
         "diagnostics": [
             {
                 "code": diagnostic.code,
-                "message": _json_text(
+                "message": json_text(
                     diagnostic.message,
                     maximum=MAX_DIAGNOSTIC_MESSAGE,
                 ),
@@ -177,10 +178,11 @@ def _text_value(value: object) -> str:
 def _json_values(values: tuple[str, ...] | None, *, maximum: int) -> list[str] | None:
     if values is None:
         return None
-    return [_json_text(value, maximum=maximum) for value in values]
+    return [json_text(value, maximum=maximum) for value in values]
 
 
-def _json_text(value: str, *, maximum: int) -> str:
+def json_text(value: str, *, maximum: int) -> str:
+    """Return bounded control-sanitized text without collapsing JSON whitespace."""
     cleaned = "".join(
         "?" if unicodedata.category(char) in {"Cc", "Cf", "Cs"} else char for char in value
     )

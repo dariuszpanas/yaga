@@ -21,11 +21,12 @@ uv run yaga --help
 The distribution is named `yaga-cli`; the executable and Python package are both named `yaga`.
 The `yaga` distribution name on PyPI belongs to an unrelated project.
 
-The command tree starts with three deliberately separate surfaces:
+The command tree starts with four deliberately separate surfaces:
 
 ```text
-yaga commit check                 # validate one message, commit, or range
-yaga config show                  # explain the effective policy and its source
+yaga commit check                  # validate one message, commit, or range
+yaga config show                   # explain the effective policy and its source
+yaga github pull-request check     # validate one exact GitHub PR event
 yaga gate codex-review <operation> # run the retained review gate
 ```
 
@@ -97,6 +98,64 @@ A `commit-msg` hook can call `yaga commit check --file "$1"`. CI should use a no
 containing the exact base and head, then call `yaga commit check --range "$BASE_SHA..$HEAD_SHA"`. `--quiet`
 suppresses validation reports while operational errors still go to standard error; `--format json`
 provides a stable schema for another tool.
+
+## Pull-request checks in GitHub Actions
+
+`yaga github pull-request check` applies the same commit policy to a GitHub event without calling
+the GitHub API. It checks the pull-request title as a single Conventional Commit header, then checks
+every commit in the exact event `base.sha..head.sha` range. Body and merge rules do not apply to the
+title; all configured header, type, scope, and description rules do. Text, versioned JSON, and
+escaped `--format github` annotations share exit codes `0`, `1`, and `2` with `commit check`.
+
+For local diagnosis, save a `pull_request` event and check out its exact head before running:
+
+```bash
+yaga github pull-request check --event-file event.json --repo .
+```
+
+The separate read-only Action wraps that command for CI:
+
+```yaml
+name: Commit Policy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yaga-commit-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  commit-policy:
+    name: Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dariuszpanas/yaga/actions/commit-check@<AUDITED_40_CHARACTER_SHA>
+```
+
+The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,
+shallow history, a missing object, an empty range, or a checkout that does not equal the event head.
+The Action has no token input or write/API code path, and the YAGA runtime never fetches Git history
+or installs YAGA dependencies; the reference workflow grants only `contents: read`. It strictly
+binds the event name, repository ID/name, base/head refs, and open PR payload to the runner context,
+and caps workflow annotations at 50. Its pinned `actions/setup-python` bootstrap receives an
+explicit empty token and may obtain the declared Python 3.12 runtime before YAGA starts.
+
+This remains an unprivileged PR check and therefore a quality signal, not a security authority. The
+policy file comes from the PR-head worktree and can be changed by the PR; review policy changes like
+any other code. Title validation is bound to the triggering event rather than the commit SHA. The
+`edited` wake and per-PR cancellation reduce stale ordering, but do not turn title metadata into
+immutable evidence. Consumers must replace the placeholder with an audited immutable YAGA commit
+SHA.
 
 ## Gate commands and the composite Action
 

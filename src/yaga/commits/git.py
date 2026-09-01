@@ -141,6 +141,7 @@ def _read_log(
         str(repo),
         "log",
         "--no-show-signature",
+        "--encoding=UTF-8",
         "--format=%H%x00%P%x00%B",
         "-z",
         f"--max-count={max_commits + int(detect_overflow)}",
@@ -292,7 +293,10 @@ def _parse_records(output: bytes) -> list[CommitTarget]:
             raise GitError("git returned a malformed commit identity")
         sha = sha_bytes.decode("ascii")
         parents = _parse_parent_ids(fields[index + 1], object_id_length=len(sha_bytes))
-        message = fields[index + 2].decode("utf-8", errors="replace")
+        try:
+            message = fields[index + 2].decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise GitError("git commit message is not valid UTF-8") from error
         commits.append(
             CommitTarget(
                 label=f"commit {sha[:12]}",

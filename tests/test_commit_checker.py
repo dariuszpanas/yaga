@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from yaga.commits.checker import check_target
+from yaga.commits.checker import check_header, check_target
 from yaga.commits.models import (
     CasePolicy,
     CheckResult,
@@ -155,3 +155,18 @@ def test_hard_message_limit_applies_before_policy_rules() -> None:
 def test_domain_checker_rejects_non_utf8_python_strings() -> None:
     with pytest.raises(InputError, match="valid UTF-8"):
         result("feat: invalid \udcff")
+
+
+def test_header_check_applies_header_rules_without_commit_body_policy() -> None:
+    policy = CommitPolicy(
+        allowed_types=("fix",),
+        body_policy=PresencePolicy.REQUIRED,
+        body_min_length=100,
+        body_max_line_length=1,
+    )
+
+    valid = check_header(CommitTarget(label="title", message="fix: repair title"), policy)
+    invalid = check_header(CommitTarget(label="title", message="feat: wrong type"), policy)
+
+    assert valid.valid
+    assert [diagnostic.code for diagnostic in invalid.diagnostics] == ["type.allowed"]

@@ -22,6 +22,20 @@ _TERMINAL_PUNCTUATION = (".", "!", "?")
 
 def check_target(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
     """Validate one selected message with deterministic diagnostic ordering."""
+    return _check_target(target, policy, check_body=True)
+
+
+def check_header(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
+    """Validate one standalone header without applying commit-body policy."""
+    return _check_target(target, policy, check_body=False)
+
+
+def _check_target(
+    target: CommitTarget,
+    policy: CommitPolicy,
+    *,
+    check_body: bool,
+) -> CheckResult:
     normalized = normalize_message(target.message)
     header = header_from(normalized)
     try:
@@ -150,42 +164,45 @@ def check_target(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
             )
         )
 
-    has_body = bool(parsed.body.strip())
-    if policy.body_policy is PresencePolicy.REQUIRED and not has_body:
-        diagnostics.append(Diagnostic(code="body.required", message="a body is required by policy"))
-    if policy.body_policy is PresencePolicy.FORBIDDEN and has_body:
-        diagnostics.append(
-            Diagnostic(
-                code="body.forbidden",
-                message="a body is forbidden by policy",
-                line=parsed.body_start_line,
+    if check_body:
+        has_body = bool(parsed.body.strip())
+        if policy.body_policy is PresencePolicy.REQUIRED and not has_body:
+            diagnostics.append(
+                Diagnostic(code="body.required", message="a body is required by policy")
             )
-        )
-    if has_body and len(parsed.body.strip()) < policy.body_min_length:
-        diagnostics.append(
-            Diagnostic(
-                code="body.length",
-                message=(
-                    f"body has {len(parsed.body.strip())} characters; minimum is "
-                    f"{policy.body_min_length}"
-                ),
-                line=parsed.body_start_line,
-            )
-        )
-    if policy.body_max_line_length is not None:
-        for offset, line in enumerate(parsed.body_lines):
-            if len(line) > policy.body_max_line_length:
-                diagnostics.append(
-                    Diagnostic(
-                        code="body.line-length",
-                        message=(
-                            f"body line has {len(line)} characters; maximum is "
-                            f"{policy.body_max_line_length}"
-                        ),
-                        line=parsed.body_start_line + offset,
-                    )
+        if policy.body_policy is PresencePolicy.FORBIDDEN and has_body:
+            diagnostics.append(
+                Diagnostic(
+                    code="body.forbidden",
+                    message="a body is forbidden by policy",
+                    line=parsed.body_start_line,
                 )
-                break
+            )
+        if has_body and len(parsed.body.strip()) < policy.body_min_length:
+            diagnostics.append(
+                Diagnostic(
+                    code="body.length",
+                    message=(
+                        f"body has {len(parsed.body.strip())} characters; minimum is "
+                        f"{policy.body_min_length}"
+                    ),
+                    line=parsed.body_start_line,
+                )
+            )
+        if policy.body_max_line_length is not None:
+            for offset, line in enumerate(parsed.body_lines):
+                if len(line) > policy.body_max_line_length:
+                    diagnostics.append(
+                        Diagnostic(
+                            code="body.line-length",
+                            message=(
+                                f"body line has {len(line)} characters; maximum is "
+                                f"{policy.body_max_line_length}"
+                            ),
+                            line=parsed.body_start_line + offset,
+                        )
+                    )
+                    break
 
     return CheckResult(target=target, header=header, diagnostics=tuple(diagnostics))
 

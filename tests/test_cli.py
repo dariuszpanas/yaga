@@ -41,6 +41,7 @@ def test_root_help_exposes_local_policy_and_preserved_gate_commands() -> None:
     assert "commit" in result.stdout
     assert "config" in result.stdout
     assert "gate" in result.stdout
+    assert "github" in result.stdout
 
 
 def test_version_is_available_from_the_installed_command() -> None:
@@ -48,6 +49,67 @@ def test_version_is_available_from_the_installed_command() -> None:
 
     assert result.exit_code == 0
     assert result.stdout.strip() == "yaga 0.1.0"
+
+
+def test_github_pull_request_command_uses_exit_zero_one_and_two(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    git(repository, "init", "--initial-branch=main")
+    git(repository, "config", "user.name", "YAGA Tests")
+    git(repository, "config", "user.email", "yaga@example.invalid")
+    base = commit(repository, "chore: establish baseline")
+    head = commit(repository, "feat(cli): check a pull request")
+    event = {
+        "action": "opened",
+        "number": 17,
+        "repository": {"id": 100, "full_name": "owner/repository"},
+        "pull_request": {
+            "number": 17,
+            "title": "feat(cli): check a pull request",
+            "state": "open",
+            "draft": False,
+            "base": {
+                "sha": base,
+                "ref": "main",
+                "repo": {"id": 100, "full_name": "owner/repository"},
+            },
+            "head": {
+                "sha": head,
+                "ref": "feature",
+                "repo": {"id": 100, "full_name": "owner/repository"},
+            },
+        },
+    }
+    event_file = tmp_path / "event.json"
+    event_file.write_text(json.dumps(event), encoding="utf-8")
+    arguments = [
+        "github",
+        "pull-request",
+        "check",
+        "--event-file",
+        str(event_file),
+        "--repo",
+        str(repository),
+        "--format",
+        "json",
+    ]
+
+    passed = runner.invoke(app, arguments)
+    assert passed.exit_code == 0
+    assert json.loads(passed.stdout)["kind"] == "pull_request_commit_policy"
+
+    pull_request = event["pull_request"]
+    assert isinstance(pull_request, dict)
+    pull_request["title"] = "not conventional"
+    event_file.write_text(json.dumps(event), encoding="utf-8")
+    failed = runner.invoke(app, arguments)
+    assert failed.exit_code == 1
+    assert json.loads(failed.stdout)["valid"] is False
+
+    event_file.write_text("not JSON", encoding="utf-8")
+    errored = runner.invoke(app, arguments)
+    assert errored.exit_code == 2
+    assert json.loads(errored.stderr)["error"]["kind"] == "input"
 
 
 def test_commit_check_accepts_a_message_and_uses_exit_one_for_violations(

@@ -25,7 +25,7 @@ def git(repository: Path, *arguments: str) -> str:
 def commit(repository: Path, message: str) -> str:
     message_file = repository / "message.txt"
     message_file.write_text(message, encoding="utf-8")
-    git(repository, "commit", "--allow-empty", "--file", str(message_file))
+    git(repository, "commit", "--quiet", "--allow-empty", "--file", str(message_file))
     return git(repository, "rev-parse", "HEAD")
 
 
@@ -67,6 +67,19 @@ def test_read_range_returns_complete_messages_oldest_first(
 
     assert [target.sha for target in selected] == shas[1:]
     assert selected[0].message.startswith("fix(cli):")
+
+
+def test_git_log_output_is_forced_to_utf8(
+    repository: tuple[Path, list[str]],
+) -> None:
+    path, _ = repository
+    git(path, "config", "i18n.logOutputEncoding", "ISO-8859-1")
+    sha = commit(path, "feat: support café")
+
+    selected = commit_git.read_commit(path)
+
+    assert selected.sha == sha
+    assert selected.message.startswith("feat: support café")
 
 
 def test_read_range_rejects_empty_and_over_limit_selections(
@@ -209,3 +222,10 @@ def test_git_log_output_is_stopped_at_the_hard_limit(
 
     with pytest.raises(GitError, match="hard 32-byte limit"):
         commit_git.read_commit(path)
+
+
+def test_record_parser_rejects_non_utf8_commit_messages() -> None:
+    output = b"a" * 40 + b"\0\0" + b"feat: invalid \xff\0"
+
+    with pytest.raises(GitError, match="not valid UTF-8"):
+        commit_git._parse_records(output)
