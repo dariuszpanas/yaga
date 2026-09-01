@@ -275,6 +275,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and isinstance(initialized_policy, dict)
         and isinstance(initialized_types, list)
         and "feat" in initialized_types
+        and initialized_policy.get("dependabot_pull_requests") == "check"
         and initialized_policy.get("merge_commits") == "reject"
         and config.is_file()
     ):

@@ -82,6 +82,7 @@ def test_github_pull_request_command_uses_exit_zero_one_and_two(tmp_path: Path) 
             "title": "feat(cli): check a pull request",
             "state": "open",
             "draft": False,
+            "user": {"login": "octocat", "id": 1, "type": "User"},
             "base": {
                 "sha": base,
                 "ref": "main",
@@ -120,6 +121,25 @@ def test_github_pull_request_command_uses_exit_zero_one_and_two(tmp_path: Path) 
     assert failed.exit_code == 1
     assert json.loads(failed.stdout)["valid"] is False
 
+    pull_request["user"] = {
+        "login": "dependabot[bot]",
+        "id": 49_699_333,
+        "type": "Bot",
+    }
+    (repository / ".yaga.toml").write_text(
+        'config-version = 1\n[commit]\ndependabot-pull-requests = "skip"\n',
+        encoding="utf-8",
+    )
+    event_file.write_text(json.dumps(event), encoding="utf-8")
+    skipped = runner.invoke(app, arguments)
+    skipped_document = json.loads(skipped.stdout)
+    assert skipped.exit_code == 0
+    assert skipped_document["skipped"] == 2
+    assert skipped_document["pull_request"]["title"]["skipped_reason"] == (
+        "Dependabot pull request"
+    )
+    assert skipped_document["pull_request"]["author"] == pull_request["user"]
+
     event_file.write_text("not JSON", encoding="utf-8")
     errored = runner.invoke(app, arguments)
     assert errored.exit_code == 2
@@ -149,6 +169,7 @@ def test_github_pull_request_cli_reports_body_word_findings_as_annotations(
             "title": "feat(cli): enforce prose minimum",
             "state": "open",
             "draft": False,
+            "user": {"login": "octocat", "id": 1, "type": "User"},
             "base": {
                 "sha": base,
                 "ref": "main",

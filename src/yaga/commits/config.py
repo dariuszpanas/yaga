@@ -14,6 +14,7 @@ from yaga.commits.models import (
     BreakingMarkerPolicy,
     CasePolicy,
     CommitPolicy,
+    DependabotPullRequestPolicy,
     EndingPolicy,
     LoadedConfig,
     MergePolicy,
@@ -49,6 +50,7 @@ _COMMIT_KEYS = frozenset(
         "body-min-words",
         "body-max-line-length",
         "breaking-markers",
+        "dependabot-pull-requests",
         "required-footer-tokens",
         "forbidden-footer-tokens",
         "merge-commits",
@@ -325,6 +327,15 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         required_footer_tokens=required_footer_tokens,
         forbidden_footer_tokens=forbidden_footer_tokens,
         scope_policy_by_type=scope_policy_by_type,
+        dependabot_pull_requests=_enum(
+            raw_commit.get(
+                "dependabot-pull-requests",
+                DependabotPullRequestPolicy.CHECK.value,
+            ),
+            DependabotPullRequestPolicy,
+            "dependabot-pull-requests",
+            path,
+        ),
     )
 
 

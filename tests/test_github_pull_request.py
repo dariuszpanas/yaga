@@ -15,7 +15,18 @@ from yaga.commits.github_event import (
     load_pull_request_event,
     validate_action_context,
 )
-from yaga.errors import GitError, InputError
+from yaga.errors import ConfigurationError, GitError, InputError
+
+DEPENDABOT_AUTHOR = {"login": "dependabot[bot]", "id": 49_699_333, "type": "Bot"}
+
+
+def _write_skip_config(repository: Path, *, extra: str = "") -> Path:
+    config = repository / ".yaga.toml"
+    config.write_text(
+        'config-version = 1\n\n[commit]\ndependabot-pull-requests = "skip"\n' + extra,
+        encoding="utf-8",
+    )
+    return config
 
 
 def _git(repository: Path, *arguments: str) -> str:
@@ -27,14 +38,18 @@ def _git(repository: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
-def _repository(tmp_path: Path) -> tuple[Path, str, str]:
+def _repository(
+    tmp_path: Path,
+    *,
+    head_message: str = "feat(cli): add pull request checks",
+) -> tuple[Path, str, str]:
     repository = tmp_path / "repository"
     repository.mkdir()
     _git(repository, "init", "--initial-branch=main")
     _git(repository, "config", "user.name", "YAGA Tests")
     _git(repository, "config", "user.email", "yaga@example.invalid")
     base = _commit(repository, "chore: establish baseline", "base")
-    head = _commit(repository, "feat(cli): add pull request checks", "head")
+    head = _commit(repository, head_message, "head")
     return repository, base, head
 
 
@@ -46,8 +61,14 @@ def _commit(repository: Path, message: str, content: str) -> str:
 
 
 def _event_document(
-    base: str, head: str, *, title: object = "feat(cli): check pull requests"
+    base: str,
+    head: str,
+    *,
+    title: object = "feat(cli): check pull requests",
+    author: object = None,
 ) -> dict[str, object]:
+    if author is None:
+        author = {"login": "octocat", "id": 1, "type": "User"}
     return {
         "action": "synchronize",
         "number": 17,
@@ -57,6 +78,7 @@ def _event_document(
             "title": title,
             "state": "open",
             "draft": False,
+            "user": author,
             "base": {
                 "sha": base,
                 "ref": "main",
@@ -89,12 +111,149 @@ def test_check_uses_the_exact_event_base_and_head(tmp_path: Path) -> None:
     assert report.commits[0].header == "feat(cli): add pull request checks"
 
 
+def test_dependabot_pull_requests_are_checked_by_default(tmp_path: Path) -> None:
+    repository, base, head = _repository(tmp_path, head_message="not conventional")
+    event_file = _write_event(
+        tmp_path / "event.json",
+        _event_document(base, head, title="also not conventional", author=DEPENDABOT_AUTHOR),
+    )
+
+    report = check_pull_request(event_file, repository)
+
+    assert not report.valid
+    assert report.failed == 2
+    assert report.skipped == 0
+    assert report.event.author_login == "dependabot[bot]"
+    assert report.event.author_id == 49_699_333
+    assert report.event.author_type == "Bot"
+    assert all(result.skipped_reason is None for result in report.results)
+
+
+@pytest.mark.parametrize(
+    "action",
+    ["opened", "edited", "reopened", "ready_for_review", "synchronize"],
+)
+@pytest.mark.parametrize("author_id", [1, 9_223_372_036_854_775_807])
+def test_explicit_policy_skips_only_exact_dependabot_pull_request_identity(
+    tmp_path: Path,
+    action: str,
+    author_id: int,
+) -> None:
+    repository, base, head = _repository(tmp_path, head_message="not conventional")
+    config = _write_skip_config(repository)
+    event_document = _event_document(
+        base,
+        head,
+        title="also not conventional",
+        author={"login": "dependabot[bot]", "id": author_id, "type": "Bot"},
+    )
+    event_document["action"] = action
+    event_file = _write_event(
+        tmp_path / "event.json",
+        event_document,
+    )
+
+    report = check_pull_request(event_file, repository)
+
+    assert report.valid
+    assert report.failed == 0
+    assert report.skipped == 2
+    assert report.config_path == config
+    assert [result.skipped_reason for result in report.results] == [
+        "Dependabot pull request",
+        "Dependabot pull request",
+    ]
+
+
+@pytest.mark.parametrize(
+    "author",
+    [
+        {"login": "octocat", "id": 1, "type": "User"},
+        {"login": "dependabot", "id": 49_699_333, "type": "Bot"},
+        {"login": "Dependabot[bot]", "id": 49_699_333, "type": "Bot"},
+        {"login": "dependabot[bot]", "id": 49_699_333, "type": "User"},
+    ],
+)
+def test_dependabot_skip_does_not_admit_well_formed_identity_near_misses(
+    tmp_path: Path,
+    author: dict[str, object],
+) -> None:
+    repository, base, head = _repository(tmp_path, head_message="not conventional")
+    _write_skip_config(repository)
+    event_file = _write_event(
+        tmp_path / "event.json",
+        _event_document(base, head, title="also not conventional", author=author),
+    )
+
+    report = check_pull_request(event_file, repository)
+
+    assert not report.valid
+    assert report.failed == 2
+    assert report.skipped == 0
+
+
 def test_check_rejects_a_checkout_that_is_not_the_event_head(tmp_path: Path) -> None:
     repository, base, event_head = _repository(tmp_path)
     _commit(repository, "fix: move checkout", "later checkout state")
-    event_file = _write_event(tmp_path / "event.json", _event_document(base, event_head))
+    _write_skip_config(repository)
+    event_file = _write_event(
+        tmp_path / "event.json",
+        _event_document(base, event_head, author=DEPENDABOT_AUTHOR),
+    )
 
     with pytest.raises(GitError, match="HEAD does not match"):
+        check_pull_request(event_file, repository)
+
+
+def test_dependabot_skip_does_not_hide_missing_history(tmp_path: Path) -> None:
+    repository, _base, head = _repository(tmp_path, head_message="not conventional")
+    _write_skip_config(repository)
+    event_file = _write_event(
+        tmp_path / "event.json",
+        _event_document(
+            "0" * 40,
+            head,
+            title="also not conventional",
+            author=DEPENDABOT_AUTHOR,
+        ),
+    )
+
+    with pytest.raises(GitError):
+        check_pull_request(event_file, repository)
+
+
+def test_dependabot_skip_does_not_hide_commit_count_overflow(tmp_path: Path) -> None:
+    repository, base, _middle = _repository(tmp_path, head_message="not conventional")
+    head = _commit(repository, "still not conventional", "second invalid commit")
+    _write_skip_config(repository, extra="max-commits = 1\n")
+    event_file = _write_event(
+        tmp_path / "event.json",
+        _event_document(
+            base,
+            head,
+            title="also not conventional",
+            author=DEPENDABOT_AUTHOR,
+        ),
+    )
+
+    with pytest.raises(GitError, match="exceeds the configured limit of 1"):
+        check_pull_request(event_file, repository)
+
+
+def test_dependabot_skip_does_not_hide_configuration_errors(tmp_path: Path) -> None:
+    repository, base, head = _repository(tmp_path, head_message="not conventional")
+    _write_skip_config(repository, extra="unknown = true\n")
+    event_file = _write_event(
+        tmp_path / "event.json",
+        _event_document(
+            base,
+            head,
+            title="also not conventional",
+            author=DEPENDABOT_AUTHOR,
+        ),
+    )
+
+    with pytest.raises(ConfigurationError, match="unknown commit configuration key"):
         check_pull_request(event_file, repository)
 
 
@@ -141,6 +300,57 @@ def test_event_parser_requires_matching_numbers_and_safe_title(tmp_path: Path) -
     pull_request["title"] = "feat: unsafe\nsecond line"
     _write_event(event_file, document)
     with pytest.raises(InputError, match="unsafe characters"):
+        load_pull_request_event(event_file)
+
+
+def test_event_parser_requires_one_complete_author_object(tmp_path: Path) -> None:
+    document = _event_document("a" * 40, "b" * 40)
+    pull_request = document["pull_request"]
+    assert isinstance(pull_request, dict)
+    pull_request.pop("user")
+    event_file = _write_event(tmp_path / "event.json", document)
+
+    with pytest.raises(InputError, match="pull request author must be an object"):
+        load_pull_request_event(event_file)
+
+    pull_request["user"] = "dependabot[bot]"
+    _write_event(event_file, document)
+    with pytest.raises(InputError, match="pull request author must be an object"):
+        load_pull_request_event(event_file)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("login", None, "author login"),
+        ("login", "", "author login"),
+        ("login", "dépendabot[bot]", "author login"),
+        ("login", "x" * 129, "author login"),
+        ("id", None, "author ID"),
+        ("id", 0, "author ID"),
+        ("id", True, "author ID"),
+        ("id", 9_223_372_036_854_775_808, "author ID"),
+        ("type", None, "author type"),
+        ("type", "", "author type"),
+        ("type", "Bot\n", "author type"),
+        ("type", "B" * 33, "author type"),
+    ],
+)
+def test_event_parser_rejects_malformed_author_fields(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    document = _event_document("a" * 40, "b" * 40, author=dict(DEPENDABOT_AUTHOR))
+    pull_request = document["pull_request"]
+    assert isinstance(pull_request, dict)
+    author = pull_request["user"]
+    assert isinstance(author, dict)
+    author[field] = value
+    event_file = _write_event(tmp_path / "event.json", document)
+
+    with pytest.raises(InputError, match=message):
         load_pull_request_event(event_file)
 
 

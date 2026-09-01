@@ -35,6 +35,7 @@ description-min-length = 3
 description-ending = "forbid"
 body-policy = "optional"
 body-max-line-length = 100
+dependabot-pull-requests = "check"
 merge-commits = "reject"
 ignored-headers = []
 max-commits = 64

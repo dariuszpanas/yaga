@@ -13,6 +13,7 @@ import pytest
 from yaga.commits import check_commits, check_git_commits
 from yaga.commits.models import ValidationReport
 from yaga.errors import InputError
+from yaga.repository.checker import check_repository
 
 
 def git(repository: Path, *arguments: str) -> str:
@@ -92,6 +93,36 @@ def test_standalone_service_preserves_default_commit_explicit_commit_and_range(
     assert explicit_report.results[0].target.sha == shas[1]
     assert [result.target.sha for result in range_report.results] == shas[1:]
     assert all(report.valid for report in (default_report, explicit_report, range_report))
+
+
+def test_forged_dependabot_git_author_does_not_skip_commit_or_repository_checks(
+    repository: tuple[Path, list[str], Path],
+) -> None:
+    repo, _, config = repository
+    config.write_text(
+        'config-version = 1\n[commit]\ndependabot-pull-requests = "skip"\n',
+        encoding="utf-8",
+    )
+    git(repo, "config", "user.name", "dependabot[bot]")
+    git(
+        repo,
+        "config",
+        "user.email",
+        "49699333+dependabot[bot]@users.noreply.github.com",
+    )
+    forged = commit(repo, "not conventional")
+
+    commit_report = check_commits(repo)
+    repository_report = check_repository(repo, ["commit"])
+
+    assert commit_report.failed == 1
+    assert commit_report.skipped == 0
+    assert commit_report.results[0].target.sha == forged
+    aggregate_commit_report = repository_report.checks[0].report
+    assert isinstance(aggregate_commit_report, ValidationReport)
+    assert aggregate_commit_report.failed == 1
+    assert aggregate_commit_report.skipped == 0
+    assert aggregate_commit_report.results[0].target.sha == forged
 
 
 def test_standalone_service_applies_footer_policy_to_messages_and_git_commits(

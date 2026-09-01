@@ -118,6 +118,7 @@ forbidden-footer-tokens = ["WIP"]
 body-policy = "optional"
 body-min-words = 8
 body-max-line-length = 100
+dependabot-pull-requests = "skip"
 merge-commits = "reject"
 ignored-headers = []
 max-commits = 64

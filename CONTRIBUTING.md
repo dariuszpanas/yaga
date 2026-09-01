@@ -68,6 +68,14 @@ allowed-scope reachability. Header-limit validation is deliberately a conservati
 lower bound because Unicode case-fold equivalents may be shorter than configured spellings;
 actual headers remain subject to every normal check. Preserve the existing `scope.required` and
 `scope.forbidden` diagnostics.
+`dependabot-pull-requests` is a schema-v1 enum with `check` as its default and `skip` as its only
+opt-in alternative. Apply it only in the event-aware `github pull-request check` path and the fixed
+read-only commit Action. Identify Dependabot from one strictly parsed PR author record with exact
+`dependabot[bot]` login, `Bot` type, and a bounded positive ID; never from Git author/committer
+metadata, a title, message, branch, actor, or footer. Complete event/context/checkout/config/range
+validation before returning skipped title and commit results with the stable reason `Dependabot
+pull request`. Ordinary `commit check` and repository plans keep checking, and every non-commit
+provider remains independent.
 `breaking-markers` is a schema-v1 enum with `either` as its default. `either` accepts a header `!`,
 a recognized final `BREAKING CHANGE:` or `BREAKING-CHANGE:` footer, or both; `paired` requires both
 markers or neither and reports `breaking.marker-pair` for exactly one. Apply marker pairing only to

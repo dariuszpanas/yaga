@@ -47,6 +47,13 @@ class BreakingMarkerPolicy(StrEnum):
     PAIRED = "paired"
 
 
+class DependabotPullRequestPolicy(StrEnum):
+    """Whether Dependabot pull-request commit policy is checked."""
+
+    CHECK = "check"
+    SKIP = "skip"
+
+
 class OutputFormat(StrEnum):
     """Supported stable report formats."""
 
@@ -79,6 +86,7 @@ class CommitPolicy:
     required_footer_tokens: tuple[str, ...] = ()
     forbidden_footer_tokens: tuple[str, ...] = ()
     scope_policy_by_type: tuple[tuple[str, PresencePolicy], ...] = ()
+    dependabot_pull_requests: DependabotPullRequestPolicy = DependabotPullRequestPolicy.CHECK
 
 
 @dataclass(frozen=True, slots=True)

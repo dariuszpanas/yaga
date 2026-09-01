@@ -21,6 +21,14 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
 - Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
   0/1/2, and the versioned JSON document are public pre-release contracts.
+- Keep `dependabot-pull-requests` in configuration schema v1 with closed values `check` and `skip`
+  and the default `check`. The opt-in skip belongs only to `github pull-request check` and the
+  read-only commit Action after complete event, runner-context, checkout, configuration, and range
+  validation. Require an exact strictly parsed PR author login `dependabot[bot]`, type `Bot`, and
+  bounded positive ID. Never infer trusted bot identity from Git author/committer data, messages,
+  titles, branches, actors, or footers. Emit skipped title and commit results with the stable
+  `Dependabot pull request` reason; ordinary commit/repository checks and every other provider keep
+  running.
 - Keep `scope-policy-by-type` as an empty-default schema-v1 mapping with at most 128 safe,
   case-insensitively unique type keys and closed presence-policy values. Overrides replace the
   global scope policy for full commits and PR titles; `scope-case` and `allowed-scopes` remain
