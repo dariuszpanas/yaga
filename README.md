@@ -25,6 +25,7 @@ The command tree starts with four deliberately separate surfaces:
 
 ```text
 yaga commit check                  # validate one message, commit, or range
+yaga config init                   # create a safe standalone starter policy
 yaga config show                   # explain the effective policy and its source
 yaga github pull-request check     # validate one exact GitHub PR event
 yaga gate codex-review <operation> # run the retained review gate
@@ -84,6 +85,19 @@ A standalone `.yaga.toml` uses `config-version = 1` and `[commit]` instead of th
 `[tool.yaga...]` tables. Omit `allowed-types` or `allowed-scopes` to allow any value. An explicit
 empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must not be empty.
 `yaga config show` prints every effective value and the source file, with `--format json` for tools.
+
+For a new repository, YAGA can create a recommended standalone policy and immediately report its
+effective values:
+
+```bash
+yaga config init --repo .
+```
+
+The starter permits the common Conventional Commit types, requires lowercase type and scope,
+allows an optional project-defined scope, bounds headers and body lines, rejects merge commits, and
+checks at most 64 commits per range. Initialization creates only `.yaga.toml`: it never edits
+`pyproject.toml`, overwrites a path, or shadows a configuration already discovered for the target
+directory. Use `--format json` when another tool needs the created path and effective policy.
 
 Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`, and
 `header.length`. Text and versioned JSON reports use these exit codes:
