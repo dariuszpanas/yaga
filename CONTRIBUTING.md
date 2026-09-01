@@ -30,7 +30,8 @@ with project and Python environment leakage removed.
 
 ## CLI and commit policy contract
 
-The public installed command groups are `commit`, `config`, `github`, `repo`, `workflow`, and `gate`.
+The public installed command groups are `change`, `commit`, `config`, `github`, `repo`, `workflow`,
+and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
@@ -81,6 +82,21 @@ diagnostics.
 `config init` creates only a new standalone `.yaga.toml` with exclusive no-overwrite semantics. It
 must refuse to shadow any effective discovered configuration, never edit `pyproject.toml`, and keep
 its deterministic starter template round-trippable through the strict loader.
+
+Changed-path coupling lives under `src/yaga/changes/` and remains installed-only. Require one
+explicit versioned policy and one explicit two-dot or three-dot Git range; never infer staged,
+working-tree, event, branch, or remote state. Keep schema v1 closed to named `when-any` plus
+`require-any` rules and its literal/`*`/component-`**` POSIX pattern grammar. Do not add regex,
+exclusions, includes, expressions, environment interpolation, or commands without a new reviewed
+contract. Resolve both endpoints without fetching, require non-shallow history without legacy graft
+overlays, choose exactly one merge base for three-dot comparison, disable
+rename/external-diff/textconv behavior, override submodule-ignore configuration so gitlink changes
+stay visible, and strictly parse bounded NUL-delimited UTF-8 paths. Treat every revision, Git
+response, path, and rule value as untrusted.
+Compile and cache each unique pattern once and preserve the shared 10,000,000-unit matcher-work
+ceiling. Keep exits `0` for pass, `1` for coupling findings, and `2` for
+policy/Git/operational failure. This provider does not enter either dependency-free Action import
+graph.
 
 Workflow reference policy lives under `src/yaga/workflows/` and remains installed-CLI-only. Parse
 untrusted YAML through the bounded pure-Python `SafeLoader` composition boundary without

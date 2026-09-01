@@ -199,6 +199,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     consumer = output / "consumer"
     consumer.mkdir()
     config = consumer / ".yaga.toml"
+    change_policy = consumer / "change-policy.toml"
     repository_plan = consumer / "repository-plan.toml"
     executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
     if not executable.is_file():
@@ -365,6 +366,103 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     ):
         raise SystemExit("installed wheel CLI repository check emitted the wrong report contract")
 
+    change_policy.write_text(
+        "change-policy-version = 1\n\n"
+        "[[rules]]\n"
+        'name = "python-source-needs-tests"\n'
+        'when-any = ["src/**/*.py"]\n'
+        'require-any = ["tests/**/*.py"]\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    git = shutil.which("git")
+    if git is None:
+        raise SystemExit("git is required for the installed change-policy smoke test")
+    for arguments in (
+        ("init", "--initial-branch=main"),
+        ("config", "user.name", "YAGA Build"),
+        ("config", "user.email", "yaga-build@example.invalid"),
+        ("add", "--all"),
+        (
+            "commit",
+            "--no-verify",
+            "--no-gpg-sign",
+            "--message",
+            "chore: establish smoke repository",
+        ),
+    ):
+        subprocess.run([git, "-C", str(consumer), *arguments], check=True)
+    base_sha = subprocess.check_output(
+        [git, "-C", str(consumer), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    source = consumer / "src" / "package.py"
+    test = consumer / "tests" / "test_package.py"
+    source.parent.mkdir()
+    test.parent.mkdir()
+    source.write_text("VALUE = 1\n", encoding="utf-8", newline="\n")
+    test.write_text("def test_value():\n    assert 1 == 1\n", encoding="utf-8", newline="\n")
+    subprocess.run([git, "-C", str(consumer), "add", "--all"], check=True)
+    subprocess.run(
+        [
+            git,
+            "-C",
+            str(consumer),
+            "commit",
+            "--no-verify",
+            "--no-gpg-sign",
+            "--message",
+            "test: cover smoke package",
+        ],
+        check=True,
+    )
+    head_sha = subprocess.check_output(
+        [git, "-C", str(consumer), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    change_completed = run_bounded(
+        [
+            str(executable),
+            "change",
+            "check",
+            "--policy",
+            str(change_policy),
+            "--range",
+            f"{base_sha}..{head_sha}",
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    change_document = successful_json(change_completed, operation="change check")
+    change_rules = change_document.get("rules")
+    if not (
+        change_document.get("schema_version") == 1
+        and change_document.get("kind") == "change_policy"
+        and change_document.get("status") == "passed"
+        and change_document.get("valid") is True
+        and change_document.get("policy_path") == str(change_policy.resolve())
+        and change_document.get("range") == f"{base_sha}..{head_sha}"
+        and change_document.get("base_sha") == base_sha
+        and change_document.get("head_sha") == head_sha
+        and change_document.get("comparison_sha") == base_sha
+        and change_document.get("paths_changed") == 2
+        and change_document.get("paths") == ["src/package.py", "tests/test_package.py"]
+        and change_document.get("paths_omitted") == 0
+        and change_document.get("passed") == 1
+        and change_document.get("failed") == 0
+        and change_document.get("skipped") == 0
+        and isinstance(change_rules, list)
+        and len(change_rules) == 1
+        and isinstance(change_rules[0], dict)
+        and change_rules[0].get("name") == "python-source-needs-tests"
+        and change_rules[0].get("status") == "passed"
+    ):
+        raise SystemExit("installed wheel CLI change check emitted the wrong report contract")
+
     lint_help = run_bounded(
         [str(executable), "workflow", "lint", "--help"],
         cwd=consumer,
@@ -448,6 +546,7 @@ def main() -> int:
                 "yaga/commit_action_runtime.py",
                 "yaga/cli.py",
                 "yaga/codex/runtime.py",
+                "yaga/commands/change.py",
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
                 "yaga/commands/repo.py",
@@ -456,6 +555,14 @@ def main() -> int:
                 "yaga/commits/github_event.py",
                 "yaga/commits/github_reporting.py",
                 "yaga/commits/service.py",
+                "yaga/changes/__init__.py",
+                "yaga/changes/checker.py",
+                "yaga/changes/git.py",
+                "yaga/changes/models.py",
+                "yaga/changes/patterns.py",
+                "yaga/changes/policy.py",
+                "yaga/changes/reporting.py",
+                "yaga/changes/service.py",
                 "yaga/files.py",
                 "yaga/repository/checker.py",
                 "yaga/repository/models.py",

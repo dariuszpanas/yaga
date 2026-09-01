@@ -13,6 +13,7 @@ check:
 	uv run ty check
 	uv run pre-commit validate-manifest .pre-commit-hooks.yaml
 	uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD
+	uv run yaga change check --policy .yaga/change-policy.toml --range HEAD^..HEAD
 	bash -n scripts/composite_smoke_python
 
 test:

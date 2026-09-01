@@ -78,6 +78,14 @@ operations through `yaga gate` and keep the composite Action as a supported adap
 - Keep `.pre-commit-hooks.yaml` as one direct Python `commit-msg` adapter to
   `yaga commit check --file`. Do not add a wrapper, filters, policy arguments, or hook-only
   dependencies; local hooks are bypassable and cannot enforce merge parent policy.
+- Keep `change check` installed-only and require an explicit versioned policy plus exact `A..B` or
+  `A...B` range. Schema v1 is closed to bounded named `when-any`/`require-any` rules and
+  case-sensitive repository-relative POSIX patterns with literals, `*`, and component-level `**`.
+  Never infer working-tree, staged, event, branch, or remote state; never fetch. Require non-shallow
+  history without legacy graft overlays, an unambiguous three-dot merge base, bounded NUL-delimited
+  Git paths, visible gitlink changes, disabled rename/external-diff/textconv behavior,
+  unique-pattern caching, and the shared 10,000,000-unit matcher-work ceiling. Keep it out of both
+  Action import graphs.
 - The installed CLI may use the locked Typer dependency. The write-capable root Action may not
   import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
   the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the

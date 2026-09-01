@@ -141,6 +141,23 @@ def test_commit_action_is_a_separate_read_only_closed_interface() -> None:
     assert "uses: ./actions/commit-check" in workflow
 
 
+def test_ci_changed_path_policy_uses_explicit_unprivileged_event_boundaries() -> None:
+    workflow = read(".github/workflows/ci.yml")
+
+    assert section_keys(workflow, "permissions") == {"contents"}
+    assert "pull_request_target:" not in workflow
+    assert "workflow_run:" not in workflow
+    assert "fetch-depth: 0" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "name: Run changed-path policy" in workflow
+    assert "YAGA_CHANGE_BASE: ${{ github.event_name == 'pull_request'" in workflow
+    assert "YAGA_CHANGE_HEAD: ${{ github.event_name == 'pull_request'" in workflow
+    assert "YAGA_CHANGE_SEPARATOR: ${{ github.event_name == 'pull_request'" in workflow
+    assert '--range "${YAGA_CHANGE_BASE}${YAGA_CHANGE_SEPARATOR}${YAGA_CHANGE_HEAD}"' in workflow
+    assert "--policy .yaga/change-policy.toml" in workflow
+    assert "--format github" in workflow
+
+
 def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:
     example = read("examples/commit-policy.yml")
     readme = read("README.md")

@@ -46,6 +46,7 @@ def test_root_help_exposes_local_policy_and_preserved_gate_commands() -> None:
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
+    assert "change" in result.stdout
     assert "commit" in result.stdout
     assert "config" in result.stdout
     assert "gate" in result.stdout
