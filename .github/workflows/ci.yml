@@ -31,6 +31,11 @@ jobs:
       - run: uv run --frozen --python 3.12 ruff check .
       - run: uv run --frozen --python 3.12 ruff format --check .
       - run: uv run --frozen --python 3.12 ty check
+      - run: uv run --frozen --python 3.12 yaga --help
+      - run: uv run --frozen --python 3.12 python -m yaga --help
+      - run: >-
+          uv run --frozen --python 3.12 yaga commit check
+          --message "feat(ci): exercise the installed CLI"
       - run: uv run --frozen --python 3.12 python scripts/run_actionlint.py
       - run: bash -n scripts/composite_smoke_python
       - run: uv run --frozen --python 3.12 python scripts/check_build.py

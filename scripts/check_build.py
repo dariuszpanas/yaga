@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
-    """Require one wheel and sdist containing the public package."""
+    """Require one wheel and sdist containing both supported execution surfaces."""
     uv = shutil.which("uv")
     if uv is None:
         raise SystemExit("uv is required for the package build gate")
@@ -34,14 +34,41 @@ def main() -> int:
         source_distributions = list(output.glob("*.tar.gz"))
         if len(wheels) != 1 or len(source_distributions) != 1:
             raise SystemExit("build must emit exactly one wheel and one source distribution")
+        if not wheels[0].name.startswith("yaga_cli-"):
+            raise SystemExit("wheel has the wrong distribution name")
         with zipfile.ZipFile(wheels[0]) as wheel:
-            if "yaga/__init__.py" not in wheel.namelist():
-                raise SystemExit("wheel does not contain the yaga package")
+            names = set(wheel.namelist())
+            required = {
+                "yaga/__init__.py",
+                "yaga/action_cli.py",
+                "yaga/cli.py",
+                "yaga/codex/runtime.py",
+                "yaga/commands/commit.py",
+                "yaga/commits/checker.py",
+                "yaga/files.py",
+            }
+            if missing := sorted(required - names):
+                raise SystemExit(f"wheel is missing required modules: {', '.join(missing)}")
+            entry_points = next(
+                (name for name in names if name.endswith(".dist-info/entry_points.txt")),
+                None,
+            )
+            if entry_points is None:
+                raise SystemExit("wheel does not contain console-script metadata")
+            entry_point_text = wheel.read(entry_points).decode("utf-8")
+            if "yaga = yaga.cli:app" not in entry_point_text:
+                raise SystemExit("wheel does not expose the yaga console script")
         with tarfile.open(source_distributions[0], mode="r:gz") as source_distribution:
-            if not any(
-                name.endswith("/src/yaga/__init__.py") for name in source_distribution.getnames()
-            ):
-                raise SystemExit("source distribution does not contain the yaga package")
+            names = source_distribution.getnames()
+            required_suffixes = {
+                "/action.yml": "the composite Action",
+                "/examples/codex-review.yml": "the Codex review workflow example",
+                "/examples/review-policy.yml": "the review policy workflow example",
+                "/src/yaga/__init__.py": "the yaga package",
+            }
+            for suffix, label in required_suffixes.items():
+                if not any(name.endswith(suffix) for name in names):
+                    raise SystemExit(f"source distribution does not contain {label}")
     return 0
 
 
