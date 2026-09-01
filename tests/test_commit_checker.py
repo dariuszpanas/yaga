@@ -77,6 +77,72 @@ def test_scope_presence_and_allow_list_are_configurable() -> None:
     assert codes("feat(cli): add a command", forbidden) == ["scope.forbidden"]
 
 
+def test_scope_policy_by_type_overrides_global_presence_policy() -> None:
+    policy = CommitPolicy(
+        scope_policy=PresencePolicy.OPTIONAL,
+        scope_policy_by_type=(
+            ("feat", PresencePolicy.REQUIRED),
+            ("docs", PresencePolicy.FORBIDDEN),
+        ),
+    )
+
+    assert codes("feat: add a command", policy) == ["scope.required"]
+    assert result("feat(cli): add a command", policy).valid
+    assert codes("docs(guide): explain the command", policy) == ["scope.forbidden"]
+    assert result("docs: explain the command", policy).valid
+
+    optional_override = CommitPolicy(
+        scope_policy=PresencePolicy.REQUIRED,
+        scope_policy_by_type=(("chore", PresencePolicy.OPTIONAL),),
+    )
+    assert result("chore: refresh tooling", optional_override).valid
+    assert result("chore(deps): refresh tooling", optional_override).valid
+
+
+def test_scope_policy_by_type_falls_back_and_matches_type_case_insensitively() -> None:
+    policy = CommitPolicy(
+        scope_policy=PresencePolicy.REQUIRED,
+        scope_policy_by_type=(("FEAT", PresencePolicy.OPTIONAL),),
+    )
+
+    assert result("feat: add a command", policy).valid
+    assert result("FeAt: add a command", policy).valid
+    assert codes("fix: repair the command", policy) == ["scope.required"]
+
+
+def test_scope_override_does_not_replace_scope_case_or_allow_list_rules() -> None:
+    policy = CommitPolicy(
+        scope_policy_by_type=(("docs", PresencePolicy.FORBIDDEN),),
+        allowed_scopes=("guide",),
+        scope_case=CasePolicy.LOWER,
+    )
+
+    assert codes("docs(API): explain the command", policy) == [
+        "scope.forbidden",
+        "scope.case",
+        "scope.allowed",
+    ]
+
+
+def test_header_check_applies_scope_policy_by_type() -> None:
+    policy = CommitPolicy(
+        scope_policy=PresencePolicy.OPTIONAL,
+        scope_policy_by_type=(
+            ("feat", PresencePolicy.REQUIRED),
+            ("docs", PresencePolicy.FORBIDDEN),
+        ),
+    )
+
+    missing = check_header(CommitTarget(label="title", message="FEAT: add command"), policy)
+    forbidden = check_header(
+        CommitTarget(label="title", message="docs(guide): explain command"),
+        policy,
+    )
+
+    assert [diagnostic.code for diagnostic in missing.diagnostics] == ["scope.required"]
+    assert [diagnostic.code for diagnostic in forbidden.diagnostics] == ["scope.forbidden"]
+
+
 def test_header_and_description_bounds_are_reported_deterministically() -> None:
     policy = CommitPolicy(
         header_max_length=20,

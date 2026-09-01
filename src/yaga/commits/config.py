@@ -37,6 +37,7 @@ _COMMIT_KEYS = frozenset(
         "allowed-types",
         "type-case",
         "scope-policy",
+        "scope-policy-by-type",
         "allowed-scopes",
         "scope-case",
         "header-max-length",
@@ -170,13 +171,26 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         "scope-policy",
         path,
     )
-    if scope_policy is PresencePolicy.FORBIDDEN and allowed_scopes not in (None, ()):
+    scope_policy_by_type = _scope_policy_by_type(
+        raw_commit.get("scope-policy-by-type", {}),
+        allowed_types=allowed_types,
+        path=path,
+    )
+    reachable_scope_policies = _reachable_scope_policies(
+        allowed_types=allowed_types,
+        scope_policy=scope_policy,
+        scope_policy_by_type=scope_policy_by_type,
+    )
+    if allowed_scopes == () and PresencePolicy.REQUIRED in reachable_scope_policies:
         raise ConfigurationError(
-            f"allowed-scopes cannot contain values when scope-policy is forbidden in {path}"
+            f"allowed-scopes cannot be empty when a reachable scope policy is required in {path}"
         )
-    if scope_policy is PresencePolicy.REQUIRED and allowed_scopes == ():
+    if allowed_scopes not in (None, ()) and all(
+        policy is PresencePolicy.FORBIDDEN for policy in reachable_scope_policies
+    ):
         raise ConfigurationError(
-            f"allowed-scopes cannot be empty when scope-policy is required in {path}"
+            f"allowed-scopes cannot contain values when every reachable scope policy is "
+            f"forbidden in {path}"
         )
 
     description_min = _integer(
@@ -230,9 +244,7 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         raw_commit, "header-max-length", minimum=1, maximum=100_000, path=path
     )
     minimum_header = _minimum_header_length(
-        allowed_types=allowed_types,
-        scope_policy=scope_policy,
-        allowed_scopes=allowed_scopes,
+        reachable_scope_policies=reachable_scope_policies,
         description_min=description_min,
     )
     if header_max is not None and header_max < minimum_header:
@@ -312,6 +324,7 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         max_commits=_integer(raw_commit.get("max-commits", 256), "max-commits", 1, 10_000, path),
         required_footer_tokens=required_footer_tokens,
         forbidden_footer_tokens=forbidden_footer_tokens,
+        scope_policy_by_type=scope_policy_by_type,
     )
 
 
@@ -376,6 +389,63 @@ def _footer_tokens(
     return values
 
 
+def _scope_policy_by_type(
+    value: object,
+    *,
+    allowed_types: tuple[str, ...] | None,
+    path: Path,
+) -> tuple[tuple[str, PresencePolicy], ...]:
+    if not isinstance(value, dict):
+        raise ConfigurationError(f"scope-policy-by-type must be a table in {path}")
+    if len(value) > MAX_LIST_ITEMS:
+        raise ConfigurationError(f"scope-policy-by-type exceeds {MAX_LIST_ITEMS} entries in {path}")
+
+    allowed = {commit_type.casefold() for commit_type in allowed_types or ()}
+    normalized: set[str] = set()
+    policies: list[tuple[str, PresencePolicy]] = []
+    for commit_type, raw_policy in value.items():
+        if (
+            not commit_type
+            or len(commit_type) > MAX_TOKEN_LENGTH
+            or any(_unsafe_character(character) for character in commit_type)
+            or _TYPE_TOKEN.fullmatch(commit_type) is None
+        ):
+            raise ConfigurationError(
+                f"scope-policy-by-type contains invalid type token {commit_type!r} in {path}"
+            )
+        folded = commit_type.casefold()
+        if folded in normalized:
+            raise ConfigurationError(
+                f"scope-policy-by-type contains duplicate type token {commit_type!r} in {path}"
+            )
+        if allowed_types is not None and folded not in allowed:
+            raise ConfigurationError(
+                f"scope-policy-by-type type {commit_type!r} is not in allowed-types in {path}"
+            )
+        normalized.add(folded)
+        policies.append(
+            (
+                commit_type,
+                _enum(raw_policy, PresencePolicy, f"scope-policy-by-type.{commit_type}", path),
+            )
+        )
+    return tuple(policies)
+
+
+def _reachable_scope_policies(
+    *,
+    allowed_types: tuple[str, ...] | None,
+    scope_policy: PresencePolicy,
+    scope_policy_by_type: tuple[tuple[str, PresencePolicy], ...],
+) -> tuple[PresencePolicy, ...]:
+    overrides = {commit_type.casefold(): policy for commit_type, policy in scope_policy_by_type}
+    if allowed_types is not None:
+        return tuple(
+            overrides.get(commit_type.casefold(), scope_policy) for commit_type in allowed_types
+        )
+    return (scope_policy, *(policy for _, policy in scope_policy_by_type))
+
+
 def _string_list(
     value: object,
     key: str,
@@ -400,17 +470,14 @@ def _string_list(
 
 def _minimum_header_length(
     *,
-    allowed_types: tuple[str, ...] | None,
-    scope_policy: PresencePolicy,
-    allowed_scopes: tuple[str, ...] | None,
+    reachable_scope_policies: tuple[PresencePolicy, ...],
     description_min: int,
 ) -> int:
-    shortest_type = min(map(len, allowed_types)) if allowed_types is not None else 1
-    scope_length = 0
-    if scope_policy is PresencePolicy.REQUIRED:
-        shortest_scope = min(map(len, allowed_scopes)) if allowed_scopes is not None else 1
-        scope_length = shortest_scope + 2
-    return shortest_type + scope_length + 2 + description_min
+    """Return a structural lower bound without rejecting shorter casefold equivalents."""
+    scope_length = (
+        3 if all(policy is PresencePolicy.REQUIRED for policy in reachable_scope_policies) else 0
+    )
+    return 1 + scope_length + 2 + description_min
 
 
 def _unsafe_character(value: str) -> bool:

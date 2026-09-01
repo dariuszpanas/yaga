@@ -6,11 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from yaga.commits.checker import check_target
 from yaga.commits.config import MAX_CONFIG_BYTES, load_config
 from yaga.commits.models import (
     BreakingMarkerPolicy,
     CasePolicy,
     CommitPolicy,
+    CommitTarget,
     EndingPolicy,
     MergePolicy,
     PresencePolicy,
@@ -35,6 +37,7 @@ def test_missing_configuration_uses_spec_only_defaults(tmp_path: Path) -> None:
     assert loaded.path is None
     assert loaded.policy.allowed_types is None
     assert loaded.policy.scope_policy is PresencePolicy.OPTIONAL
+    assert loaded.policy.scope_policy_by_type == ()
     assert loaded.policy.body_min_words == 0
     assert loaded.policy.breaking_markers is BreakingMarkerPolicy.EITHER
     assert loaded.policy.required_footer_tokens == ()
@@ -71,6 +74,7 @@ def test_commit_policy_preserves_the_legacy_positional_constructor() -> None:
     assert policy.breaking_markers is BreakingMarkerPolicy.EITHER
     assert policy.required_footer_tokens == ()
     assert policy.forbidden_footer_tokens == ()
+    assert policy.scope_policy_by_type == ()
 
 
 def test_nearest_pyproject_is_discovered_from_a_nested_directory(tmp_path: Path) -> None:
@@ -156,10 +160,6 @@ def test_discovery_does_not_escape_the_git_root(tmp_path: Path) -> None:
             "cannot be empty",
         ),
         (
-            '[tool.yaga]\n[tool.yaga.commit]\nallowed-types = ["feature"]\nheader-max-length = 8\n',
-            "minimum header length",
-        ),
-        (
             '[tool.yaga]\n[tool.yaga.commit]\nallowed-scopes = ["   "]\n',
             "invalid token",
         ),
@@ -183,6 +183,180 @@ def test_explicit_empty_scope_list_forbids_any_named_scope(tmp_path: Path) -> No
     loaded = load_config(project)
 
     assert loaded.policy.allowed_scopes == ()
+
+
+def test_scope_policy_by_type_preserves_configured_spelling_and_order(tmp_path: Path) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'allowed-types = ["feat", "revert"]\n'
+        'scope-policy-by-type = { FEAT = "required", Revert = "forbidden" }\n',
+    )
+
+    policy = load_config(project).policy
+
+    assert policy.scope_policy_by_type == (
+        ("FEAT", PresencePolicy.REQUIRED),
+        ("Revert", PresencePolicy.FORBIDDEN),
+    )
+
+
+@pytest.mark.parametrize(
+    ("configured", "message"),
+    [
+        ("scope-policy-by-type = []\n", "must be a table"),
+        ('scope-policy-by-type = { feat = "sometimes" }\n', "must be one of"),
+        ("scope-policy-by-type = { feat = true }\n", "must be a string"),
+        ('scope-policy-by-type = { "" = "required" }\n', "invalid type token"),
+        ('scope-policy-by-type = { "feat(scope)" = "required" }\n', "invalid type token"),
+        (
+            f'scope-policy-by-type = {{ "{"x" * 129}" = "required" }}\n',
+            "invalid type token",
+        ),
+        (
+            'scope-policy-by-type = { "fi\u200bx" = "required" }\n',
+            "invalid type token",
+        ),
+        (
+            'scope-policy-by-type = { feat = "required", FEAT = "optional" }\n',
+            "duplicate type token",
+        ),
+        (
+            'scope-policy-by-type = { "ß" = "required", ss = "optional" }\n',
+            "duplicate type token",
+        ),
+    ],
+)
+def test_scope_policy_by_type_rejects_invalid_mappings(
+    tmp_path: Path,
+    configured: str,
+    message: str,
+) -> None:
+    project = write_pyproject(tmp_path, configured)
+
+    with pytest.raises(ConfigurationError, match=message):
+        load_config(project)
+
+
+@pytest.mark.parametrize("count", [128, 129])
+def test_scope_policy_by_type_bounds_entries(tmp_path: Path, count: int) -> None:
+    entries = ", ".join(f'Type{index} = "optional"' for index in range(count))
+    project = write_pyproject(tmp_path, f"scope-policy-by-type = {{ {entries} }}\n")
+
+    if count == 128:
+        assert len(load_config(project).policy.scope_policy_by_type) == 128
+    else:
+        with pytest.raises(ConfigurationError, match="exceeds 128 entries"):
+            load_config(project)
+
+
+def test_scope_policy_by_type_must_name_an_allowed_type(tmp_path: Path) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'allowed-types = ["feat"]\nscope-policy-by-type = { fix = "required" }\n',
+    )
+
+    with pytest.raises(ConfigurationError, match="type 'fix' is not in allowed-types"):
+        load_config(project)
+
+
+def test_empty_allowed_scopes_rejects_any_reachable_required_override(tmp_path: Path) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'allowed-scopes = []\nscope-policy-by-type = { feat = "required" }\n',
+    )
+
+    with pytest.raises(ConfigurationError, match="reachable scope policy is required"):
+        load_config(project)
+
+
+def test_allowed_types_limit_scope_policy_reachability(tmp_path: Path) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'allowed-types = ["feat"]\n'
+        'scope-policy = "required"\n'
+        'scope-policy-by-type = { feat = "forbidden" }\n'
+        "allowed-scopes = []\n",
+    )
+
+    assert load_config(project).policy.allowed_scopes == ()
+
+
+def test_nonempty_allowed_scopes_accepts_a_reachable_optional_override(tmp_path: Path) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'scope-policy = "forbidden"\n'
+        'scope-policy-by-type = { feat = "optional" }\n'
+        'allowed-scopes = ["cli"]\n',
+    )
+
+    assert load_config(project).policy.allowed_scopes == ("cli",)
+
+
+def test_nonempty_allowed_scopes_rejects_only_forbidden_reachable_policies(
+    tmp_path: Path,
+) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'allowed-types = ["feat"]\n'
+        'scope-policy = "optional"\n'
+        'scope-policy-by-type = { feat = "forbidden" }\n'
+        'allowed-scopes = ["cli"]\n',
+    )
+
+    with pytest.raises(ConfigurationError, match="every reachable scope policy is forbidden"):
+        load_config(project)
+
+
+def test_header_minimum_uses_effective_scope_policy_candidates(tmp_path: Path) -> None:
+    forbidden_override = write_pyproject(
+        tmp_path,
+        'allowed-types = ["feature"]\n'
+        'scope-policy = "required"\n'
+        'scope-policy-by-type = { feature = "forbidden" }\n'
+        "header-max-length = 10\n",
+    )
+
+    assert load_config(forbidden_override).policy.header_max_length == 10
+
+    required_override = write_pyproject(
+        tmp_path,
+        'allowed-types = ["f"]\nscope-policy-by-type = { f = "required" }\nheader-max-length = 4\n',
+    )
+    with pytest.raises(ConfigurationError, match="minimum header length of 7"):
+        load_config(required_override)
+
+
+def test_header_minimum_includes_explicit_overrides_without_allowed_types(
+    tmp_path: Path,
+) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'scope-policy = "required"\n'
+        'scope-policy-by-type = { x = "forbidden" }\n'
+        "header-max-length = 4\n",
+    )
+
+    assert load_config(project).policy.header_max_length == 4
+
+
+def test_header_minimum_is_a_conservative_structural_bound(tmp_path: Path) -> None:
+    configured_spelling = write_pyproject(
+        tmp_path,
+        'allowed-types = ["feature"]\nheader-max-length = 8\n',
+    )
+
+    assert load_config(configured_spelling).policy.header_max_length == 8
+
+    casefold_equivalent = write_pyproject(
+        tmp_path,
+        'allowed-types = ["ss"]\n'
+        'scope-policy = "required"\n'
+        'allowed-scopes = ["x"]\n'
+        "header-max-length = 7\n",
+    )
+    policy = load_config(casefold_equivalent).policy
+
+    assert check_target(CommitTarget(label="message", message="ß(x): a"), policy).valid
 
 
 def test_small_but_satisfiable_length_limits_are_supported(tmp_path: Path) -> None:

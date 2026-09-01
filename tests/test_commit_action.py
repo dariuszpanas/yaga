@@ -352,6 +352,56 @@ def test_isolated_commit_action_enforces_footer_policy_only_for_commits(
     assert f"pull request #17 title: [{diagnostic}]" not in completed.stdout
 
 
+def test_isolated_commit_action_applies_per_type_scope_policy_to_pr_title(
+    tmp_path: Path,
+) -> None:
+    repository, event_file, action_environment = _action_fixture(
+        tmp_path,
+        head_message="feat(action): validate the complete commit",
+        pull_request_title="feat: require a title scope",
+        config=(
+            "config-version = 1\n"
+            "[commit]\n"
+            'scope-policy = "optional"\n'
+            'scope-policy-by-type = { feat = "required" }\n'
+        ),
+    )
+    environment = os.environ.copy()
+    environment.update(action_environment)
+    environment["PYTHONPATH"] = str(ROOT / "src")
+    environment["YAGA_COMMIT_ACTION_RUNTIME"] = "1"
+    environment.pop("YAGA_ACTION_RUNTIME", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            "-S",
+            "-m",
+            "yaga",
+            "github",
+            "pull-request",
+            "check",
+            "--event-file",
+            str(event_file),
+            "--repo",
+            str(repository),
+            "--format",
+            "github",
+        ],
+        cwd=repository,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stderr == ""
+    assert completed.stdout.count("[scope.required]") == 1
+    assert "pull request #17 title: [scope.required]" in completed.stdout
+
+
 def test_action_runtime_selectors_are_mutually_exclusive(tmp_path: Path) -> None:
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(ROOT / "src")

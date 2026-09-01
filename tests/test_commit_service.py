@@ -134,6 +134,29 @@ def test_standalone_service_applies_footer_policy_to_messages_and_git_commits(
     assert repeated.valid
 
 
+def test_standalone_service_applies_scope_policy_by_type_from_config(
+    repository: tuple[Path, list[str], Path],
+) -> None:
+    repo, _, config = repository
+    config.write_text(
+        "config-version = 1\n"
+        "\n"
+        "[commit]\n"
+        'allowed-types = ["feat", "docs"]\n'
+        'scope-policy = "optional"\n'
+        'scope-policy-by-type = { feat = "required" }\n',
+        encoding="utf-8",
+    )
+
+    missing = check_commits(repo, message="feat: require a feature scope")
+    scoped = check_commits(repo, message="feat(cli): accept a feature scope")
+    fallback = check_commits(repo, message="docs: keep the global scope policy")
+
+    assert [diagnostic.code for diagnostic in missing.results[0].diagnostics] == ["scope.required"]
+    assert scoped.valid
+    assert fallback.valid
+
+
 def test_git_only_service_exposes_default_commit_explicit_commit_and_range(
     repository: tuple[Path, list[str], Path],
 ) -> None:
