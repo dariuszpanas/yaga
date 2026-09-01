@@ -45,6 +45,10 @@ Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or
 `.yaga.toml` root plus `[commit]`. Load exactly one nearest or explicit file, reject unknown keys and
 wrong types, and do not silently merge policies. Stable diagnostic identifiers and JSON schema
 fields are public pre-release interfaces; change them deliberately and test both text and JSON.
+`breaking-markers` is a schema-v1 enum with `either` as its default. `either` accepts a header `!`,
+a recognized final `BREAKING CHANGE:` or `BREAKING-CHANGE:` footer, or both; `paired` requires both
+markers or neither and reports `breaking.marker-pair` for exactly one. Apply marker pairing only to
+complete commit messages: the pull-request title adapter deliberately uses the header-only checker.
 `body-min-words` is a schema-v1 integer from zero through 100000 with a zero default. It counts only
 Unicode-whitespace-delimited prose-body tokens containing a Unicode alphanumeric character;
 recognized final footers and punctuation-only or emoji-only tokens are excluded. A nonzero value

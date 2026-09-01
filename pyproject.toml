@@ -112,6 +112,7 @@ scope-case = "lower"
 header-max-length = 100
 description-min-length = 3
 description-ending = "forbid"
+breaking-markers = "paired"
 body-policy = "optional"
 body-min-words = 8
 body-max-line-length = 100

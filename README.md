@@ -77,6 +77,7 @@ header-max-length = 100
 description-min-length = 3
 description-max-length = 72
 description-ending = "forbid"    # allow, require, or forbid . ! ?
+breaking-markers = "paired"      # either or paired
 body-policy = "optional"
 body-min-length = 0
 body-min-words = 8
@@ -90,6 +91,12 @@ A standalone `.yaga.toml` uses `config-version = 1` and `[commit]` instead of th
 `[tool.yaga...]` tables. Omit `allowed-types` or `allowed-scopes` to allow any value. An explicit
 empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must not be empty.
 `yaga config show` prints every effective value and the source file, with `--format json` for tools.
+
+`breaking-markers` defaults to `"either"`. A header `!`, a recognized final
+`BREAKING CHANGE:` or `BREAKING-CHANGE:` footer, or both mark a breaking change in that mode. The
+`"paired"` policy requires both markers or neither; exactly one produces
+`breaking.marker-pair`. Marker pairing applies to complete commit messages, not pull-request titles,
+whose policy check intentionally covers only the Conventional Commit header.
 
 `body-min-length` and `body-min-words` are independent lower bounds on the parsed prose body.
 `body-min-words` accepts an integer from `0` through `100000` and defaults to `0`; it counts
@@ -113,7 +120,8 @@ checks at most 64 commits per range. Initialization creates only `.yaga.toml`: i
 directory. Use `--format json` when another tool needs the created path and effective policy.
 
 Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`,
-`header.length`, and `body.word-count`. Text and versioned JSON reports use these exit codes:
+`header.length`, `breaking.marker-pair`, and `body.word-count`. Text and versioned JSON reports use
+these exit codes:
 
 | Exit | Meaning |
 | --- | --- |
@@ -129,7 +137,7 @@ audited immutable commit that contains `.pre-commit-hooks.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/dariuszpanas/yaga
-    rev: 1693ad15b66428f8edb30b168c1a422f0d1dfb26
+    rev: b9a4bada0cf4cc633dc699376ec1c6dc4af6a291
     hooks:
       - id: yaga-commit-check
 ```
@@ -198,7 +206,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: dariuszpanas/yaga/actions/commit-check@1693ad15b66428f8edb30b168c1a422f0d1dfb26
+      - uses: dariuszpanas/yaga/actions/commit-check@b9a4bada0cf4cc633dc699376ec1c6dc4af6a291
 ```
 
 The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,
