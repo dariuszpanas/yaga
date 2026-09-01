@@ -15,16 +15,18 @@ uv run make ci
 ```
 
 The full gate uses Docker for the pinned actionlint container. The installed CLI uses the locked
-Typer dependency. The composite-Action import graph—`__main__` in Action mode, `action_cli`,
+Typer dependency. The write-capable root Action import graph—`__main__` in gate mode, `action_cli`,
 `action`, `codex`, and the generic GitHub primitives—must remain Python-standard-library-only and
-must not import the installed CLI, command, commit-policy, or presentation modules.
+must not import the installed CLI, command, commit-policy, or presentation modules. The separate
+read-only commit Action may import dependency-light commit modules, but never Typer, command
+modules, Codex policy, GitHub REST transport, site packages, or token handling.
 
 ## CLI and commit policy contract
 
-The public installed command groups are `commit`, `config`, and `gate`. Keep Typer declarations in
-`src/yaga/commands/`; keep commit parsing, policy, Git selection, configuration, and reporting in
-focused dependency-light modules under `src/yaga/commits/`. Domain behavior must remain directly
-testable without invoking Typer.
+The public installed command groups are `commit`, `config`, `github`, and `gate`. Keep Typer
+declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection, configuration,
+GitHub event adaptation, and reporting in focused dependency-light modules under
+`src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
 
 `commit check` accepts exactly one of a message, UTF-8 file, standard input, Git commit, or Git
 range; with none it checks `HEAD`. Preserve full messages, deterministic oldest-first range order,
@@ -37,9 +39,16 @@ Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or
 wrong types, and do not silently merge policies. Stable diagnostic identifiers and JSON schema
 fields are public pre-release interfaces; change them deliberately and test both text and JSON.
 
-The Action uses the same `gate codex-review <operation>` command path through a fixed
+The write-capable root Action uses the same `gate codex-review <operation>` command path through a fixed
 `YAGA_ACTION_RUNTIME=1` standard-library bootstrap. It installs no package and makes no network
 request for dependencies. Never accept `github-token` as argv, configuration, output, or logs.
+
+The read-only Action uses its own closed `YAGA_COMMIT_ACTION_RUNTIME=1` bootstrap and the public
+`github pull-request check` path. It accepts no token or caller-selected revisions, validates one
+bounded event against the GitHub runner repository/ref identity, requires `HEAD` to equal the event
+head, and never fetches Git history. Keep the pinned Python bootstrap token explicitly empty, and
+keep its `edited`-aware workflow separate from the authenticated `CI` workflow used by the Codex
+gate. Its PR-head configuration is contributor-controlled and is only a quality signal.
 
 ## Action contract
 

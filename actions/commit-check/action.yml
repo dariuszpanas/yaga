@@ -1,0 +1,32 @@
+name: YAGA Commit Check
+description: Check a pull request title and exact commit range with repository-local YAGA policy
+author: Dariusz Panas
+
+runs:
+  using: composite
+  steps:
+    - name: Set up the YAGA runtime
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: "3.12"
+        token: ""
+    - name: Check pull request commit policy
+      shell: bash
+      env:
+        PYTHONUTF8: "1"
+        YAGA_COMMIT_ACTION_RUNTIME: "1"
+      run: |
+        set -euo pipefail
+        unset PYTHONHOME
+        YAGA_SOURCE="$(cd -- "$GITHUB_ACTION_PATH/../../src" && pwd -P)"
+        test -f "$YAGA_SOURCE/yaga/commit_action_cli.py"
+        export PYTHONPATH="$YAGA_SOURCE"
+        export PYTHONSAFEPATH=1
+        python -P -S -m yaga github pull-request check \
+          --event-file "${GITHUB_EVENT_PATH:-}" \
+          --repo "${GITHUB_WORKSPACE:-}" \
+          --format github
+
+branding:
+  icon: check-circle
+  color: purple

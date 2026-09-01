@@ -21,16 +21,19 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
 - Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
   0/1/2, and the versioned JSON document are public pre-release contracts.
-- The installed CLI may use the locked Typer dependency. The composite Action may not import Typer,
-  CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve the fixed
-  dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher.
+- The installed CLI may use the locked Typer dependency. The write-capable root Action may not
+  import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
+  the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the
+  read-only commit Action on its separate `YAGA_COMMIT_ACTION_RUNTIME=1` bootstrap; it may import
+  commit modules but not Typer, commands, Codex policy, GitHub REST/token code, or site packages.
 
 ## Preserve the trust boundary
 
 - Treat events, inputs, API responses, comments, reviews, reactions, statuses, and run metadata as
   untrusted until strictly parsed and bounded.
-- Keep the composite-Action import graph dependency-free and never expose `github-token` in
-  arguments, output, status, logs, or exceptions.
+- Keep both composite-Action import graphs dependency-free and never expose `github-token` in
+  arguments, output, status, logs, or exceptions. Keep the commit Action's pinned Python bootstrap
+  token explicitly empty.
 - Keep PR CI unprivileged. Write-capable YAGA operations run only from trusted default-branch
   `pull_request_target` or `workflow_run` workflows and never consume PR code, artifacts, or cache.
 - Treat PR CI as a quota-saving heuristic, not a security authority. Merge security also relies on

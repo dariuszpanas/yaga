@@ -11,8 +11,11 @@ Useful reports include:
   message;
 - terminal escape/control injection, unbounded message/config/Git output, or JSON contract
   confusion in `commit check`;
-- the composite Action importing Typer, site packages, commit-policy modules, or any dependency
-  installed at runtime;
+- the write-capable root Action importing Typer, site packages, commit-policy modules, or any
+  dependency installed at runtime;
+- the read-only commit runtime accepting a token, GitHub API or Git-fetch path, caller-selected
+  revision, synthetic merge checkout, shallow history, unbound event/repository identity, or
+  unescaped workflow command;
 - PR-controlled code, actions, artifacts, caches, or text reaching a write-capable trusted job;
 - a request comment posted before exact current successful CI, live PR/head/base/default branch,
   unique ownership, lifecycle provenance, and owner/environment authorization are revalidated;
@@ -34,10 +37,21 @@ no network request. A selected `.yaga.toml` or `pyproject.toml` is trusted repos
 shape, types, token lengths, patterns, and schema version are still validated strictly so a typo
 cannot silently weaken checks.
 
-The installed CLI depends on locked Typer packages. The composite Action does not: its fixed
+The installed CLI depends on locked Typer packages. The write-capable root Action does not: its fixed
 `YAGA_ACTION_RUNTIME=1` path runs with Python site packages disabled and enters only the
 standard-library Action/gate import graph. Both frontends call the same gate dispatcher. The GitHub
 token stays in `GITHUB_TOKEN`; no gate command accepts it as an argument or configuration value.
+
+The separate commit Action uses a pinned Python bootstrap with an explicit empty token; that
+bootstrap may obtain Python before YAGA starts. Its dependency-free YAGA runtime uses a different
+`YAGA_COMMIT_ACTION_RUNTIME=1` selector and may enter only bounded commit/event/reporting modules.
+The runtime has no token input, GitHub API client, Git fetch behavior, or write code path; the
+reference workflow grants only `contents: read`. It binds a strict `pull_request` event to the
+runner repository ID/name and refs, requires the worktree at the exact event head, rejects shallow
+or missing history, and emits at most 50 escaped annotations. Its configuration comes from the
+unprivileged PR head, so this result is a reviewable quality signal rather than tamper-proof merge
+security. Normal consumers pin the Action code; YAGA's local dogfood workflow deliberately executes
+the PR copy without granting write permissions or secrets.
 
 ## Codex review gate boundary
 
