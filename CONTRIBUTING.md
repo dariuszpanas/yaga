@@ -31,7 +31,7 @@ with project and Python environment leakage removed.
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `repo`,
-`workflow`, and `gate`.
+`tree`, `workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
@@ -109,6 +109,30 @@ Compile and cache each unique pattern once and preserve the shared 10,000,000-un
 ceiling. Keep exits `0` for pass, `1` for coupling findings, and `2` for
 policy/Git/operational failure. This provider does not enter either dependency-free Action import
 graph.
+
+Committed-tree policy lives under `src/yaga/trees/` and remains installed-only. `tree check`
+requires one explicit versioned policy and one explicit commit-ish; the CLI may default only the
+repository path to `.`. Never infer `HEAD`, discover policy, fetch, parse an event, read tracked
+content, inspect the worktree/index/untracked set, or recurse into a gitlink. Schema v1 requires exact
+`required-paths` and anchored case-sensitive `forbidden-patterns`; either array may be empty but
+their combined bounded total must not be. Reject any required path admitted by a forbidden pattern
+as an impossible policy. Preserve canonical UTF-8 POSIX path validation, first-pattern attribution,
+one shared 10,000,000-unit matcher-work ceiling, and stable `tree.required` and `tree.forbidden`
+findings.
+
+Resolve exactly one bounded non-option commit-ish and its tree using type-checked `rev-parse`, then
+enumerate leaf paths with recursive, full-tree, name-only, NUL-delimited `ls-tree`. Keep the Git
+executable absolute and outside the repository; use a minimal no-prompt/no-fetch/no-replacement
+environment, shell-free bounded execution, strict identities and path records, a 30-second timeout,
+a 64 MiB output cap, and 50,000-path limit. Pass global `--no-lazy-fetch` on every Git invocation so
+unsupported older clients and missing promised objects fail closed. Validate Git against the
+outermost enclosing repository boundary even when the requested directory is a worktree
+subdirectory, and resolve bounded `.git` files, linked-worktree `commondir`, and external object
+directories plus cycle-safe local alternate chains into that trust boundary; allow at most 128
+object directories. Shallow history is valid when the selected objects are present. The policy path
+is a runtime input and carries no provenance claim. Bound JSON/text/GitHub diagnostics without
+weakening exact aggregate counts, and keep this provider outside both Action import graphs and the
+repository-plan v1 provider set until that contract is deliberately revised.
 
 Workflow reference policy lives under `src/yaga/workflows/` and remains installed-CLI-only. Parse
 untrusted YAML through the bounded pure-Python `SafeLoader` composition boundary without

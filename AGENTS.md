@@ -94,6 +94,21 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   `branch.allowed`, preserve the first matching pattern, and keep the 244-byte portability cap.
   CI may pass guarded `github.head_ref` or branch-only `github.ref_name` through a quoted environment
   variable. Keep the provider out of both Action import graphs.
+- Keep `tree check` installed-only and require an explicit versioned policy plus exact commit-ish;
+  only `--repo` may default to `.`. Never infer HEAD, discover policy, fetch, parse events, read
+  tracked file contents, inspect worktree/index/untracked state, or recurse into gitlinks. Schema v1 is
+  bounded exact `required-paths` plus anchored case-sensitive `forbidden-patterns`, with
+  component-local `*` and whole-component `**`; reject required/forbidden overlap and preserve
+  first-pattern attribution, the shared 10,000,000-unit matcher-work ceiling, `tree.required`, and
+  `tree.forbidden`. Resolve one commit and tree, then use shell-free bounded NUL-delimited
+  full-tree `ls-tree` with an absolute external Git, global `--no-lazy-fetch`, a minimal
+  no-prompt/no-replacement environment, 30-second timeout, 64 MiB output, and 50,000 canonical
+  UTF-8 path bounds. Validate Git against the outermost enclosing repository even when `--repo`
+  names a worktree subdirectory, including bounded `.git`, linked-worktree `commondir`, and external
+  object-directory resolution plus cycle-safe local alternate chains capped at 128 directories;
+  unsupported older Git clients fail closed. Shallow repositories are allowed when the selected
+  objects exist. Keep the provider out of both Action graphs and repository-plan v1 until explicitly
+  added.
 - The installed CLI may use the locked Typer dependency. The write-capable root Action may not
   import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
   the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the
