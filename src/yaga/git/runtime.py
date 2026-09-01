@@ -179,8 +179,7 @@ def require_complete_history(
     grafts_message: str,
 ) -> Path:
     """Require non-shallow history without a legacy graft overlay."""
-    common_directory = resolve_common_git_directory(repository)
-    _require_no_legacy_grafts(common_directory, message=grafts_message)
+    common_directory = require_no_legacy_grafts(repository, message=grafts_message)
     result = run_git(
         repository,
         ["rev-parse", "--is-shallow-repository"],
@@ -194,6 +193,13 @@ def require_complete_history(
         raise GitError(shallow_message)
     if answer != b"false":
         raise GitError("git returned an invalid shallow-repository state")
+    return common_directory
+
+
+def require_no_legacy_grafts(repository: GitRepository, *, message: str) -> Path:
+    """Require neutral legacy graft metadata without rejecting shallow history."""
+    common_directory = resolve_common_git_directory(repository)
+    _require_no_legacy_grafts(common_directory, message=message)
     return common_directory
 
 

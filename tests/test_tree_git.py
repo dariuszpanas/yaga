@@ -193,6 +193,8 @@ def test_commit_and_tree_resolution_are_exact_and_same_hash_format(
     commit_sha = "a" * 40
     tree_sha = "b" * 40
     calls: list[tuple[list[str], int]] = []
+    graft_checks: list[str] = []
+    events: list[tuple[str, object]] = []
     results = iter(
         [
             ProcessResult(0, f"{commit_sha}\n".encode(), b"", False, False, False),
@@ -210,16 +212,24 @@ def test_commit_and_tree_resolution_are_exact_and_same_hash_format(
     ) -> ProcessResult:
         assert selected == repository
         calls.append((arguments, stdout_limit))
+        events.append(("git", tuple(arguments)))
         return next(results)
+
+    def fake_graft_check(selected: GitRepository, *, message: str) -> None:
+        assert selected == repository
+        graft_checks.append(message)
+        events.append(("graft", message))
 
     monkeypatch.setattr(tree_git, "open_repository", lambda _path: repository)
     monkeypatch.setattr(tree_git, "run_git", fake_run)
+    monkeypatch.setattr(tree_git, "require_no_legacy_grafts", fake_graft_check)
 
     selection = tree_git.read_tree_paths(tmp_path, "topic")
 
     assert selection.commit_sha == commit_sha
     assert selection.tree_sha == tree_sha
     assert selection.paths == ("a.txt", "z.txt")
+    assert graft_checks == [tree_git._GRAFTS_MESSAGE, tree_git._GRAFTS_MESSAGE]
     assert calls == [
         (
             [
@@ -252,6 +262,13 @@ def test_commit_and_tree_resolution_are_exact_and_same_hash_format(
             tree_git.MAX_GIT_TREE_BYTES,
         ),
     ]
+    assert events == [
+        ("graft", tree_git._GRAFTS_MESSAGE),
+        ("git", tuple(calls[0][0])),
+        ("git", tuple(calls[1][0])),
+        ("git", tuple(calls[2][0])),
+        ("graft", tree_git._GRAFTS_MESSAGE),
+    ]
 
 
 def test_commit_and_tree_hash_formats_must_match(
@@ -269,6 +286,7 @@ def test_commit_and_tree_hash_formats_must_match(
     repository = GitRepository(tmp_path.resolve(), str(executable.resolve()))
     monkeypatch.setattr(tree_git, "open_repository", lambda _path: repository)
     monkeypatch.setattr(tree_git, "run_git", lambda *_args, **_kwargs: next(results))
+    monkeypatch.setattr(tree_git, "require_no_legacy_grafts", lambda *_args, **_kwargs: None)
 
     with pytest.raises(GitError, match="inconsistent object identity lengths"):
         tree_git.read_tree_paths(tmp_path, "HEAD")
@@ -344,3 +362,38 @@ def test_replacement_refs_cannot_change_the_selected_tree(
     selection = tree_git.read_tree_paths(path, original)
 
     assert selection.paths == ("README.md", "src/app.py")
+
+
+def test_legacy_grafts_cannot_redirect_ancestry_revision(
+    repository: tuple[Path, str],
+) -> None:
+    path, original = repository
+    head = commit_paths(path, "feat: add child", {"child.txt": "child\n"})
+    original_tree = git(path, "rev-parse", f"{original}^{{tree}}")
+    unrelated = git(path, "commit-tree", original_tree, "-m", "unrelated root")
+    git(path, "config", "advice.graftFileDeprecated", "false")
+    grafts = path / ".git" / "info" / "grafts"
+    grafts.write_text(f"{head} {unrelated}\n", encoding="ascii")
+    assert git(path, "rev-parse", "HEAD^") == unrelated
+
+    with pytest.raises(GitError, match="rejects legacy graft overlays"):
+        tree_git.read_tree_paths(path, "HEAD^")
+
+
+def test_graft_created_after_tree_enumeration_fails_final_recheck(
+    repository: tuple[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, _ = repository
+    original_read = tree_git._read_tree_path_output
+
+    def read_then_create_graft(selected: GitRepository, tree_sha: str) -> tuple[str, ...]:
+        paths = original_read(selected, tree_sha)
+        grafts = path / ".git" / "info" / "grafts"
+        grafts.write_text("a" * 40 + "\n", encoding="ascii")
+        return paths
+
+    monkeypatch.setattr(tree_git, "_read_tree_path_output", read_then_create_graft)
+
+    with pytest.raises(GitError, match="rejects legacy graft overlays"):
+        tree_git.read_tree_paths(path, "HEAD")
