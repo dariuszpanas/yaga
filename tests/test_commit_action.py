@@ -280,6 +280,78 @@ def test_isolated_commit_action_enforces_paired_breaking_markers_only_for_commit
     assert "pull request #17 title: [breaking.marker-pair]" not in completed.stdout
 
 
+@pytest.mark.parametrize(
+    ("head_message", "diagnostic", "line"),
+    [
+        (
+            "feat(action): require release attribution",
+            "footer.required",
+            1,
+        ),
+        (
+            "feat(action): reject unfinished commits\n\n"
+            "Signed-off-by: YAGA Tests <yaga@example.invalid>\n"
+            "WIP: remove before merge",
+            "footer.forbidden",
+            4,
+        ),
+    ],
+)
+def test_isolated_commit_action_enforces_footer_policy_only_for_commits(
+    tmp_path: Path,
+    head_message: str,
+    diagnostic: str,
+    line: int,
+) -> None:
+    repository, event_file, action_environment = _action_fixture(
+        tmp_path,
+        head_message=head_message,
+        pull_request_title="feat(action): describe the attributed pull request",
+        config=(
+            "config-version = 1\n"
+            "[commit]\n"
+            'required-footer-tokens = ["Signed-off-by"]\n'
+            'forbidden-footer-tokens = ["WIP"]\n'
+        ),
+    )
+    environment = os.environ.copy()
+    environment.update(action_environment)
+    environment["PYTHONPATH"] = str(ROOT / "src")
+    environment["YAGA_COMMIT_ACTION_RUNTIME"] = "1"
+    environment.pop("YAGA_ACTION_RUNTIME", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            "-S",
+            "-m",
+            "yaga",
+            "github",
+            "pull-request",
+            "check",
+            "--event-file",
+            str(event_file),
+            "--repo",
+            str(repository),
+            "--format",
+            "github",
+        ],
+        cwd=repository,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    head_identity = _git(repository, "rev-parse", "--short=12", "HEAD")
+    assert completed.returncode == 1
+    assert completed.stderr == ""
+    assert completed.stdout.count(f"[{diagnostic}]") == 1
+    assert f"{head_identity}: [{diagnostic}] line {line}:" in completed.stdout
+    assert f"pull request #17 title: [{diagnostic}]" not in completed.stdout
+
+
 def test_action_runtime_selectors_are_mutually_exclusive(tmp_path: Path) -> None:
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(ROOT / "src")

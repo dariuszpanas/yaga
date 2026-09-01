@@ -315,6 +315,132 @@ def test_body_diagnostics_have_stable_length_word_and_line_order() -> None:
     ]
 
 
+def test_required_footer_tokens_match_exact_tokens_case_insensitively() -> None:
+    policy = CommitPolicy(required_footer_tokens=("Signed-off-by", "Refs"))
+    message = (
+        "feat: enforce repository footers\n\nBody remains independent.\n\n"
+        "signed-OFF-by: Example Maintainer <maintainer@example.com>\n"
+        "Refs #123"
+    )
+
+    assert result(message, policy).valid
+
+
+def test_required_footer_token_like_body_line_remains_missing() -> None:
+    policy = CommitPolicy(required_footer_tokens=("Refs",))
+    message = "feat: retain body prose\n\nExplain the issue.\nRefs #123"
+
+    assert codes(message, policy) == ["footer.required"]
+
+
+def test_required_footer_diagnostic_is_bounded_and_uses_configuration_order() -> None:
+    policy = CommitPolicy(required_footer_tokens=("Signed-off-by", "Refs", "Co-authored-by"))
+
+    checked = result("feat: require project metadata", policy)
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == ["footer.required"]
+    assert checked.diagnostics[0].message == (
+        "required footer token 'Signed-off-by' is missing; "
+        "2 additional required footer tokens missing"
+    )
+    assert checked.diagnostics[0].line == 1
+
+
+def test_forbidden_footer_reports_the_earliest_exact_occurrence() -> None:
+    policy = CommitPolicy(forbidden_footer_tokens=("WIP", "Reviewed-by"))
+    message = (
+        "fix: reject temporary metadata\n\n"
+        "reviewed-BY: Example Maintainer\n"
+        "WIP #remove-before-merge"
+    )
+
+    checked = result(message, policy)
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == ["footer.forbidden"]
+    assert checked.diagnostics[0].message == "footer token 'Reviewed-by' is forbidden by policy"
+    assert checked.diagnostics[0].line == 3
+
+
+def test_missing_header_separator_precedes_a_source_located_footer_finding() -> None:
+    checked = result(
+        "fix: retain structural findings\nWIP: remove before merge",
+        CommitPolicy(forbidden_footer_tokens=("WIP",)),
+    )
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == [
+        "syntax.separator",
+        "footer.forbidden",
+    ]
+    assert checked.diagnostics[1].line == 2
+
+
+def test_crlf_and_leading_blank_lines_preserve_footer_location() -> None:
+    checked = result(
+        "fix: normalize source locations\r\n\r\n\r\nWIP: remove before merge",
+        CommitPolicy(forbidden_footer_tokens=("WIP",)),
+    )
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == ["footer.forbidden"]
+    assert checked.diagnostics[0].line == 4
+
+
+def test_footer_policies_do_not_match_prefixes_values_or_non_footer_body_lines() -> None:
+    policy = CommitPolicy(forbidden_footer_tokens=("WIP",))
+
+    assert result("fix: keep exact matching\n\nWIP-Mode: allowed", policy).valid
+    assert result("fix: keep exact matching\n\nRefs: WIP", policy).valid
+    assert result("fix: keep body text\n\nBody paragraph\nWIP: still body text", policy).valid
+
+
+def test_footer_diagnostics_follow_existing_body_diagnostics_in_stable_order() -> None:
+    policy = CommitPolicy(
+        body_min_words=3,
+        required_footer_tokens=("Signed-off-by",),
+        forbidden_footer_tokens=("WIP",),
+    )
+    message = "fix: order policy findings\n\none two\n\nWIP: temporary"
+
+    checked = result(message, policy)
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == [
+        "body.word-count",
+        "footer.required",
+        "footer.forbidden",
+    ]
+    assert checked.diagnostics[-1].line == 5
+
+
+def test_disabled_footer_policies_do_not_scan_footer_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_scan(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("disabled footer policy invoked the footer iterator")
+
+    monkeypatch.setattr(commit_checker, "iter_footer_starts", unexpected_scan)
+
+    assert result("fix: keep defaults fast\n\nRefs #42").valid
+
+
+@pytest.mark.parametrize(
+    ("count", "suffix"),
+    [
+        (2, "1 additional required footer token missing"),
+        (128, "127 additional required footer tokens missing"),
+    ],
+)
+def test_required_footer_diagnostic_remains_single_and_bounded(
+    count: int,
+    suffix: str,
+) -> None:
+    policy = CommitPolicy(required_footer_tokens=tuple(f"Token-{index}" for index in range(count)))
+
+    checked = result("feat: bound missing footer reports", policy)
+
+    assert len(checked.diagnostics) == 1
+    assert checked.diagnostics[0].code == "footer.required"
+    assert checked.diagnostics[0].message == f"required footer token 'Token-0' is missing; {suffix}"
+
+
 def test_merge_policy_uses_parent_identity_not_header_text() -> None:
     merge = CommitTarget(
         label="merge",
@@ -362,6 +488,8 @@ def test_header_check_applies_header_rules_without_commit_body_policy() -> None:
         body_min_words=100,
         body_max_line_length=1,
         breaking_markers=BreakingMarkerPolicy.PAIRED,
+        required_footer_tokens=("Signed-off-by",),
+        forbidden_footer_tokens=("WIP",),
     )
 
     valid = check_header(CommitTarget(label="title", message="fix!: repair title"), policy)

@@ -37,6 +37,8 @@ def test_missing_configuration_uses_spec_only_defaults(tmp_path: Path) -> None:
     assert loaded.policy.scope_policy is PresencePolicy.OPTIONAL
     assert loaded.policy.body_min_words == 0
     assert loaded.policy.breaking_markers is BreakingMarkerPolicy.EITHER
+    assert loaded.policy.required_footer_tokens == ()
+    assert loaded.policy.forbidden_footer_tokens == ()
     assert loaded.policy.merge_commits is MergePolicy.IGNORE
 
 
@@ -67,6 +69,8 @@ def test_commit_policy_preserves_the_legacy_positional_constructor() -> None:
     assert policy.max_commits == 64
     assert policy.body_min_words == 0
     assert policy.breaking_markers is BreakingMarkerPolicy.EITHER
+    assert policy.required_footer_tokens == ()
+    assert policy.forbidden_footer_tokens == ()
 
 
 def test_nearest_pyproject_is_discovered_from_a_nested_directory(tmp_path: Path) -> None:
@@ -236,6 +240,103 @@ def test_body_min_words_rejects_invalid_values(tmp_path: Path, value: str) -> No
 
     with pytest.raises(ConfigurationError, match="body-min-words must be an integer"):
         load_config(project)
+
+
+def test_footer_token_policies_preserve_configured_spelling_and_order(tmp_path: Path) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'required-footer-tokens = ["Signed-off-by", "Refs"]\n'
+        'forbidden-footer-tokens = ["WIP", "Do-Not-Merge"]\n',
+    )
+
+    policy = load_config(project).policy
+
+    assert policy.required_footer_tokens == ("Signed-off-by", "Refs")
+    assert policy.forbidden_footer_tokens == ("WIP", "Do-Not-Merge")
+
+
+def test_footer_token_policies_accept_empty_lists_and_closed_boundaries(tmp_path: Path) -> None:
+    longest = "A" * 128
+    project = write_pyproject(
+        tmp_path,
+        f'required-footer-tokens = ["A", "{longest}"]\nforbidden-footer-tokens = []\n',
+    )
+
+    policy = load_config(project).policy
+
+    assert policy.required_footer_tokens == ("A", longest)
+    assert policy.forbidden_footer_tokens == ()
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("required-footer-tokens", '"Signed-off-by"', "array of strings"),
+        ("required-footer-tokens", '["Refs", 1]', "array of strings"),
+        ("required-footer-tokens", '["has_underscore"]', "invalid token"),
+        ("required-footer-tokens", '["Réfs"]', "invalid token"),
+        ("required-footer-tokens", '["Refs:"]', "invalid token"),
+        ("required-footer-tokens", '["A", "a"]', "duplicate token"),
+        ("forbidden-footer-tokens", '["WIP", "wip"]', "duplicate token"),
+        ("required-footer-tokens", f'["{"A" * 129}"]', "oversized"),
+    ],
+)
+def test_footer_token_policies_reject_invalid_values(
+    tmp_path: Path,
+    key: str,
+    value: str,
+    message: str,
+) -> None:
+    project = write_pyproject(tmp_path, f"{key} = {value}\n")
+
+    with pytest.raises(ConfigurationError, match=message):
+        load_config(project)
+
+
+@pytest.mark.parametrize(
+    "token",
+    ["BREAKING CHANGE", "breaking change", "BREAKING-CHANGE", "breaking-change"],
+)
+@pytest.mark.parametrize("key", ["required-footer-tokens", "forbidden-footer-tokens"])
+def test_footer_token_policies_reserve_breaking_change_markers(
+    tmp_path: Path,
+    key: str,
+    token: str,
+) -> None:
+    project = write_pyproject(tmp_path, f'{key} = ["{token}"]\n')
+
+    with pytest.raises(ConfigurationError, match="reserved breaking-change token"):
+        load_config(project)
+
+
+def test_footer_token_policies_reject_case_insensitive_overlap(tmp_path: Path) -> None:
+    project = write_pyproject(
+        tmp_path,
+        'required-footer-tokens = ["Signed-off-by"]\nforbidden-footer-tokens = ["SIGNED-OFF-BY"]\n',
+    )
+
+    with pytest.raises(ConfigurationError, match="overlap at token 'SIGNED-OFF-BY'"):
+        load_config(project)
+
+
+@pytest.mark.parametrize("total", [128, 129])
+def test_footer_token_policies_bound_the_combined_entry_count(
+    tmp_path: Path,
+    total: int,
+) -> None:
+    required = ", ".join(f'"R{index}"' for index in range(64))
+    forbidden = ", ".join(f'"F{index}"' for index in range(total - 64))
+    project = write_pyproject(
+        tmp_path,
+        f"required-footer-tokens = [{required}]\nforbidden-footer-tokens = [{forbidden}]\n",
+    )
+
+    if total == 128:
+        policy = load_config(project).policy
+        assert len(policy.required_footer_tokens) + len(policy.forbidden_footer_tokens) == 128
+    else:
+        with pytest.raises(ConfigurationError, match="exceed 128 combined entries"):
+            load_config(project)
 
 
 @pytest.mark.parametrize(

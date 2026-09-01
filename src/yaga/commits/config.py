@@ -29,6 +29,8 @@ MAX_PATTERN_LENGTH = 256
 
 _TYPE_TOKEN = re.compile(r"^[^\s()!:]+$")
 _SCOPE_TOKEN = re.compile(r"^[^\s()]+$")
+_FOOTER_TOKEN = re.compile(r"^[A-Za-z0-9-]+$")
+_RESERVED_FOOTER_TOKENS = frozenset({"breaking change", "breaking-change"})
 _ROOT_KEYS = frozenset({"config-version", "commit"})
 _COMMIT_KEYS = frozenset(
     {
@@ -46,6 +48,8 @@ _COMMIT_KEYS = frozenset(
         "body-min-words",
         "body-max-line-length",
         "breaking-markers",
+        "required-footer-tokens",
+        "forbidden-footer-tokens",
         "merge-commits",
         "ignored-headers",
         "max-commits",
@@ -237,6 +241,23 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             f"{minimum_header} in {path}"
         )
 
+    required_footer_tokens = _footer_tokens(raw_commit, "required-footer-tokens", path=path)
+    forbidden_footer_tokens = _footer_tokens(raw_commit, "forbidden-footer-tokens", path=path)
+    if len(required_footer_tokens) + len(forbidden_footer_tokens) > MAX_LIST_ITEMS:
+        raise ConfigurationError(
+            f"required-footer-tokens and forbidden-footer-tokens exceed "
+            f"{MAX_LIST_ITEMS} combined entries in {path}"
+        )
+    overlap = {token.casefold() for token in required_footer_tokens} & {
+        token.casefold() for token in forbidden_footer_tokens
+    }
+    if overlap:
+        token = next(token for token in forbidden_footer_tokens if token.casefold() in overlap)
+        raise ConfigurationError(
+            f"required-footer-tokens and forbidden-footer-tokens overlap at token "
+            f"{token!r} in {path}"
+        )
+
     return CommitPolicy(
         config_version=config_version,
         allowed_types=allowed_types,
@@ -289,6 +310,8 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             max_item_length=MAX_PATTERN_LENGTH,
         ),
         max_commits=_integer(raw_commit.get("max-commits", 256), "max-commits", 1, 10_000, path),
+        required_footer_tokens=required_footer_tokens,
+        forbidden_footer_tokens=forbidden_footer_tokens,
     )
 
 
@@ -319,6 +342,34 @@ def _optional_tokens(
         if token_pattern.fullmatch(value) is None:
             raise ConfigurationError(f"{key} contains invalid token {value!r} in {path}")
         folded = value.casefold()
+        if folded in normalized:
+            raise ConfigurationError(f"{key} contains duplicate token {value!r} in {path}")
+        normalized.add(folded)
+    return values
+
+
+def _footer_tokens(
+    table: Mapping[str, Any],
+    key: str,
+    *,
+    path: Path,
+) -> tuple[str, ...]:
+    values = _string_list(
+        table.get(key, []),
+        key,
+        path,
+        allow_empty=True,
+        max_item_length=MAX_TOKEN_LENGTH,
+    )
+    normalized: set[str] = set()
+    for value in values:
+        folded = value.casefold()
+        if folded in _RESERVED_FOOTER_TOKENS:
+            raise ConfigurationError(
+                f"{key} contains reserved breaking-change token {value!r} in {path}"
+            )
+        if _FOOTER_TOKEN.fullmatch(value) is None:
+            raise ConfigurationError(f"{key} contains invalid token {value!r} in {path}")
         if folded in normalized:
             raise ConfigurationError(f"{key} contains duplicate token {value!r} in {path}")
         normalized.add(folded)

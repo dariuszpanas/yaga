@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterable, Iterator
 
-from yaga.commits.models import ParsedCommit
+from yaga.commits.models import CommitFooter, ParsedCommit
 
 MAX_MESSAGE_BYTES = 1024 * 1024
 
@@ -13,8 +14,11 @@ _HEADER = re.compile(
     r"^(?P<type>[^\s()!:]+)(?:\((?P<scope>[^()\r\n]+)\))?"
     r"(?P<breaking>!)?: (?P<description>\S(?:.*\S)?)$"
 )
-_FOOTER_START = re.compile(r"^(?:BREAKING CHANGE|[A-Za-z0-9-]+)(?:: | #)\S")
-_BREAKING_FOOTER = re.compile(r"^BREAKING(?: CHANGE|-CHANGE): \S")
+_FOOTER_START = re.compile(
+    r"^(?P<token>BREAKING CHANGE|[A-Za-z0-9-]+)"
+    r"(?P<separator>: | #)\S"
+)
+_BREAKING_TOKENS = frozenset({"BREAKING CHANGE", "BREAKING-CHANGE"})
 
 
 def normalize_message(message: str) -> str:
@@ -48,8 +52,15 @@ def parse_message(message: str) -> ParsedCommit | None:
     content = lines[content_start:]
     while content and content[-1] == "":
         content.pop()
-    body_lines, footer_lines = _split_body_and_footers(content)
-    breaking_footer = any(_BREAKING_FOOTER.match(line) for line in footer_lines)
+    body_lines, footer_lines, footer_start = _split_body_and_footers(content)
+    footer_start_line = content_start + footer_start + 1 if footer_start is not None else None
+    breaking_footer = footer_start_line is not None and any(
+        footer.token in _BREAKING_TOKENS and footer.separator == ":"
+        for footer in iter_footer_starts(
+            footer_lines,
+            start_line=footer_start_line,
+        )
+    )
     breaking_header = match.group("breaking") == "!"
 
     return ParsedCommit(
@@ -66,10 +77,13 @@ def parse_message(message: str) -> ParsedCommit | None:
         body_lines=tuple(body_lines),
         body_start_line=content_start + 1,
         footer_lines=tuple(footer_lines),
+        footer_start_line=footer_start_line,
     )
 
 
-def _split_body_and_footers(lines: list[str]) -> tuple[list[str], list[str]]:
+def _split_body_and_footers(
+    lines: list[str],
+) -> tuple[list[str], list[str], int | None]:
     """Split the first boundary-delimited footer token and its complete suffix."""
     footer_start: int | None = None
     at_paragraph_start = True
@@ -79,7 +93,7 @@ def _split_body_and_footers(lines: list[str]) -> tuple[list[str], list[str]]:
             break
         at_paragraph_start = line == ""
     if footer_start is None:
-        return lines, []
+        return lines, [], None
 
     body = lines[:footer_start]
     while body and body[-1] == "":
@@ -88,7 +102,25 @@ def _split_body_and_footers(lines: list[str]) -> tuple[list[str], list[str]]:
     # boundary token starts the footer block, its entire remaining suffix is
     # therefore footer content; a later valid token terminates the preceding
     # value rather than returning to body parsing.
-    return body, lines[footer_start:]
+    return body, lines[footer_start:], footer_start
+
+
+def iter_footer_starts(
+    lines: Iterable[str],
+    *,
+    start_line: int,
+) -> Iterator[CommitFooter]:
+    """Yield exact footer token starts with absolute one-based source lines."""
+    for offset, line in enumerate(lines):
+        match = _FOOTER_START.match(line)
+        if match is None:
+            continue
+        separator = ":" if match.group("separator") == ": " else "#"
+        yield CommitFooter(
+            token=match.group("token"),
+            separator=separator,
+            line=start_line + offset,
+        )
 
 
 def _is_component_token(value: str) -> bool:

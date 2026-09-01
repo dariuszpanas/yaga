@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 
 class CasePolicy(StrEnum):
@@ -75,6 +76,8 @@ class CommitPolicy:
     max_commits: int = 256
     body_min_words: int = 0
     breaking_markers: BreakingMarkerPolicy = BreakingMarkerPolicy.EITHER
+    required_footer_tokens: tuple[str, ...] = ()
+    forbidden_footer_tokens: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +86,15 @@ class LoadedConfig:
 
     policy: CommitPolicy
     path: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class CommitFooter:
+    """One exact source-located footer token start."""
+
+    token: str
+    separator: Literal[":", "#"]
+    line: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +114,7 @@ class ParsedCommit:
     body_lines: tuple[str, ...]
     body_start_line: int
     footer_lines: tuple[str, ...]
+    footer_start_line: int | None
 
 
 @dataclass(frozen=True, slots=True)

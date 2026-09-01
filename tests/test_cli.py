@@ -241,6 +241,47 @@ def test_commit_check_json_is_stable_and_quiet_suppresses_output(tmp_path: Path)
     assert quiet.stdout == ""
 
 
+def test_commit_check_json_preserves_footer_policy_diagnostics(tmp_path: Path) -> None:
+    (tmp_path / ".yaga.toml").write_text(
+        "config-version = 1\n"
+        "[commit]\n"
+        'required-footer-tokens = ["Refs"]\n'
+        'forbidden-footer-tokens = ["WIP"]\n',
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "commit",
+            "check",
+            "--message",
+            "feat: publish the release\n\nWIP: remove before merge",
+            "--repo",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    document = json.loads(result.stdout)
+
+    assert result.exit_code == 1
+    assert document["commits"][0]["diagnostics"] == [
+        {
+            "code": "footer.required",
+            "message": "required footer token 'Refs' is missing",
+            "line": 1,
+            "column": 1,
+        },
+        {
+            "code": "footer.forbidden",
+            "message": "footer token 'WIP' is forbidden by policy",
+            "line": 3,
+            "column": 1,
+        },
+    ]
+
+
 def test_message_sources_are_mutually_exclusive_operational_inputs(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
@@ -329,6 +370,46 @@ def test_default_commit_explicit_commit_and_range_use_the_same_cli_policy(tmp_pa
     assert selected.exit_code == 0
     assert revision_range.exit_code == 1
     assert "type.allowed" in revision_range.stdout
+
+
+def test_commit_range_applies_footer_policy_to_each_exact_selected_commit(
+    tmp_path: Path,
+) -> None:
+    git(tmp_path, "init", "--initial-branch=main")
+    git(tmp_path, "config", "user.email", "yaga@example.com")
+    git(tmp_path, "config", "user.name", "YAGA Tests")
+    base = commit(tmp_path, "chore: establish footer policy baseline")
+    attributed = commit(
+        tmp_path,
+        "feat: add attributed range change\n\nRefs: #17",
+    )
+    missing = commit(tmp_path, "fix: omit attribution from range change")
+    (tmp_path / ".yaga.toml").write_text(
+        'config-version = 1\n[commit]\nrequired-footer-tokens = ["Refs"]\n',
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "commit",
+            "check",
+            "--range",
+            f"{base}..{missing}",
+            "--repo",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    document = json.loads(result.stdout)
+
+    assert result.exit_code == 1
+    assert [item["sha"] for item in document["commits"]] == [attributed, missing]
+    assert document["commits"][0]["diagnostics"] == []
+    assert [diagnostic["code"] for diagnostic in document["commits"][1]["diagnostics"]] == [
+        "footer.required"
+    ]
 
 
 def test_git_resolution_failure_is_exit_two(tmp_path: Path) -> None:

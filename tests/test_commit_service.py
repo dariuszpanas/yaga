@@ -94,6 +94,46 @@ def test_standalone_service_preserves_default_commit_explicit_commit_and_range(
     assert all(report.valid for report in (default_report, explicit_report, range_report))
 
 
+def test_standalone_service_applies_footer_policy_to_messages_and_git_commits(
+    repository: tuple[Path, list[str], Path],
+) -> None:
+    repo, _, config = repository
+    config.write_text(
+        "config-version = 1\n"
+        "\n"
+        "[commit]\n"
+        'allowed-types = ["service"]\n'
+        'required-footer-tokens = ["Signed-off-by"]\n'
+        'forbidden-footer-tokens = ["WIP"]\n',
+        encoding="utf-8",
+    )
+
+    missing = check_commits(repo, message="service: require release attribution")
+    assert [diagnostic.code for diagnostic in missing.results[0].diagnostics] == ["footer.required"]
+
+    forbidden_sha = commit(
+        repo,
+        "service: reject unfinished commits\n\n"
+        "Signed-off-by: YAGA Tests <yaga@example.com>\n"
+        "WIP #remove before merge",
+    )
+    forbidden = check_commits(repo, commit=forbidden_sha)
+    assert [diagnostic.code for diagnostic in forbidden.results[0].diagnostics] == [
+        "footer.forbidden"
+    ]
+    assert forbidden.results[0].diagnostics[0].line == 4
+
+    repeated = check_commits(
+        repo,
+        message=(
+            "service: accept repeated release attribution\n\n"
+            "Signed-off-by: First Author <first@example.com>\n"
+            "Signed-off-by: Second Author <second@example.com>"
+        ),
+    )
+    assert repeated.valid
+
+
 def test_git_only_service_exposes_default_commit_explicit_commit_and_range(
     repository: tuple[Path, list[str], Path],
 ) -> None:
