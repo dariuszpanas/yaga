@@ -21,6 +21,10 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
 - Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
   0/1/2, and the versioned JSON document are public pre-release contracts.
+- Keep `breaking-markers` in configuration schema v1 with closed values `either` and `paired` and
+  the default `either`. `paired` requires both the header `!` and a recognized final breaking
+  footer, or neither; exactly one reports `breaking.marker-pair`. Apply it to complete commits but
+  never to pull-request titles checked through the header-only boundary.
 - Keep `body-min-words` in configuration schema v1 as a zero-default integer from zero through
   100000. Count only Unicode-whitespace-delimited prose-body tokens containing a Unicode
   alphanumeric character, exclude recognized final footers, and do not make an optional absent
