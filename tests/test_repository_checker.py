@@ -349,6 +349,37 @@ def test_docker_provider_is_never_touched_when_not_selected(
     assert report.valid is True
 
 
+def test_workflow_provider_checks_job_and_service_container_images(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "containers.yml").write_text(
+        "jobs:\n"
+        "  test:\n"
+        "    container: python:3.12\n"
+        "    services:\n"
+        "      postgres:\n"
+        f"        image: postgres@sha256:{'b' * 64}\n"
+        "    steps: []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        checker,
+        "lint_workflow_inputs",
+        lambda *args, **kwargs: pytest.fail("lint provider should not run"),
+    )
+
+    report = checker.check_repository(tmp_path, ["workflow"])
+
+    assert report.status is RepositoryCheckStatus.FAILED
+    result = report.checks[0]
+    assert isinstance(result.report, WorkflowReport)
+    assert result.report.results[0].references_checked == 2
+    assert [diagnostic.code for diagnostic in result.report.results[0].diagnostics] == ["image.pin"]
+
+
 def test_parse_error_is_shared_by_pure_providers_while_lint_still_runs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

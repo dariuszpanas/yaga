@@ -56,7 +56,10 @@ bound files, bytes, documents, nodes, depth, anchors, aliases, scalar sizes, exp
 references, diagnostics, and displayed values. Keep immutable-reference checking separate from
 actionlint and out of both dependency-free composite Action import graphs. Treat `$/` local
 references as commit-bound; `./` is a compatibility path whose integrity depends on the caller's
-trusted checkout and must not imply an immutable-reference guarantee.
+trusted checkout and must not imply an immutable-reference guarantee. Apply the same literal
+lowercase SHA-256 digest policy to Docker Actions, job-container images, and service-container
+images. Preserve GitHub's exact quoted-empty service-image disable case, but reject dynamic image
+expressions instead of approximating the Actions expression language.
 
 `workflow security` is a separate pure-Python provider over immutable, source-located facts from
 that same bounded composition. Keep `recommended-v1` frozen to its documented permission,

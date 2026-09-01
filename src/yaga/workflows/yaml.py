@@ -12,10 +12,12 @@ from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 from yaga.errors import InputError, safe_error_text
 from yaga.workflows.models import (
     ActionManifestDependency,
+    ImageReferenceContext,
     ParsedActionManifest,
     ParsedWorkflow,
     ReferenceContext,
     WorkflowDiagnostic,
+    WorkflowImageReference,
     WorkflowReference,
 )
 from yaga.workflows.security_facts import (
@@ -145,23 +147,29 @@ class _Inspector:
         self.explicit_tags = explicit_tags
         self.diagnostics: list[WorkflowDiagnostic] = []
         self.references: list[WorkflowReference] = []
+        self.images: list[WorkflowImageReference] = []
         self._expanded_visits = 0
         self._active_nodes: set[int] = set()
         self._checked_nodes: set[int] = set()
 
     def inspect(
         self, root: Node
-    ) -> tuple[tuple[WorkflowReference, ...], tuple[WorkflowDiagnostic, ...]]:
+    ) -> tuple[
+        tuple[WorkflowReference, ...],
+        tuple[WorkflowImageReference, ...],
+        tuple[WorkflowDiagnostic, ...],
+    ]:
         self._validate_graph(root)
         self._extract_workflow(root)
         references = tuple(sorted(self.references, key=lambda item: (item.line, item.column)))
+        images = tuple(sorted(self.images, key=lambda item: (item.line, item.column)))
         diagnostics = tuple(
             sorted(
                 self.diagnostics,
                 key=lambda item: (item.line, item.column, item.code, item.message),
             )
         )
-        return references, diagnostics
+        return references, images, diagnostics
 
     def _validate_graph(self, node: Node) -> None:
         pending: list[tuple[Node, bool]] = [(node, False)]
@@ -262,9 +270,18 @@ class _Inspector:
                     self._edge_mark(parent, pair_index, "value", jobs_node.start_mark),
                 )
                 continue
-            self._extract_jobs(jobs_node)
+            value_mark = self._edge_mark(parent, pair_index, "value", jobs_node.start_mark)
+            self._extract_jobs(
+                jobs_node,
+                occurrence_mark=self._alias_occurrence_mark(jobs_node, value_mark),
+            )
 
-    def _extract_jobs(self, jobs: MappingNode) -> None:
+    def _extract_jobs(
+        self,
+        jobs: MappingNode,
+        *,
+        occurrence_mark: Mark | None,
+    ) -> None:
         for pair_index, (job_id, job) in enumerate(jobs.value):
             if not isinstance(job_id, ScalarNode):
                 self._diagnose(
@@ -273,16 +290,25 @@ class _Inspector:
                     self._edge_mark(jobs, pair_index, "key", job_id.start_mark),
                 )
                 continue
+            job_mark = occurrence_mark or self._edge_mark(
+                jobs,
+                pair_index,
+                "value",
+                job.start_mark,
+            )
             if not isinstance(job, MappingNode):
                 self._diagnose(
                     "workflow.structure",
                     "job definitions must be mappings",
-                    self._edge_mark(jobs, pair_index, "value", job.start_mark),
+                    job_mark,
                 )
                 continue
-            self._extract_job(job)
+            self._extract_job(
+                job,
+                occurrence_mark=occurrence_mark or self._alias_occurrence_mark(job, job_mark),
+            )
 
-    def _extract_job(self, job: MappingNode) -> None:
+    def _extract_job(self, job: MappingNode, *, occurrence_mark: Mark | None) -> None:
         for pair_index, (key, value) in enumerate(job.value):
             if not isinstance(key, ScalarNode):
                 self._diagnose(
@@ -295,6 +321,153 @@ class _Inspector:
                 self._extract_reference(job, pair_index, value, ReferenceContext.JOB)
             elif key.value == "steps":
                 self._extract_steps(job, pair_index, value)
+            elif key.value == "container":
+                self._extract_container(
+                    job,
+                    pair_index,
+                    value,
+                    occurrence_mark=occurrence_mark,
+                )
+            elif key.value == "services":
+                self._extract_services(
+                    job,
+                    pair_index,
+                    value,
+                    occurrence_mark=occurrence_mark,
+                )
+
+    def _extract_container(
+        self,
+        parent: MappingNode,
+        pair_index: int,
+        value: Node,
+        *,
+        occurrence_mark: Mark | None,
+    ) -> None:
+        value_mark = occurrence_mark or self._edge_mark(
+            parent,
+            pair_index,
+            "value",
+            value.start_mark,
+        )
+        if isinstance(value, ScalarNode):
+            self._append_image(value, ImageReferenceContext.JOB, value_mark)
+            return
+        if not isinstance(value, MappingNode):
+            self._diagnose(
+                "workflow.structure",
+                "job container must be a scalar or mapping",
+                value_mark,
+            )
+            return
+
+        alias_mark = occurrence_mark or self._alias_occurrence_mark(value, value_mark)
+        for image_index, (key, image) in enumerate(value.value):
+            if not isinstance(key, ScalarNode):
+                self._diagnose(
+                    "workflow.structure",
+                    "job container mapping keys must be scalars",
+                    alias_mark or self._edge_mark(value, image_index, "key", key.start_mark),
+                )
+                continue
+            if key.value != "image":
+                continue
+            image_mark = alias_mark or self._edge_mark(
+                value,
+                image_index,
+                "value",
+                image.start_mark,
+            )
+            if not isinstance(image, ScalarNode):
+                self._diagnose(
+                    "workflow.structure",
+                    "job container image must be a scalar",
+                    image_mark,
+                )
+                continue
+            self._append_image(image, ImageReferenceContext.JOB, image_mark)
+
+    def _extract_services(
+        self,
+        parent: MappingNode,
+        pair_index: int,
+        value: Node,
+        *,
+        occurrence_mark: Mark | None,
+    ) -> None:
+        value_mark = occurrence_mark or self._edge_mark(
+            parent,
+            pair_index,
+            "value",
+            value.start_mark,
+        )
+        if not isinstance(value, MappingNode):
+            self._diagnose(
+                "workflow.structure",
+                "job services must be a mapping",
+                value_mark,
+            )
+            return
+
+        services_alias_mark = occurrence_mark or self._alias_occurrence_mark(value, value_mark)
+        for service_index, (identifier, service) in enumerate(value.value):
+            if not isinstance(identifier, ScalarNode):
+                self._diagnose(
+                    "workflow.structure",
+                    "service identifiers must be scalars",
+                    services_alias_mark
+                    or self._edge_mark(value, service_index, "key", identifier.start_mark),
+                )
+                continue
+            service_mark = services_alias_mark or self._edge_mark(
+                value,
+                service_index,
+                "value",
+                service.start_mark,
+            )
+            if not isinstance(service, MappingNode):
+                self._diagnose(
+                    "workflow.structure",
+                    "service definitions must be mappings",
+                    service_mark,
+                )
+                continue
+            self._extract_service(
+                service,
+                occurrence_mark=services_alias_mark
+                or self._alias_occurrence_mark(service, service_mark),
+            )
+
+    def _extract_service(
+        self,
+        service: MappingNode,
+        *,
+        occurrence_mark: Mark | None,
+    ) -> None:
+        for image_index, (key, image) in enumerate(service.value):
+            if not isinstance(key, ScalarNode):
+                self._diagnose(
+                    "workflow.structure",
+                    "service mapping keys must be scalars",
+                    occurrence_mark or self._edge_mark(service, image_index, "key", key.start_mark),
+                )
+                continue
+            if key.value != "image":
+                continue
+            image_mark = occurrence_mark or self._edge_mark(
+                service,
+                image_index,
+                "value",
+                image.start_mark,
+            )
+            if not isinstance(image, ScalarNode):
+                self._diagnose(
+                    "workflow.structure",
+                    "service image must be a scalar",
+                    image_mark,
+                )
+                continue
+            self._append_image(image, ImageReferenceContext.SERVICE, image_mark)
 
     def _extract_steps(self, job: MappingNode, pair_index: int, steps: Node) -> None:
         if not isinstance(steps, SequenceNode):
@@ -358,8 +531,7 @@ class _Inspector:
                 mark,
             )
             return
-        if len(self.references) >= MAX_REFERENCES:
-            self._fail(f"exceeds the hard workflow reference limit of {MAX_REFERENCES}")
+        self._check_reference_capacity()
         line, column = _position(mark)
         self.references.append(
             WorkflowReference(
@@ -371,6 +543,29 @@ class _Inspector:
                 source_end=value.end_mark.index if value.end_mark is not None else None,
             )
         )
+
+    def _append_image(
+        self,
+        value: ScalarNode,
+        context: ImageReferenceContext,
+        mark: Mark | None,
+    ) -> None:
+        self._check_reference_capacity()
+        line, column = _position(mark)
+        self.images.append(
+            WorkflowImageReference(
+                value=value.value,
+                context=context,
+                tag=value.tag,
+                line=line,
+                column=column,
+                style=value.style,
+            )
+        )
+
+    def _check_reference_capacity(self) -> None:
+        if len(self.references) + len(self.images) >= MAX_REFERENCES:
+            self._fail(f"exceeds the hard workflow reference limit of {MAX_REFERENCES}")
 
     def _diagnose(self, code: str, message: str, mark: Mark | None) -> None:
         if len(self.diagnostics) >= MAX_DIAGNOSTICS:
@@ -388,6 +583,13 @@ class _Inspector:
         fallback: Mark | None,
     ) -> Mark | None:
         return self.edge_marks.get((id(parent), index, side), fallback)
+
+    @staticmethod
+    def _alias_occurrence_mark(node: Node, edge_mark: Mark | None) -> Mark | None:
+        start_mark = node.start_mark
+        if edge_mark is not None and start_mark is not None and edge_mark.index != start_mark.index:
+            return edge_mark
+        return None
 
     def _fail(self, reason: str) -> None:
         raise InputError(f"{self.label} {reason}")
@@ -768,11 +970,12 @@ def parse_workflow_bundle(raw: bytes, *, label: str) -> ParsedWorkflowBundle:
         edge_marks=edge_marks,
         explicit_tags=explicit_tags,
     )
-    references, diagnostics = inspector.inspect(root)
+    references, images, diagnostics = inspector.inspect(root)
     workflow = ParsedWorkflow(
         references=references,
         diagnostics=diagnostics,
         node_count=node_count,
+        images=images,
     )
     security = _SecurityFactExtractor(edge_marks=edge_marks).inspect(root)
     return ParsedWorkflowBundle(
