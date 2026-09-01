@@ -92,7 +92,10 @@ def test_action_has_one_closed_direct_publisher_interface() -> None:
     assert "YAGA_MODE" not in action
     assert "YAGA_CANDIDATE" not in action
     assert "YAGA_OBSERVER" not in action
-    assert 'python -P -m yaga --gate "$YAGA_GATE" --operation "$YAGA_OPERATION"' in action
+    assert 'python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION"' in action
+    assert 'YAGA_ACTION_RUNTIME: "1"' in action
+    assert "pip install" not in action
+    assert "uv " not in action
     assert 'test "${YAGA_REQUEST_TIMEOUT:-}" = 5' in smoke
     assert 'test -z "${YAGA_APPROVAL_MARKER:-}"' in smoke
 

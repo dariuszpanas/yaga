@@ -143,10 +143,10 @@ def _write_outputs(route: str, *, pull_request_number: int | None = None) -> Non
         raise GateError("GITHUB_OUTPUT could not be written") from error
 
 
-def run_action() -> int:
+def run_action(selected_operation: str) -> int:
     """Execute one closed YAGA operation from trusted GitHub context."""
     started_at = time.monotonic()
-    operation = operation_name(_required_environment("YAGA_OPERATION"))
+    operation = operation_name(selected_operation)
     repository = repository_name(_required_environment("GITHUB_REPOSITORY"))
     event_name = bounded_text(
         _required_environment("GITHUB_EVENT_NAME"),

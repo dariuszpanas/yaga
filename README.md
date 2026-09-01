@@ -1,14 +1,127 @@
 # YAGA
 
-YAGA is Yet Another Gate Action: a reusable, conservative GitHub status gate. Its first adapter
-turns Codex GitHub review evidence into two authoritative classic commit statuses, `Codex Review`
-and final `CI Gate`. Generic GitHub transport and publication remain separate from Codex policy so
-later provider adapters can reuse the trust boundary.
+YAGA is an extensible Python CLI for repository policy that runs the same checks locally and in CI.
+Its first general-purpose feature is a configurable
+[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) checker. The original
+Codex review gate remains available as an experimental GitHub Action and as a CLI command; it has
+not been discarded or hidden behind copied scripts.
 
-YAGA is pre-release. Pin the exact audited 40-character commit SHA that your repository canaried;
-do not consume a branch or mutable tag.
+YAGA is pre-release. The CLI and configuration schema may still change. Action consumers must pin
+the exact audited 40-character commit SHA they canaried rather than a branch or mutable tag.
 
-## Why the workflow is split
+## Install and explore
+
+Python 3.12 or newer is required. From a checkout:
+
+```bash
+uv sync --group dev
+uv run yaga --help
+```
+
+The distribution is named `yaga-cli`; the executable and Python package are both named `yaga`.
+The `yaga` distribution name on PyPI belongs to an unrelated project.
+
+The command tree starts with three deliberately separate surfaces:
+
+```text
+yaga commit check                 # validate one message, commit, or range
+yaga config show                  # explain the effective policy and its source
+yaga gate codex-review <operation> # run the retained review gate
+```
+
+## Conventional Commit checks
+
+With no input option, YAGA checks `HEAD`. Exactly one explicit source may be selected:
+
+```bash
+yaga commit check --message "feat(cli): add configurable checks"
+yaga commit check --file .git/COMMIT_EDITMSG
+printf 'fix: preserve stdin\n' | yaga commit check --stdin
+yaga commit check --commit HEAD~1
+yaga commit check --range origin/main..HEAD
+```
+
+Range checks read complete commit messages from Git in oldest-first order. They do not fetch missing
+history or invoke a shell, and they reject shallow repositories rather than silently weaken a
+selection. An empty range, a missing ref, or a selection above the configured commit limit is an
+operational error.
+
+The built-in policy enforces only Conventional Commit structure, accepts any type and scope, and
+ignores commits that Git proves have multiple parents. Put stricter project policy in the nearest
+`.yaga.toml` or `pyproject.toml`. Discovery walks toward the repository root, preferring
+`.yaga.toml` in each directory; `--config` selects one file explicitly. Files are never merged, and
+unknown or misspelled keys fail loudly.
+
+For `pyproject.toml`:
+
+```toml
+[tool.yaga]
+config-version = 1
+
+[tool.yaga.commit]
+allowed-types = [
+  "build", "chore", "ci", "docs", "feat", "fix",
+  "perf", "refactor", "revert", "style", "test",
+]
+type-case = "lower"              # any, lower, or upper
+scope-policy = "optional"        # optional, required, or forbidden
+allowed-scopes = ["cli", "config", "git"]
+scope-case = "lower"
+header-max-length = 100
+description-min-length = 3
+description-max-length = 72
+description-ending = "forbid"    # allow, require, or forbid . ! ?
+body-policy = "optional"
+body-min-length = 0
+body-max-line-length = 100
+merge-commits = "reject"         # ignore, check, or reject
+ignored-headers = ['Revert "*"'] # bounded, case-sensitive glob patterns
+max-commits = 64
+```
+
+A standalone `.yaga.toml` uses `config-version = 1` and `[commit]` instead of the two
+`[tool.yaga...]` tables. Omit `allowed-types` or `allowed-scopes` to allow any value. An explicit
+empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must not be empty.
+`yaga config show` prints every effective value and the source file, with `--format json` for tools.
+
+Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`, and
+`header.length`. Text and versioned JSON reports use these exit codes:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Every checked commit passed; ignored merge/header records may have been skipped. |
+| `1` | At least one commit violated policy. |
+| `2` | Invocation, input, configuration, or Git failed. |
+
+A `commit-msg` hook can call `yaga commit check --file "$1"`. CI should use a non-shallow checkout
+containing the exact base and head, then call `yaga commit check --range "$BASE_SHA..$HEAD_SHA"`. `--quiet`
+suppresses validation reports while operational errors still go to standard error; `--format json`
+provides a stable schema for another tool.
+
+## Gate commands and the composite Action
+
+The installed CLI exposes all retained operations:
+
+```bash
+yaga gate codex-review invalidate
+yaga gate codex-review prepare
+yaga gate codex-review authorize
+yaga gate codex-review observe
+yaga gate codex-review request
+yaga gate codex-review finalize
+```
+
+These are not offline simulations: they require the same trusted GitHub environment, event payload,
+permissions, operation-specific protected approval marker where applicable, and default-branch
+provenance as the composite Action. The GitHub token remains environment-only and is never accepted
+as a CLI argument.
+
+The installed CLI uses Typer. The write-capable composite Action intentionally installs nothing and
+runs with Python site packages disabled. A fixed standard-library bootstrap accepts the same
+`gate codex-review <operation>` command path and calls the same dispatcher, keeping the trusted
+Action import graph dependency-free and network-free.
+
+## Codex review Action: why the workflow is split
 
 Write-capable review automation must not execute pull-request-controlled code. YAGA therefore puts
 two trusted, write-capable default-branch workflows around ordinary unprivileged PR CI:

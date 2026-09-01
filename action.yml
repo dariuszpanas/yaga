@@ -58,6 +58,7 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        YAGA_ACTION_RUNTIME: "1"
         YAGA_GATE: ${{ inputs.gate }}
         YAGA_APPROVAL_MARKER: ${{ inputs.approval-marker }}
         YAGA_LIFECYCLE_WORKFLOW: ${{ inputs.lifecycle-workflow }}
@@ -71,7 +72,7 @@ runs:
         unset PYTHONHOME
         export PYTHONPATH="$GITHUB_ACTION_PATH/src"
         export PYTHONSAFEPATH=1
-        python -P -m yaga --gate "$YAGA_GATE" --operation "$YAGA_OPERATION"
+        python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION"
 
 branding:
   icon: shield

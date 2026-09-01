@@ -5,12 +5,32 @@ Read `CONTRIBUTING.md` before changing code or opening a pull request. Start wit
 explicit paths, and inspect both working and cached diffs. Feature branches use `feat/<topic>` and
 fixes use `fix/<topic>`.
 
+YAGA is an extensible CLI for checks that work locally and in CI. Keep the Conventional Commit
+checker under `src/yaga/commits/`, installed Typer commands under `src/yaga/commands/`, and the
+retained Codex review gate under `src/yaga/codex/`. Do not discard the gate experiment: expose its
+operations through `yaga gate` and keep the composite Action as a supported adapter.
+
+## Preserve the CLI contract
+
+- `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine sources,
+  fetch history, reduce a Git selection, or ignore a missing base.
+- Treat commit messages, Git output, revisions, paths, and displayed labels as untrusted. Bound
+  inputs and output, invoke Git without a shell, reject option-like/split revisions, and sanitize
+  terminal text.
+- Load exactly one nearest `.yaga.toml` or `pyproject.toml`, or one explicit `--config`; reject
+  unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
+- Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
+  0/1/2, and the versioned JSON document are public pre-release contracts.
+- The installed CLI may use the locked Typer dependency. The composite Action may not import Typer,
+  CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve the fixed
+  dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher.
+
 ## Preserve the trust boundary
 
 - Treat events, inputs, API responses, comments, reviews, reactions, statuses, and run metadata as
   untrusted until strictly parsed and bounded.
-- Keep runtime code dependency-free and never expose `github-token` in arguments, output, status,
-  logs, or exceptions.
+- Keep the composite-Action import graph dependency-free and never expose `github-token` in
+  arguments, output, status, logs, or exceptions.
 - Keep PR CI unprivileged. Write-capable YAGA operations run only from trusted default-branch
   `pull_request_target` or `workflow_run` workflows and never consume PR code, artifacts, or cache.
 - Treat PR CI as a quota-saving heuristic, not a security authority. Merge security also relies on
