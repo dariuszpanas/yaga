@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from fnmatch import fnmatchcase
 
 from yaga.commits.models import (
     BreakingMarkerPolicy,
     CasePolicy,
     CheckResult,
+    CommitFooter,
     CommitPolicy,
     CommitTarget,
     Diagnostic,
@@ -15,7 +17,13 @@ from yaga.commits.models import (
     MergePolicy,
     PresencePolicy,
 )
-from yaga.commits.parser import MAX_MESSAGE_BYTES, header_from, normalize_message, parse_message
+from yaga.commits.parser import (
+    MAX_MESSAGE_BYTES,
+    header_from,
+    iter_footer_starts,
+    normalize_message,
+    parse_message,
+)
 from yaga.errors import InputError
 
 _TERMINAL_PUNCTUATION = (".", "!", "?")
@@ -228,6 +236,16 @@ def _check_target(
                         )
                     )
                     break
+        if policy.required_footer_tokens or policy.forbidden_footer_tokens:
+            footers = (
+                iter_footer_starts(
+                    parsed.footer_lines,
+                    start_line=parsed.footer_start_line,
+                )
+                if parsed.footer_start_line is not None
+                else ()
+            )
+            _check_footer_tokens(diagnostics, footers, policy)
 
     return CheckResult(target=target, header=header, diagnostics=tuple(diagnostics))
 
@@ -254,6 +272,49 @@ def _check_case(
 def _contains_casefold(values: tuple[str, ...], candidate: str) -> bool:
     folded = candidate.casefold()
     return any(value.casefold() == folded for value in values)
+
+
+def _check_footer_tokens(
+    diagnostics: list[Diagnostic],
+    footers: Iterable[CommitFooter],
+    policy: CommitPolicy,
+) -> None:
+    """Apply bounded presence policies after the existing body diagnostics."""
+    required = {token.casefold(): token for token in policy.required_footer_tokens}
+    forbidden = {token.casefold(): token for token in policy.forbidden_footer_tokens}
+    present_required: set[str] = set()
+    first_forbidden: tuple[int, str] | None = None
+
+    for footer in footers:
+        token = footer.token
+        folded = token.casefold()
+        if folded in required:
+            present_required.add(folded)
+        if first_forbidden is None and folded in forbidden:
+            first_forbidden = (footer.line, forbidden[folded])
+
+    missing = [token for folded, token in required.items() if folded not in present_required]
+    if missing:
+        remaining = len(missing) - 1
+        suffix = ""
+        if remaining:
+            noun = "token" if remaining == 1 else "tokens"
+            suffix = f"; {remaining} additional required footer {noun} missing"
+        diagnostics.append(
+            Diagnostic(
+                code="footer.required",
+                message=f"required footer token {missing[0]!r} is missing{suffix}",
+            )
+        )
+    if first_forbidden is not None:
+        line, token = first_forbidden
+        diagnostics.append(
+            Diagnostic(
+                code="footer.forbidden",
+                message=f"footer token {token!r} is forbidden by policy",
+                line=line,
+            )
+        )
 
 
 def _word_count_below_minimum(value: str, minimum: int) -> int | None:

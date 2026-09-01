@@ -81,6 +81,8 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "description_max_length": policy.description_max_length,
         "description_ending": policy.description_ending.value,
         "breaking_markers": policy.breaking_markers.value,
+        "required_footer_tokens": _json_values(policy.required_footer_tokens, maximum=128),
+        "forbidden_footer_tokens": _json_values(policy.forbidden_footer_tokens, maximum=128),
         "body_policy": policy.body_policy.value,
         "body_min_length": policy.body_min_length,
         "body_min_words": policy.body_min_words,

@@ -108,6 +108,58 @@ def test_config_reports_the_effective_breaking_marker_policy() -> None:
     assert document["config"]["breaking_markers"] == "paired"
 
 
+def test_config_reports_footer_tokens_with_configured_spelling_and_order() -> None:
+    loaded = LoadedConfig(
+        policy=CommitPolicy(
+            required_footer_tokens=("Signed-off-by", "Refs"),
+            forbidden_footer_tokens=("WIP", "Do-Not-Merge"),
+        ),
+        path=None,
+    )
+
+    rendered = render_config(loaded, OutputFormat.TEXT)
+    document = json.loads(render_config(loaded, OutputFormat.JSON))
+
+    assert "required-footer-tokens: Signed-off-by, Refs" in rendered
+    assert "forbidden-footer-tokens: WIP, Do-Not-Merge" in rendered
+    assert document["config"]["required_footer_tokens"] == ["Signed-off-by", "Refs"]
+    assert document["config"]["forbidden_footer_tokens"] == ["WIP", "Do-Not-Merge"]
+
+
+def test_footer_policy_diagnostics_are_stable_in_text_and_json_reports() -> None:
+    result = check_target(
+        CommitTarget(
+            label="message",
+            message="feat: reject temporary metadata\n\nWIP: remove before merge",
+        ),
+        CommitPolicy(
+            required_footer_tokens=("Signed-off-by",),
+            forbidden_footer_tokens=("WIP",),
+        ),
+    )
+    report = ValidationReport(results=(result,), config_path=None)
+
+    rendered = render_report(report, OutputFormat.TEXT)
+    document = json.loads(render_report(report, OutputFormat.JSON))
+
+    assert "[footer.required] line 1: required footer token 'Signed-off-by' is missing" in rendered
+    assert "[footer.forbidden] line 3: footer token 'WIP' is forbidden by policy" in rendered
+    assert document["commits"][0]["diagnostics"] == [
+        {
+            "code": "footer.required",
+            "message": "required footer token 'Signed-off-by' is missing",
+            "line": 1,
+            "column": 1,
+        },
+        {
+            "code": "footer.forbidden",
+            "message": "footer token 'WIP' is forbidden by policy",
+            "line": 3,
+            "column": 1,
+        },
+    ]
+
+
 def test_untrusted_headers_and_operational_errors_are_sanitized() -> None:
     assert safe_text("feat: hello\x1b[31m\nworld\u202e\u0085") == ("feat: hello?[31m?world??")
     rendered = render_error(
