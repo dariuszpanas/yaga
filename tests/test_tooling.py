@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
 import pytest
 
-from scripts import run_actionlint
+from scripts import check_build, run_actionlint
 
 ROOT = Path(__file__).parents[1]
 
@@ -98,6 +100,54 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "pre-commit try-repo . yaga-commit-check" in ci
     assert 'test "$YAGA_PRE_COMMIT_STATUS" -eq 1' in ci
     assert "grep -F -- '[syntax.header]'" in ci
+
+    build_gate = (ROOT / "scripts" / "check_build.py").read_text(encoding="utf-8")
+    for locked_argument in (
+        "--locked",
+        "--no-sources",
+        "--no-default-groups",
+        "--require-hashes",
+        "--no-build",
+        "--no-deps",
+    ):
+        assert f'"{locked_argument}"' in build_gate
+    assert '"--no-hashes"' not in build_gate
+    assert 'EXPECTED_REQUIRES_DIST = ["typer<1,>=0.27.2"]' in build_gate
+    assert '"PYTHONPATH"' in build_gate
+    assert '"YAGA_ACTION_RUNTIME"' in build_gate
+    assert "cwd=consumer" in build_gate
+    assert 'completed.stdout.decode("utf-8")' in build_gate
+    assert '"pip",\n            "check"' in build_gate
+    assert '"--format",\n            "json"' in build_gate
+
+
+def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
+    valid = b"Metadata-Version: 2.4\nRequires-Python: >=3.12\nRequires-Dist: typer<1,>=0.27.2\n\n"
+    check_build.validate_wheel_metadata(valid)
+
+    for malformed in (
+        b"Metadata-Version: 2.4\nRequires-Python: >=3.12\n\n",
+        valid.replace(b"typer<1,>=0.27.2", b"typer>=0.27.2"),
+        valid.replace(
+            b"Requires-Dist: typer<1,>=0.27.2",
+            b"Requires-Dist: typer<1,>=0.27.2\nRequires-Dist: requests>=2",
+        ),
+        valid.replace(b"Requires-Python: >=3.12", b"Requires-Python: >=3.11"),
+    ):
+        with pytest.raises(SystemExit):
+            check_build.validate_wheel_metadata(malformed)
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_wheel_smoke_process_output_is_bounded(tmp_path: Path, stream: str) -> None:
+    command = [
+        sys.executable,
+        "-c",
+        (f"import sys; sys.{stream}.buffer.write(b'x' * {check_build.MAX_SMOKE_OUTPUT_BYTES + 1})"),
+    ]
+
+    with pytest.raises(SystemExit, match="output exceeds"):
+        check_build.run_bounded(command, cwd=tmp_path, env=os.environ.copy())
 
 
 def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> None:
