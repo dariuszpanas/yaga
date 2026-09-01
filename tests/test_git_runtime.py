@@ -19,6 +19,7 @@ from yaga.git import (
     open_repository,
     parse_object_id,
     require_complete_history,
+    require_no_legacy_grafts,
     resolve_common_git_directory,
     run_git,
     runtime,
@@ -911,20 +912,71 @@ def test_resolves_normal_and_linked_worktree_common_directories(
     assert resolve_common_git_directory(open_repository(linked)) == (repository / ".git").resolve()
 
 
+def test_graft_validation_uses_bare_separate_and_linked_common_directories(
+    repository: Path,
+    tmp_path: Path,
+) -> None:
+    bare = tmp_path.with_name(f"{tmp_path.name}-graft-bare.git")
+    separate = tmp_path.with_name(f"{tmp_path.name}-graft-separate")
+    separate_metadata = tmp_path.with_name(f"{tmp_path.name}-graft-separate.git")
+    linked = tmp_path.with_name(f"{tmp_path.name}-graft-linked")
+    subprocess.run(
+        ["git", "clone", "--quiet", "--bare", str(repository), str(bare)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--quiet",
+            f"--separate-git-dir={separate_metadata}",
+            str(repository),
+            str(separate),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repository), "worktree", "add", "--quiet", "--detach", str(linked)],
+        check=True,
+        capture_output=True,
+    )
+
+    for candidate in (bare, separate, linked):
+        selected = open_repository(candidate)
+        common_directory = resolve_common_git_directory(selected)
+        grafts = common_directory / "info" / "grafts"
+        grafts.parent.mkdir(parents=True, exist_ok=True)
+        grafts.write_text("a" * 40 + "\n", encoding="ascii")
+        with pytest.raises(GitError, match="selection rejects grafts"):
+            require_no_legacy_grafts(selected, message="selection rejects grafts")
+        grafts.unlink()
+
+
 @pytest.mark.parametrize("output", [b"", b"one\ntwo\n", b"bad\0path\n", b"\xff\n"])
 def test_common_directory_rejects_malformed_git_output(
     output: bytes,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(
-        runtime,
-        "run_git",
-        lambda *_args, **_kwargs: ProcessResult(0, output, b"", False, False, False),
-    )
+    selected = GitRepository(tmp_path.resolve(), sys.executable)
+
+    def fake_run_git(
+        repository: GitRepository,
+        arguments: list[str],
+        *,
+        stdout_limit: int,
+    ) -> ProcessResult:
+        assert repository == selected
+        assert arguments == ["rev-parse", "--git-common-dir"]
+        assert stdout_limit == runtime._MAX_GIT_COMMON_DIR_BYTES
+        return ProcessResult(0, output, b"", False, False, False)
+
+    monkeypatch.setattr(runtime, "run_git", fake_run_git)
 
     with pytest.raises(GitError, match="malformed common history metadata"):
-        resolve_common_git_directory(GitRepository(tmp_path.resolve(), sys.executable))
+        resolve_common_git_directory(selected)
 
 
 def test_complete_history_rejects_shallow_repositories_and_legacy_grafts(
@@ -965,9 +1017,46 @@ def test_complete_history_rejects_shallow_repositories_and_legacy_grafts(
         )
 
 
+def test_graft_only_validation_allows_shallow_history_and_empty_metadata(
+    repository: Path,
+    tmp_path: Path,
+) -> None:
+    selected = open_repository(repository)
+    grafts = repository / ".git" / "info" / "grafts"
+    grafts.write_bytes(b"")
+    assert (
+        require_no_legacy_grafts(selected, message="selection rejects grafts")
+        == (repository / ".git").resolve()
+    )
+
+    shallow = tmp_path.with_name(f"{tmp_path.name}-graft-check-shallow")
+    subprocess.run(
+        ["git", "clone", "--quiet", "--depth=1", "--no-local", str(repository), str(shallow)],
+        check=True,
+        capture_output=True,
+    )
+    assert (
+        require_no_legacy_grafts(
+            open_repository(shallow),
+            message="selection rejects grafts",
+        )
+        == (shallow / ".git").resolve()
+    )
+
+    grafts.write_text("a" * 40 + "\n", encoding="ascii")
+    with pytest.raises(GitError, match="selection rejects grafts"):
+        require_no_legacy_grafts(selected, message="selection rejects grafts")
+
+
 def test_complete_history_requires_regular_grafts_metadata(repository: Path) -> None:
     grafts = repository / ".git" / "info" / "grafts"
     grafts.mkdir()
+
+    with pytest.raises(GitError, match="overlay metadata cannot be validated safely"):
+        require_no_legacy_grafts(
+            open_repository(repository),
+            message="selection rejects grafts",
+        )
 
     with pytest.raises(GitError, match="overlay metadata cannot be validated safely"):
         require_complete_history(

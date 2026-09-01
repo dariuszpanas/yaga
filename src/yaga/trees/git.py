@@ -5,7 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from yaga.errors import GitError, InputError, safe_error_text
-from yaga.git import GitRepository, open_repository, parse_object_id, run_git, safe_git_error
+from yaga.git import (
+    GitRepository,
+    open_repository,
+    parse_object_id,
+    require_no_legacy_grafts,
+    run_git,
+    safe_git_error,
+)
 from yaga.trees.models import (
     MAX_TREE_PATH_BYTES,
     MAX_TREE_PATH_COMPONENTS,
@@ -20,17 +27,20 @@ from yaga.trees.models import (
 
 MAX_GIT_TREE_BYTES = 64 * 1024 * 1024
 _MAX_GIT_IDENTITY_BYTES = 256
+_GRAFTS_MESSAGE = "committed-tree selection rejects legacy graft overlays"
 
 
 def read_tree_paths(repository: Path, revision: str) -> TreeSelection:
     """Resolve exactly one commit and return the leaf paths in its committed tree."""
     _validate_revision(revision)
     repo = open_repository(repository)
+    require_no_legacy_grafts(repo, message=_GRAFTS_MESSAGE)
     commit_sha = _resolve_object(repo, revision, object_type="commit")
     tree_sha = _resolve_object(repo, commit_sha, object_type="tree")
     if len(commit_sha) != len(tree_sha):
         raise GitError("git returned inconsistent object identity lengths")
     paths = _read_tree_path_output(repo, tree_sha)
+    require_no_legacy_grafts(repo, message=_GRAFTS_MESSAGE)
     return TreeSelection(
         repository=repo.directory,
         revision=revision,
