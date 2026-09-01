@@ -12,6 +12,7 @@ check:
 	uv run ruff format --check .
 	uv run ty check
 	uv run pre-commit validate-manifest .pre-commit-hooks.yaml
+	uv run yaga workflow check .github/workflows examples
 	uv run python scripts/run_actionlint.py
 	bash -n scripts/composite_smoke_python
 

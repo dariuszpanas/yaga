@@ -21,13 +21,14 @@ uv run yaga --help
 The distribution is named `yaga-cli`; the executable and Python package are both named `yaga`.
 The `yaga` distribution name on PyPI belongs to an unrelated project.
 
-The command tree starts with four deliberately separate surfaces:
+The command tree starts with five deliberately separate surfaces:
 
 ```text
 yaga commit check                  # validate one message, commit, or range
 yaga config init                   # create a safe standalone starter policy
 yaga config show                   # explain the effective policy and its source
 yaga github pull-request check     # validate one exact GitHub PR event
+yaga workflow check                # require immutable workflow references
 yaga gate codex-review <operation> # run the retained review gate
 ```
 
@@ -203,6 +204,39 @@ any other code. Title validation is bound to the triggering event rather than th
 immutable evidence. The copy-ready [commit-policy workflow](examples/commit-policy.yml) pins an
 audited pre-release commit; review and deliberately replace that immutable SHA when adopting a
 newer YAGA revision.
+
+## GitHub workflow reference checks
+
+`yaga workflow check` catches mutable third-party Action and reusable-workflow references before
+they become a supply-chain regression. With no paths it checks direct `.yml` and `.yaml` children
+of `.github/workflows`; explicit file or directory selections make examples and other workflow
+sets checkable with the same policy:
+
+```bash
+yaga workflow check
+yaga workflow check .github/workflows examples --format github
+```
+
+External GitHub references must use a full lowercase 40-character commit SHA. Step-level local
+Actions may use `./` or `$/` repository paths, while job-level local references must select one
+direct `.github/workflows/*.yml` or `.yaml` reusable workflow. Docker Actions must use a lowercase
+SHA-256 image digest. Expressions, ambiguous paths, tags, branches, abbreviated or uppercase SHAs,
+and references in the wrong step/job context fail policy.
+
+The `$/` self-repository syntax requires github.com and Actions runner 2.336.0 or newer; use `./`
+for GitHub Enterprise Server or older self-hosted runners. Prefer `$/` when it is available: `./`
+executes from the checked-out workspace, so its integrity depends on an exact trusted checkout and
+it must not consume untrusted pull-request code in a write-capable workflow.
+
+The checker strictly bounds selected files, bytes, YAML nodes, depth, aliases, scalar sizes,
+references, and diagnostics. It composes a YAML node graph without constructing Python objects, so
+duplicate keys and merge keys remain visible and fail closed. Text, versioned JSON, and escaped
+GitHub annotations use exit `0` for success, `1` for policy findings, and `2` for discovery, input,
+YAML, or resource-limit errors.
+
+This is an installed-CLI provider, not a composite Action. Run it after installing the locked YAGA
+environment in ordinary unprivileged CI. Keep actionlint as a separate syntax and GitHub-schema
+check; immutable reference policy does not replace it.
 
 ## Gate commands and the composite Action
 

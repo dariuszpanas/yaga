@@ -18,7 +18,7 @@ from typing import BinaryIO
 ROOT = Path(__file__).resolve().parents[1]
 MAX_SMOKE_OUTPUT_BYTES = 65_536
 SMOKE_MESSAGE = "feat(build): execute the built wheel"
-EXPECTED_REQUIRES_DIST = ["typer<1,>=0.27.2"]
+EXPECTED_REQUIRES_DIST = ["pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]
 
 
 def validate_wheel_metadata(raw: bytes) -> None:
@@ -242,6 +242,44 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     ):
         raise SystemExit("installed wheel CLI config init emitted the wrong report contract")
 
+    workflow_directory = consumer / ".github" / "workflows"
+    workflow_directory.mkdir(parents=True)
+    (workflow_directory / "ci.yml").write_text(
+        "name: CI\n"
+        "on: push\n"
+        "jobs:\n"
+        "  check:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    workflow_completed = run_bounded(
+        [
+            str(executable),
+            "workflow",
+            "check",
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    workflow_document = successful_json(workflow_completed, operation="workflow check")
+    if not (
+        workflow_document.get("schema_version") == 1
+        and workflow_document.get("kind") == "github_workflow_policy"
+        and workflow_document.get("valid") is True
+        and workflow_document.get("checked") == 1
+        and workflow_document.get("passed") == 1
+        and workflow_document.get("failed") == 0
+        and workflow_document.get("references_checked") == 1
+    ):
+        raise SystemExit("installed wheel CLI workflow check emitted the wrong report contract")
+
     completed = run_bounded(
         [
             str(executable),
@@ -313,10 +351,13 @@ def main() -> int:
                 "yaga/codex/runtime.py",
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
+                "yaga/commands/workflow.py",
                 "yaga/commits/checker.py",
                 "yaga/commits/github_event.py",
                 "yaga/commits/github_reporting.py",
                 "yaga/files.py",
+                "yaga/workflows/checker.py",
+                "yaga/workflows/yaml.py",
             }
             if missing := sorted(required - names):
                 raise SystemExit(f"wheel is missing required modules: {', '.join(missing)}")

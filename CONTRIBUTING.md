@@ -28,9 +28,9 @@ with project and Python environment leakage removed.
 
 ## CLI and commit policy contract
 
-The public installed command groups are `commit`, `config`, `github`, and `gate`. Keep Typer
-declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection, configuration,
-GitHub event adaptation, and reporting in focused dependency-light modules under
+The public installed command groups are `commit`, `config`, `github`, `workflow`, and `gate`. Keep
+Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
+configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
 
 `commit check` accepts exactly one of a message, UTF-8 file, standard input, Git commit, or Git
@@ -47,6 +47,15 @@ fields are public pre-release interfaces; change them deliberately and test both
 `config init` creates only a new standalone `.yaga.toml` with exclusive no-overwrite semantics. It
 must refuse to shadow any effective discovered configuration, never edit `pyproject.toml`, and keep
 its deterministic starter template round-trippable through the strict loader.
+
+Workflow reference policy lives under `src/yaga/workflows/` and remains installed-CLI-only. Parse
+untrusted YAML through the bounded pure-Python `SafeLoader` composition boundary without
+constructing Python objects or collapsing mapping pairs. Preserve source marks and duplicate keys;
+bound files, bytes, documents, nodes, depth, anchors, aliases, scalar sizes, expanded visits,
+references, diagnostics, and displayed values. Keep immutable-reference checking separate from
+actionlint and out of both dependency-free composite Action import graphs. Treat `$/` local
+references as commit-bound; `./` is a compatibility path whose integrity depends on the caller's
+trusted checkout and must not imply an immutable-reference guarantee.
 
 The pre-commit provider manifest exposes exactly one `commit-msg` hook. Keep it as a direct
 `language: python` adapter to `yaga commit check --file`; do not add shell indirection, filename

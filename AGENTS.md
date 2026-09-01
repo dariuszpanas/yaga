@@ -87,3 +87,8 @@ dependencies, Ruff, ty, pinned actionlint, tests, and package build. Use Convent
 fold review/CI fixes into the logical commit. Keep the installed CLI entrypoint UTF-8-safe before
 Typer renders untrusted text. The build gate must install hash-locked runtime wheels, add the fresh
 YAGA wheel without dependency resolution, and execute it outside the checkout.
+
+Keep installed workflow-policy parsing and reporting under `src/yaga/workflows/`. Its YAML boundary
+must remain resource-bounded, preserve duplicate mapping pairs, and never enter either
+dependency-free Action runtime. `$/` local references are commit-bound; `./` depends on the
+caller's trusted checkout and must not be described as independently immutable.
