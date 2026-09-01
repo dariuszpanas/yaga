@@ -1,8 +1,9 @@
 # Contributing
 
-YAGA is security-sensitive workflow infrastructure. Keep changes small, test-backed, and explicit
-about the event, evidence, authorization, status, and permission boundary they affect. The first
-gate is `codex-review`; generic infrastructure must remain usable by later adapters.
+YAGA is an extensible repository-policy CLI with a security-sensitive GitHub Action surface. Keep
+changes focused, test-backed, and explicit about the public command, configuration, diagnostic, or
+gate boundary they affect. The first local/CI policy is `commit check`; the retained write-capable
+gate is `codex-review`.
 
 ## Development
 
@@ -13,8 +14,32 @@ uv sync --group dev
 uv run make ci
 ```
 
-The full gate uses Docker for the pinned actionlint container. Runtime code uses only the Python
-standard library; lint, type, test, and build tools are development dependencies.
+The full gate uses Docker for the pinned actionlint container. The installed CLI uses the locked
+Typer dependency. The composite-Action import graph—`__main__` in Action mode, `action_cli`,
+`action`, `codex`, and the generic GitHub primitives—must remain Python-standard-library-only and
+must not import the installed CLI, command, commit-policy, or presentation modules.
+
+## CLI and commit policy contract
+
+The public installed command groups are `commit`, `config`, and `gate`. Keep Typer declarations in
+`src/yaga/commands/`; keep commit parsing, policy, Git selection, configuration, and reporting in
+focused dependency-light modules under `src/yaga/commits/`. Domain behavior must remain directly
+testable without invoking Typer.
+
+`commit check` accepts exactly one of a message, UTF-8 file, standard input, Git commit, or Git
+range; with none it checks `HEAD`. Preserve full messages, deterministic oldest-first range order,
+hard message/config/output/count bounds, shell-free Git invocation, and explicit failure for missing
+or shallow history. Commit messages and Git output are untrusted terminal input: sanitize and bound
+anything displayed.
+
+Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or in the standalone
+`.yaga.toml` root plus `[commit]`. Load exactly one nearest or explicit file, reject unknown keys and
+wrong types, and do not silently merge policies. Stable diagnostic identifiers and JSON schema
+fields are public pre-release interfaces; change them deliberately and test both text and JSON.
+
+The Action uses the same `gate codex-review <operation>` command path through a fixed
+`YAGA_ACTION_RUNTIME=1` standard-library bootstrap. It installs no package and makes no network
+request for dependencies. Never accept `github-token` as argv, configuration, output, or logs.
 
 ## Action contract
 
@@ -116,6 +141,11 @@ delivers every configured lifecycle event, because there is no scheduled repair 
 same-head transition.
 
 ## Testing and pull requests
+
+Add parser/checker tests for every new commit rule, strict configuration tests for every key,
+shell-free Git integration tests for selection behavior, and Typer runner tests for command/exit
+contracts. Keep a subprocess smoke proving `python -P -S -m yaga gate codex-review ...` reaches the
+dependency-free Action boundary without importing Typer.
 
 Keep generic transport/models/status primitives in `src/yaga/` and provider policy in
 `src/yaga/codex/`. Add focused tests for success, failed CI, direct/protected routing, unsolicited

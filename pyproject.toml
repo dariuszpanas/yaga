@@ -3,24 +3,36 @@ requires = ["hatchling==1.32.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "yaga-gate-action"
+name = "yaga-cli"
 version = "0.1.0"
-description = "Conservative, reusable GitHub status gates"
+description = "Configurable developer workflow checks for local use and GitHub Actions"
 readme = "README.md"
 license = "BSD-3-Clause"
 requires-python = ">=3.12"
 authors = [
     { name = "Dariusz Panas" },
 ]
+keywords = [
+    "cli",
+    "conventional-commits",
+    "git",
+    "github-actions",
+    "quality-assurance",
+]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = []
+dependencies = [
+    "typer>=0.27.2,<1",
+]
 
 [tool.uv]
 required-version = "==0.9.18"
@@ -30,7 +42,7 @@ Repository = "https://github.com/dariuszpanas/yaga"
 Issues = "https://github.com/dariuszpanas/yaga/issues"
 
 [project.scripts]
-yaga = "yaga.cli:main"
+yaga = "yaga.cli:app"
 
 [dependency-groups]
 dev = [
@@ -73,3 +85,32 @@ known-first-party = ["yaga"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.yaga]
+config-version = 1
+
+[tool.yaga.commit]
+allowed-types = [
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "refactor",
+    "revert",
+    "style",
+    "test",
+]
+type-case = "lower"
+scope-policy = "optional"
+scope-case = "lower"
+header-max-length = 100
+description-min-length = 3
+description-ending = "forbid"
+body-policy = "optional"
+body-max-line-length = 100
+merge-commits = "reject"
+ignored-headers = []
+max-commits = 64

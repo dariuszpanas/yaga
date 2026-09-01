@@ -35,7 +35,6 @@ def _environment(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     *,
-    operation: str,
     event_name: str,
     event: dict[str, object],
 ) -> Path:
@@ -57,7 +56,6 @@ def _environment(
         "YAGA_JOB_TIMEOUT_MINUTES": "15",
         "YAGA_APPROVAL_MARKER": runtime.APPROVAL_ENVIRONMENT_MARKER,
         "YAGA_LIFECYCLE_WORKFLOW": ".github/workflows/review-policy.yml",
-        "YAGA_OPERATION": operation,
         "YAGA_OWNER_ID": "15094983",
         "YAGA_PREREQUISITE_WORKFLOW": ".github/workflows/ci.yml",
         "YAGA_REQUEST_TIMEOUT": "15",
@@ -81,7 +79,6 @@ def test_invalidate_dispatches_without_loading_source(
     output = _environment(
         monkeypatch,
         tmp_path,
-        operation="invalidate",
         event_name="pull_request_target",
         event=_event(),
     )
@@ -92,13 +89,14 @@ def test_invalidate_dispatches_without_loading_source(
         "load_source_from_wake",
         lambda *_args, **_kwargs: pytest.fail("invalidate loaded a CI source"),
     )
+    monkeypatch.setenv("YAGA_OPERATION", "prepare")
 
     def fake_invalidate(_api: object, **kwargs: object) -> GateResult:
         captured.update(kwargs)
         return GateResult("pending", 0)
 
     monkeypatch.setattr(runtime, "invalidate", fake_invalidate)
-    assert runtime.run_action() == 0
+    assert runtime.run_action("invalidate") == 0
     assert captured["run_id"] == RUN_ID
     assert captured["run_attempt"] == RUN_ATTEMPT
     assert output.read_text(encoding="utf-8") == "route=skip\n"
@@ -116,7 +114,6 @@ def test_prepare_dispatches_owner_id_and_publishes_route(
     output = _environment(
         monkeypatch,
         tmp_path,
-        operation="prepare",
         event_name="workflow_run",
         event=event,
     )
@@ -131,7 +128,7 @@ def test_prepare_dispatches_owner_id_and_publishes_route(
         return GateResult("route", 0, "external")
 
     monkeypatch.setattr(runtime, "prepare", fake_prepare)
-    assert runtime.run_action() == 0
+    assert runtime.run_action("prepare") == 0
     assert captured["source"] is source
     assert captured["wake_workflow"] == CI_WORKFLOW_PATH
     assert captured["direct_author_id"] == 15_094_983
@@ -152,7 +149,6 @@ def test_authorize_requires_the_protected_environment_marker(
     _environment(
         monkeypatch,
         tmp_path,
-        operation="authorize",
         event_name="workflow_run",
         event=event,
     )
@@ -170,7 +166,7 @@ def test_authorize_requires_the_protected_environment_marker(
     )
 
     with pytest.raises(GateError, match="YAGA_APPROVAL_MARKER"):
-        runtime.run_action()
+        runtime.run_action("authorize")
 
 
 @pytest.mark.parametrize(("operation", "allow_request"), [("observe", False), ("request", True)])
@@ -188,7 +184,6 @@ def test_review_modes_are_distinct(
     _environment(
         monkeypatch,
         tmp_path,
-        operation=operation,
         event_name="workflow_run",
         event=event,
     )
@@ -200,7 +195,7 @@ def test_review_modes_are_distinct(
         return GateResult("done", 0, "done")
 
     monkeypatch.setattr(runtime, "review", fake_review)
-    assert runtime.run_action() == 0
+    assert runtime.run_action(operation) == 0
 
 
 def test_default_branch_workflow_ref_is_mandatory(
@@ -210,13 +205,12 @@ def test_default_branch_workflow_ref_is_mandatory(
     _environment(
         monkeypatch,
         tmp_path,
-        operation="invalidate",
         event_name="pull_request_target",
         event=_event(),
     )
     monkeypatch.setenv("GITHUB_WORKFLOW_REF", f"{REPOSITORY}/{WORKFLOW_PATH}@refs/heads/feature")
     with pytest.raises(GateError, match="default branch"):
-        runtime.run_action()
+        runtime.run_action("invalidate")
 
 
 @pytest.mark.parametrize(
@@ -249,7 +243,6 @@ def test_each_operation_has_a_closed_api_request_budget(
     _environment(
         monkeypatch,
         tmp_path,
-        operation=operation,
         event_name=event_name,
         event=event,
     )
@@ -271,5 +264,5 @@ def test_each_operation_has_a_closed_api_request_budget(
     monkeypatch.setattr(runtime, "review", lambda *_args, **_kwargs: GateResult("done", 0))
     monkeypatch.setattr(runtime, "finalize", lambda *_args, **_kwargs: GateResult("done", 0))
 
-    assert runtime.run_action() == 0
+    assert runtime.run_action(operation) == 0
     assert captured["max_requests"] == expected_budget

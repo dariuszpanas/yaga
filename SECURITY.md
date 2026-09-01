@@ -1,11 +1,18 @@
 # Security policy
 
-YAGA is security-sensitive GitHub Actions infrastructure. Do not open a public issue for a
-suspected vulnerability. Use GitHub private vulnerability reporting and include the affected
-commit, trust boundary, expected fail-closed behavior, and a secret-free reproduction.
+YAGA contains both a local/CI repository-policy CLI and security-sensitive GitHub Actions
+infrastructure. Do not open a public issue for a suspected vulnerability. Use GitHub private
+vulnerability reporting and include the affected commit, execution surface, expected fail-closed
+behavior, and a secret-free reproduction.
 
 Useful reports include:
 
+- shell or option injection through a commit revision, repository path, configuration, or commit
+  message;
+- terminal escape/control injection, unbounded message/config/Git output, or JSON contract
+  confusion in `commit check`;
+- the composite Action importing Typer, site packages, commit-policy modules, or any dependency
+  installed at runtime;
 - PR-controlled code, actions, artifacts, caches, or text reaching a write-capable trusted job;
 - a request comment posted before exact current successful CI, live PR/head/base/default branch,
   unique ownership, lifecycle provenance, and owner/environment authorization are revalidated;
@@ -17,6 +24,22 @@ Useful reports include:
   request outside the documented final-read/comment-POST residual;
 - unbounded API, polling, body, pagination, status-history, or comment-history behavior; or
 - another writer or case-insensitive alias replacing either reserved status context.
+
+## Local and CI CLI boundary
+
+Commit messages and Git output are untrusted. The checker bounds input and selection sizes,
+sanitizes displayed text, invokes Git without a shell, rejects option-like or split revision
+expressions, and fails when requested history is absent or incomplete. It reads no token and makes
+no network request. A selected `.yaga.toml` or `pyproject.toml` is trusted repository policy, but its
+shape, types, token lengths, patterns, and schema version are still validated strictly so a typo
+cannot silently weaken checks.
+
+The installed CLI depends on locked Typer packages. The composite Action does not: its fixed
+`YAGA_ACTION_RUNTIME=1` path runs with Python site packages disabled and enters only the
+standard-library Action/gate import graph. Both frontends call the same gate dispatcher. The GitHub
+token stays in `GITHUB_TOKEN`; no gate command accepts it as an argument or configuration value.
+
+## Codex review gate boundary
 
 The lifecycle invalidator and `workflow_run` publisher execute only trusted default-branch action
 code. They never check out PR code, consume upstream artifacts/cache, or interpolate untrusted text
