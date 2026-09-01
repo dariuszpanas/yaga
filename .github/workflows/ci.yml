@@ -53,7 +53,7 @@ jobs:
       - name: Run aggregate repository checks
         run: >-
           uv run --frozen --python 3.12 yaga repo check
-          --check commit --check workflow --check workflow-lint
+          --check commit --check workflow --check workflow-security --check workflow-lint
           --commit HEAD
           --workflow-path .github/workflows --workflow-path examples
           --format github

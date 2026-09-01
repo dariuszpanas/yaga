@@ -8,8 +8,11 @@ from enum import StrEnum
 from yaga.commits.models import ValidationReport
 from yaga.errors import YagaError
 from yaga.workflows.models import WorkflowLintReport, WorkflowReport
+from yaga.workflows.security_models import WorkflowSecurityReport
 
-type ProviderReport = ValidationReport | WorkflowReport | WorkflowLintReport
+type ProviderReport = (
+    ValidationReport | WorkflowReport | WorkflowSecurityReport | WorkflowLintReport
+)
 
 
 class RepositoryProvider(StrEnum):
@@ -17,6 +20,7 @@ class RepositoryProvider(StrEnum):
 
     COMMIT = "commit"
     WORKFLOW = "workflow"
+    WORKFLOW_SECURITY = "workflow-security"
     WORKFLOW_LINT = "workflow-lint"
 
 

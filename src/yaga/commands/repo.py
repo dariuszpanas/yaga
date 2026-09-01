@@ -21,7 +21,10 @@ def check_repo(
         list[str] | None,
         typer.Option(
             "--check",
-            help="Provider to run: commit, workflow, or workflow-lint. Repeat explicitly.",
+            help=(
+                "Provider to run: commit, workflow, workflow-security, or workflow-lint. "
+                "Repeat explicitly."
+            ),
         ),
     ] = None,
     repository: Annotated[
@@ -47,6 +50,20 @@ def check_repo(
             help="Workflow file or direct-child directory. Repeat for multiple selections.",
         ),
     ] = None,
+    workflow_security_profile: Annotated[
+        str | None,
+        typer.Option(
+            "--workflow-security-profile",
+            help="Versioned workflow-security profile. Defaults to recommended-v1.",
+        ),
+    ] = None,
+    workflow_security_rules: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--workflow-security-rule",
+            help="Exact custom workflow-security rule. Repeat explicitly.",
+        ),
+    ] = None,
     output_format: Annotated[
         RepositoryOutputFormat,
         typer.Option("--format", case_sensitive=False, help="Aggregate report format."),
@@ -61,6 +78,8 @@ def check_repo(
             commit=commit,
             revision_range=revision_range,
             workflow_paths=workflow_paths or (),
+            workflow_security_profile=workflow_security_profile,
+            workflow_security_rules=workflow_security_rules or (),
         )
     except YagaError as error:
         typer.echo(render_repository_error(error, output_format), err=True)

@@ -21,14 +21,19 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
 - Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
   0/1/2, and the versioned JSON document are public pre-release contracts.
-- Keep `workflow check` and `workflow lint` on the same default and explicit path-selection
-  contract. The former is pure-Python immutable-reference policy; the latter is a pinned actionlint
-  adapter that requires Docker. Do not merge their diagnostics or imply that either replaces the
-  other.
+- Keep `workflow check`, `workflow security`, and `workflow lint` on the same default and explicit
+  path-selection contract. They respectively own immutable-reference policy, a narrow pure-Python
+  trust policy, and pinned actionlint syntax checks. Freeze the documented `recommended-v1`
+  security rules; future defaults require a new profile. Do not merge their diagnostics or imply
+  that one replaces another.
+- Keep privileged checkout analysis fail-closed without emulating GitHub expressions: on
+  `pull_request_target` or `workflow_run`, dynamic `actions/checkout` `ref` or `repository` inputs
+  fail, as does any `allow-unsafe-pr-checkout` value other than literal `false`.
 - Keep `repo check` installed-only and argument-driven. Require an explicit, unique provider set;
-  run `commit`, `workflow`, and `workflow-lint` in canonical order; share one bounded workflow load;
-  and keep child reports separate. Do not add an implicit `all`, silently skip unavailable Docker,
-  or weaken exit precedence: provider errors require exit 2 even alongside findings.
+  run `commit`, `workflow`, `workflow-security`, and `workflow-lint` in canonical order; share one
+  bounded workflow load and pure-Python parse; and keep child reports separate. Do not add an
+  implicit `all`, silently skip unavailable Docker, or weaken exit precedence: provider errors
+  require exit 2 even alongside findings.
 - Keep `.pre-commit-hooks.yaml` as one direct Python `commit-msg` adapter to
   `yaga commit check --file`. Do not add a wrapper, filters, policy arguments, or hook-only
   dependencies; local hooks are bypassable and cannot enforce merge parent policy.

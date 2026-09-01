@@ -247,6 +247,8 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     (workflow_directory / "ci.yml").write_text(
         "name: CI\n"
         "on: push\n"
+        "permissions:\n"
+        "  contents: read\n"
         "jobs:\n"
         "  check:\n"
         "    runs-on: ubuntu-latest\n"
@@ -280,6 +282,38 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     ):
         raise SystemExit("installed wheel CLI workflow check emitted the wrong report contract")
 
+    security_completed = run_bounded(
+        [
+            str(executable),
+            "workflow",
+            "security",
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    security_document = successful_json(
+        security_completed,
+        operation="workflow security",
+    )
+    security_rules = security_document.get("rules")
+    if not (
+        security_document.get("schema_version") == 1
+        and security_document.get("kind") == "github_workflow_security"
+        and security_document.get("profile") == "recommended-v1"
+        and security_document.get("valid") is True
+        and security_document.get("checked") == 1
+        and security_document.get("passed") == 1
+        and security_document.get("failed") == 0
+        and security_document.get("diagnostics") == 0
+        and isinstance(security_rules, list)
+        and len(security_rules) == 5
+    ):
+        raise SystemExit("installed wheel CLI workflow security emitted the wrong report contract")
+
     repository_completed = run_bounded(
         [
             str(executable),
@@ -287,6 +321,8 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
             "check",
             "--check",
             "workflow",
+            "--check",
+            "workflow-security",
             "--repo",
             str(consumer),
             "--format",
@@ -307,15 +343,18 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and repository_document.get("kind") == "repository_check"
         and repository_document.get("status") == "passed"
         and repository_document.get("valid") is True
-        and repository_document.get("selected") == 1
-        and repository_document.get("passed") == 1
+        and repository_document.get("selected") == 2
+        and repository_document.get("passed") == 2
         and repository_document.get("failed") == 0
         and repository_document.get("errored") == 0
         and isinstance(repository_checks, list)
-        and len(repository_checks) == 1
+        and len(repository_checks) == 2
         and isinstance(repository_checks[0], dict)
         and repository_checks[0].get("provider") == "workflow"
         and repository_checks[0].get("status") == "passed"
+        and isinstance(repository_checks[1], dict)
+        and repository_checks[1].get("provider") == "workflow-security"
+        and repository_checks[1].get("status") == "passed"
     ):
         raise SystemExit("installed wheel CLI repository check emitted the wrong report contract")
 
@@ -419,6 +458,12 @@ def main() -> int:
                 "yaga/workflows/checker.py",
                 "yaga/workflows/inputs.py",
                 "yaga/workflows/lint.py",
+                "yaga/workflows/parser.py",
+                "yaga/workflows/security.py",
+                "yaga/workflows/security_facts.py",
+                "yaga/workflows/security_models.py",
+                "yaga/workflows/security_reporting.py",
+                "yaga/workflows/security_rules.py",
                 "yaga/workflows/yaml.py",
             }
             if missing := sorted(required - names):

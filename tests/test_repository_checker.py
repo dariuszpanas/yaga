@@ -18,6 +18,13 @@ from yaga.workflows.models import (
     WorkflowReport,
     WorkflowResult,
 )
+from yaga.workflows.parser import ParsedWorkflowInput, parse_workflow_inputs
+from yaga.workflows.security_models import (
+    WORKFLOW_SECURITY_RULE_ORDER,
+    WorkflowSecurityProfile,
+    WorkflowSecurityReport,
+    WorkflowSecurityResult,
+)
 
 
 def passing_commit_report() -> ValidationReport:
@@ -67,13 +74,24 @@ def passing_lint_report() -> WorkflowLintReport:
     return WorkflowLintReport(results=(WorkflowLintResult(path="ci.yml", diagnostics=()),))
 
 
+def passing_security_report() -> WorkflowSecurityReport:
+    return WorkflowSecurityReport(
+        profile=WorkflowSecurityProfile.RECOMMENDED_V1,
+        rules=WORKFLOW_SECURITY_RULE_ORDER,
+        results=(WorkflowSecurityResult(path="ci.yml", diagnostics=()),),
+    )
+
+
 @pytest.mark.parametrize(
     ("providers", "message"),
     [
         ([], "select at least one"),
         (["unknown"], "unknown repository check provider"),
         (["commit", "commit"], "must not be repeated"),
-        (["commit", "workflow", "workflow-lint", "commit"], "hard limit"),
+        (
+            ["commit", "workflow", "workflow-security", "workflow-lint", "commit"],
+            "hard limit",
+        ),
     ],
 )
 def test_provider_selection_is_closed_explicit_and_unique(
@@ -107,6 +125,36 @@ def test_provider_specific_arguments_are_mutually_scoped() -> None:
             ["commit"],
             workflow_paths=[Path("examples")],
         )
+    with pytest.raises(InputError, match="require --check workflow-security"):
+        checker.check_repository(
+            Path("."),
+            ["workflow"],
+            workflow_security_profile="recommended-v1",
+        )
+    with pytest.raises(InputError, match="require --check workflow-security"):
+        checker.check_repository(
+            Path("."),
+            ["workflow"],
+            workflow_security_rules=["permissions.explicit"],
+        )
+
+
+def test_security_selection_errors_precede_workflow_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        checker,
+        "load_workflow_inputs",
+        lambda *args, **kwargs: pytest.fail("invalid selection must fail before discovery"),
+    )
+
+    with pytest.raises(InputError, match="either a workflow security profile or explicit rules"):
+        checker.check_repository(
+            Path("."),
+            ["workflow-security"],
+            workflow_security_profile="recommended-v1",
+            workflow_security_rules=["permissions.explicit"],
+        )
 
 
 def test_providers_execute_once_in_canonical_order_with_one_shared_workflow_load(
@@ -118,6 +166,7 @@ def test_providers_execute_once_in_canonical_order_with_one_shared_workflow_load
         relative_path="ci.yml",
         content=b"jobs: {}\n",
     )
+    parsed = parse_workflow_inputs((workflow,))
     events: list[str] = []
 
     def fake_commits(*args: object, **kwargs: object) -> ValidationReport:
@@ -129,10 +178,24 @@ def test_providers_execute_once_in_canonical_order_with_one_shared_workflow_load
         events.append("load")
         return (workflow,)
 
-    def fake_workflow(inputs: tuple[WorkflowInput, ...]) -> WorkflowReport:
-        events.append("workflow")
+    def fake_parse(inputs: tuple[WorkflowInput, ...]) -> tuple[ParsedWorkflowInput, ...]:
+        events.append("parse")
         assert inputs == (workflow,)
+        return parsed
+
+    def fake_workflow(inputs: tuple[ParsedWorkflowInput, ...]) -> WorkflowReport:
+        events.append("workflow")
+        assert inputs == parsed
         return failing_workflow_report()
+
+    def fake_security(
+        inputs: tuple[ParsedWorkflowInput, ...],
+        **kwargs: object,
+    ) -> WorkflowSecurityReport:
+        events.append("workflow-security")
+        assert inputs == parsed
+        assert kwargs == {"profile": None, "rules": ()}
+        return passing_security_report()
 
     def fake_lint(repository: Path, inputs: tuple[WorkflowInput, ...]) -> WorkflowLintReport:
         events.append("workflow-lint")
@@ -142,25 +205,36 @@ def test_providers_execute_once_in_canonical_order_with_one_shared_workflow_load
 
     monkeypatch.setattr(checker, "check_git_commits", fake_commits)
     monkeypatch.setattr(checker, "load_workflow_inputs", fake_load)
-    monkeypatch.setattr(checker, "check_workflow_inputs", fake_workflow)
+    monkeypatch.setattr(checker, "parse_workflow_inputs", fake_parse)
+    monkeypatch.setattr(checker, "check_parsed_workflow_inputs", fake_workflow)
+    monkeypatch.setattr(checker, "check_parsed_workflow_security_inputs", fake_security)
     monkeypatch.setattr(checker, "lint_workflow_inputs", fake_lint)
 
     report = checker.check_repository(
         tmp_path,
-        ["workflow-lint", "commit", "workflow"],
+        ["workflow-lint", "workflow-security", "commit", "workflow"],
         commit="HEAD~1",
         workflow_paths=[Path("ci.yml")],
     )
 
-    assert events == ["commit", "load", "workflow", "workflow-lint"]
+    assert events == [
+        "commit",
+        "load",
+        "parse",
+        "workflow",
+        "workflow-security",
+        "workflow-lint",
+    ]
     assert [check.provider for check in report.checks] == [
         RepositoryProvider.COMMIT,
         RepositoryProvider.WORKFLOW,
+        RepositoryProvider.WORKFLOW_SECURITY,
         RepositoryProvider.WORKFLOW_LINT,
     ]
     assert [check.status for check in report.checks] == [
         RepositoryCheckStatus.PASSED,
         RepositoryCheckStatus.FAILED,
+        RepositoryCheckStatus.PASSED,
         RepositoryCheckStatus.PASSED,
     ]
 
@@ -174,13 +248,17 @@ def test_expected_provider_errors_do_not_hide_independent_findings(
         relative_path="ci.yml",
         content=b"jobs: {}\n",
     )
+    parsed = parse_workflow_inputs((workflow,))
     monkeypatch.setattr(
         checker,
         "check_git_commits",
         lambda *args, **kwargs: (_ for _ in ()).throw(GitError("missing history")),
     )
     monkeypatch.setattr(checker, "load_workflow_inputs", lambda *args, **kwargs: (workflow,))
-    monkeypatch.setattr(checker, "check_workflow_inputs", lambda inputs: failing_workflow_report())
+    monkeypatch.setattr(checker, "parse_workflow_inputs", lambda inputs: parsed)
+    monkeypatch.setattr(
+        checker, "check_parsed_workflow_inputs", lambda inputs: failing_workflow_report()
+    )
     monkeypatch.setattr(
         checker, "lint_workflow_inputs", lambda repository, inputs: passing_lint_report()
     )
@@ -200,7 +278,7 @@ def test_shared_discovery_error_marks_only_selected_workflow_providers(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls = {"load": 0, "workflow": 0, "lint": 0}
+    calls = {"load": 0, "parse": 0, "workflow": 0, "security": 0, "lint": 0}
     monkeypatch.setattr(
         checker, "check_git_commits", lambda *args, **kwargs: passing_commit_report()
     )
@@ -209,26 +287,37 @@ def test_shared_discovery_error_marks_only_selected_workflow_providers(
         calls["load"] += 1
         raise InputError("workflow directory missing")
 
+    def unexpected_parse(*args: object, **kwargs: object) -> tuple[ParsedWorkflowInput, ...]:
+        calls["parse"] += 1
+        raise AssertionError("parse provider should not run")
+
     def unexpected_workflow(*args: object, **kwargs: object) -> WorkflowReport:
         calls["workflow"] += 1
         return passing_workflow_report()
+
+    def unexpected_security(*args: object, **kwargs: object) -> WorkflowSecurityReport:
+        calls["security"] += 1
+        return passing_security_report()
 
     def unexpected_lint(*args: object, **kwargs: object) -> WorkflowLintReport:
         calls["lint"] += 1
         return passing_lint_report()
 
     monkeypatch.setattr(checker, "load_workflow_inputs", fail_load)
-    monkeypatch.setattr(checker, "check_workflow_inputs", unexpected_workflow)
+    monkeypatch.setattr(checker, "parse_workflow_inputs", unexpected_parse)
+    monkeypatch.setattr(checker, "check_parsed_workflow_inputs", unexpected_workflow)
+    monkeypatch.setattr(checker, "check_parsed_workflow_security_inputs", unexpected_security)
     monkeypatch.setattr(checker, "lint_workflow_inputs", unexpected_lint)
 
     report = checker.check_repository(
         tmp_path,
-        ["workflow-lint", "workflow", "commit"],
+        ["workflow-lint", "workflow-security", "workflow", "commit"],
     )
 
-    assert calls == {"load": 1, "workflow": 0, "lint": 0}
+    assert calls == {"load": 1, "parse": 0, "workflow": 0, "security": 0, "lint": 0}
     assert [check.status for check in report.checks] == [
         RepositoryCheckStatus.PASSED,
+        RepositoryCheckStatus.ERROR,
         RepositoryCheckStatus.ERROR,
         RepositoryCheckStatus.ERROR,
     ]
@@ -243,8 +332,12 @@ def test_docker_provider_is_never_touched_when_not_selected(
         relative_path="ci.yml",
         content=b"jobs: {}\n",
     )
+    parsed = parse_workflow_inputs((workflow,))
     monkeypatch.setattr(checker, "load_workflow_inputs", lambda *args, **kwargs: (workflow,))
-    monkeypatch.setattr(checker, "check_workflow_inputs", lambda inputs: passing_workflow_report())
+    monkeypatch.setattr(checker, "parse_workflow_inputs", lambda inputs: parsed)
+    monkeypatch.setattr(
+        checker, "check_parsed_workflow_inputs", lambda inputs: passing_workflow_report()
+    )
     monkeypatch.setattr(
         checker,
         "lint_workflow_inputs",
@@ -254,3 +347,51 @@ def test_docker_provider_is_never_touched_when_not_selected(
     report = checker.check_repository(tmp_path, ["workflow"])
 
     assert report.valid is True
+
+
+def test_parse_error_is_shared_by_pure_providers_while_lint_still_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workflow = WorkflowInput(
+        path=tmp_path / "ci.yml",
+        relative_path="ci.yml",
+        content=b"jobs: [\n",
+    )
+    calls = {"parse": 0, "workflow": 0, "security": 0, "lint": 0}
+    monkeypatch.setattr(checker, "load_workflow_inputs", lambda *args, **kwargs: (workflow,))
+
+    def fail_parse(inputs: tuple[WorkflowInput, ...]) -> tuple[ParsedWorkflowInput, ...]:
+        calls["parse"] += 1
+        raise InputError("malformed workflow")
+
+    def unexpected_workflow(*args: object, **kwargs: object) -> WorkflowReport:
+        calls["workflow"] += 1
+        return passing_workflow_report()
+
+    def unexpected_security(*args: object, **kwargs: object) -> WorkflowSecurityReport:
+        calls["security"] += 1
+        return passing_security_report()
+
+    def fake_lint(repository: Path, inputs: tuple[WorkflowInput, ...]) -> WorkflowLintReport:
+        calls["lint"] += 1
+        assert repository == tmp_path
+        assert inputs == (workflow,)
+        return passing_lint_report()
+
+    monkeypatch.setattr(checker, "parse_workflow_inputs", fail_parse)
+    monkeypatch.setattr(checker, "check_parsed_workflow_inputs", unexpected_workflow)
+    monkeypatch.setattr(checker, "check_parsed_workflow_security_inputs", unexpected_security)
+    monkeypatch.setattr(checker, "lint_workflow_inputs", fake_lint)
+
+    report = checker.check_repository(
+        tmp_path,
+        ["workflow-lint", "workflow-security", "workflow"],
+    )
+
+    assert calls == {"parse": 1, "workflow": 0, "security": 0, "lint": 1}
+    assert [check.status for check in report.checks] == [
+        RepositoryCheckStatus.ERROR,
+        RepositoryCheckStatus.ERROR,
+        RepositoryCheckStatus.PASSED,
+    ]

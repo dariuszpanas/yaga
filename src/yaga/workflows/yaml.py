@@ -18,6 +18,18 @@ from yaga.workflows.models import (
     WorkflowDiagnostic,
     WorkflowReference,
 )
+from yaga.workflows.security_facts import (
+    LocatedMappingEntry,
+    LocatedScalar,
+    LocatedValue,
+    ParsedWorkflowBundle,
+    WorkflowFieldFact,
+    WorkflowSecurityFacts,
+    WorkflowSecurityJob,
+    WorkflowSecurityStep,
+    WorkflowTriggerFact,
+    WorkflowValueKind,
+)
 
 MAX_WORKFLOW_BYTES = 1024 * 1024
 MAX_NODES = 20_000
@@ -381,8 +393,344 @@ class _Inspector:
         raise InputError(f"{self.label} {reason}")
 
 
+class _SecurityFactExtractor:
+    """Select immutable security facts from an already validated YAML graph."""
+
+    def __init__(self, *, edge_marks: dict[_EdgeKey, Mark]) -> None:
+        self.edge_marks = edge_marks
+
+    def inspect(self, root: Node) -> WorkflowSecurityFacts:
+        root_value = self._located_value(root, root.start_mark)
+        if not isinstance(root, MappingNode):
+            return WorkflowSecurityFacts(
+                root=root_value,
+                triggers=(),
+                permissions=(),
+                jobs=(),
+            )
+
+        triggers: list[WorkflowTriggerFact] = []
+        permissions: list[WorkflowFieldFact] = []
+        jobs: list[WorkflowSecurityJob] = []
+        for pair_index, (key, value) in enumerate(root.value):
+            if not isinstance(key, ScalarNode):
+                continue
+            if key.value == "on":
+                triggers.append(self._trigger_fact(root, pair_index, value))
+            elif key.value == "permissions":
+                permissions.append(self._field_fact(root, pair_index, value))
+            elif key.value == "jobs" and isinstance(value, MappingNode):
+                jobs.extend(self._jobs(root, pair_index, value))
+
+        return WorkflowSecurityFacts(
+            root=root_value,
+            triggers=tuple(triggers),
+            permissions=tuple(permissions),
+            jobs=tuple(jobs),
+        )
+
+    def _trigger_fact(
+        self,
+        parent: MappingNode,
+        pair_index: int,
+        value: Node,
+    ) -> WorkflowTriggerFact:
+        value_mark = self._edge_mark(parent, pair_index, "value", value.start_mark)
+        alias_mark = self._alias_occurrence_mark(value, value_mark)
+        events: list[LocatedValue] = []
+        if isinstance(value, ScalarNode):
+            events.append(self._located_value(value, value_mark))
+        elif isinstance(value, SequenceNode):
+            for item_index, item in enumerate(value.value):
+                mark = alias_mark or self._edge_mark(
+                    value,
+                    item_index,
+                    "item",
+                    item.start_mark,
+                )
+                events.append(self._located_value(item, mark))
+        elif isinstance(value, MappingNode):
+            for entry_index, (key, _) in enumerate(value.value):
+                mark = alias_mark or self._edge_mark(
+                    value,
+                    entry_index,
+                    "key",
+                    key.start_mark,
+                )
+                events.append(self._located_value(key, mark))
+        return WorkflowTriggerFact(
+            value=self._located_value(value, value_mark),
+            events=tuple(events),
+        )
+
+    def _jobs(
+        self,
+        parent: MappingNode,
+        pair_index: int,
+        jobs: MappingNode,
+    ) -> list[WorkflowSecurityJob]:
+        jobs_mark = self._edge_mark(parent, pair_index, "value", jobs.start_mark)
+        jobs_alias_mark = self._alias_occurrence_mark(jobs, jobs_mark)
+        selected: list[WorkflowSecurityJob] = []
+        for job_index, (identifier, job) in enumerate(jobs.value):
+            if not isinstance(identifier, ScalarNode) or not isinstance(job, MappingNode):
+                continue
+            identifier_mark = jobs_alias_mark or self._edge_mark(
+                jobs,
+                job_index,
+                "key",
+                identifier.start_mark,
+            )
+            job_mark = jobs_alias_mark or self._edge_mark(
+                jobs,
+                job_index,
+                "value",
+                job.start_mark,
+            )
+            job_alias_mark = jobs_alias_mark or self._alias_occurrence_mark(job, job_mark)
+            selected.append(
+                self._job(
+                    identifier,
+                    identifier_mark,
+                    job,
+                    job_mark,
+                    job_alias_mark,
+                )
+            )
+        return selected
+
+    def _job(
+        self,
+        identifier: ScalarNode,
+        identifier_mark: Mark | None,
+        job: MappingNode,
+        job_mark: Mark | None,
+        alias_mark: Mark | None,
+    ) -> WorkflowSecurityJob:
+        permissions: list[WorkflowFieldFact] = []
+        uses: list[LocatedValue] = []
+        secrets: list[LocatedValue] = []
+        steps: list[WorkflowSecurityStep] = []
+        for pair_index, (key, value) in enumerate(job.value):
+            if not isinstance(key, ScalarNode):
+                continue
+            value_mark = alias_mark or self._edge_mark(
+                job,
+                pair_index,
+                "value",
+                value.start_mark,
+            )
+            if key.value == "permissions":
+                permissions.append(
+                    self._field_fact(
+                        job,
+                        pair_index,
+                        value,
+                        occurrence_mark=alias_mark,
+                    )
+                )
+            elif key.value == "uses":
+                uses.append(self._located_value(value, value_mark))
+            elif key.value == "secrets":
+                secrets.append(self._located_value(value, value_mark))
+            elif key.value == "steps" and isinstance(value, SequenceNode):
+                steps.extend(self._steps(job, pair_index, value, occurrence_mark=alias_mark))
+
+        line, column = _position(job_mark)
+        return WorkflowSecurityJob(
+            identifier=self._located_scalar(identifier, identifier_mark),
+            line=line,
+            column=column,
+            permissions=tuple(permissions),
+            uses=tuple(uses),
+            secrets=tuple(secrets),
+            steps=tuple(steps),
+        )
+
+    def _steps(
+        self,
+        parent: MappingNode,
+        pair_index: int,
+        steps: SequenceNode,
+        *,
+        occurrence_mark: Mark | None = None,
+    ) -> list[WorkflowSecurityStep]:
+        steps_mark = occurrence_mark or self._edge_mark(
+            parent,
+            pair_index,
+            "value",
+            steps.start_mark,
+        )
+        steps_alias_mark = occurrence_mark or self._alias_occurrence_mark(steps, steps_mark)
+        return self._step_group(steps, occurrence_mark=steps_alias_mark)
+
+    def _step_group(
+        self,
+        group: SequenceNode,
+        *,
+        occurrence_mark: Mark | None,
+    ) -> list[WorkflowSecurityStep]:
+        selected: list[WorkflowSecurityStep] = []
+        for item_index, step in enumerate(group.value):
+            if not isinstance(step, MappingNode):
+                continue
+            step_mark = occurrence_mark or self._edge_mark(
+                group,
+                item_index,
+                "item",
+                step.start_mark,
+            )
+            step_alias_mark = occurrence_mark or self._alias_occurrence_mark(step, step_mark)
+            uses: list[LocatedValue] = []
+            inputs: list[WorkflowFieldFact] = []
+            nested: list[tuple[SequenceNode, Mark | None]] = []
+            for pair_index, (key, value) in enumerate(step.value):
+                if not isinstance(key, ScalarNode):
+                    continue
+                value_mark = step_alias_mark or self._edge_mark(
+                    step,
+                    pair_index,
+                    "value",
+                    value.start_mark,
+                )
+                if key.value == "uses":
+                    uses.append(self._located_value(value, value_mark))
+                elif key.value == "with":
+                    inputs.append(
+                        self._field_fact(
+                            step,
+                            pair_index,
+                            value,
+                            occurrence_mark=step_alias_mark,
+                        )
+                    )
+                elif key.value == "parallel" and isinstance(value, SequenceNode):
+                    nested.append(
+                        (
+                            value,
+                            step_alias_mark or self._alias_occurrence_mark(value, value_mark),
+                        )
+                    )
+
+            line, column = _position(step_mark)
+            selected.append(
+                WorkflowSecurityStep(
+                    line=line,
+                    column=column,
+                    uses=tuple(uses),
+                    inputs=tuple(inputs),
+                )
+            )
+            for nested_group, nested_mark in nested:
+                selected.extend(
+                    self._step_group(
+                        nested_group,
+                        occurrence_mark=nested_mark,
+                    )
+                )
+        return selected
+
+    def _field_fact(
+        self,
+        parent: MappingNode,
+        pair_index: int,
+        value: Node,
+        *,
+        occurrence_mark: Mark | None = None,
+    ) -> WorkflowFieldFact:
+        value_mark = occurrence_mark or self._edge_mark(
+            parent,
+            pair_index,
+            "value",
+            value.start_mark,
+        )
+        alias_mark = occurrence_mark or self._alias_occurrence_mark(value, value_mark)
+        entries: tuple[LocatedMappingEntry, ...] = ()
+        if isinstance(value, MappingNode):
+            entries = tuple(self._mapping_entries(value, occurrence_mark=alias_mark))
+        return WorkflowFieldFact(
+            value=self._located_value(value, value_mark),
+            entries=entries,
+        )
+
+    def _mapping_entries(
+        self,
+        mapping: MappingNode,
+        *,
+        occurrence_mark: Mark | None,
+    ) -> list[LocatedMappingEntry]:
+        entries: list[LocatedMappingEntry] = []
+        for pair_index, (key, value) in enumerate(mapping.value):
+            key_mark = occurrence_mark or self._edge_mark(
+                mapping,
+                pair_index,
+                "key",
+                key.start_mark,
+            )
+            value_mark = occurrence_mark or self._edge_mark(
+                mapping,
+                pair_index,
+                "value",
+                value.start_mark,
+            )
+            entries.append(
+                LocatedMappingEntry(
+                    key=self._located_value(key, key_mark),
+                    value=self._located_value(value, value_mark),
+                )
+            )
+        return entries
+
+    def _located_value(self, node: Node, mark: Mark | None) -> LocatedValue:
+        line, column = _position(mark)
+        if isinstance(node, ScalarNode):
+            return LocatedValue(
+                kind=WorkflowValueKind.SCALAR,
+                line=line,
+                column=column,
+                scalar=self._located_scalar(node, mark),
+            )
+        if isinstance(node, MappingNode):
+            kind = WorkflowValueKind.MAPPING
+        elif isinstance(node, SequenceNode):
+            kind = WorkflowValueKind.SEQUENCE
+        else:  # pragma: no cover - SafeLoader composes only the closed node kinds above
+            raise InputError("workflow YAML contains an unsupported node kind")
+        return LocatedValue(kind=kind, line=line, column=column)
+
+    def _located_scalar(self, node: ScalarNode, mark: Mark | None) -> LocatedScalar:
+        line, column = _position(mark)
+        return LocatedScalar(
+            value=node.value,
+            tag=node.tag,
+            line=line,
+            column=column,
+        )
+
+    def _edge_mark(
+        self,
+        parent: Node,
+        index: int,
+        side: str,
+        fallback: Mark | None,
+    ) -> Mark | None:
+        return self.edge_marks.get((id(parent), index, side), fallback)
+
+    @staticmethod
+    def _alias_occurrence_mark(node: Node, edge_mark: Mark | None) -> Mark | None:
+        start_mark = node.start_mark
+        if edge_mark is not None and start_mark is not None and edge_mark.index != start_mark.index:
+            return edge_mark
+        return None
+
+
 def parse_workflow(raw: bytes, *, label: str) -> ParsedWorkflow:
-    """Compose and inspect exactly one bounded workflow YAML document."""
+    """Compose and inspect one workflow using the existing policy parse contract."""
+    return parse_workflow_bundle(raw, label=label).workflow
+
+
+def parse_workflow_bundle(raw: bytes, *, label: str) -> ParsedWorkflowBundle:
+    """Compose once and select bounded reference-policy and security facts."""
     safe_label = safe_error_text(label, maximum=160) or "workflow input"
     if not isinstance(raw, bytes):
         raise InputError(f"{safe_label} must be provided as bytes")
@@ -421,10 +769,15 @@ def parse_workflow(raw: bytes, *, label: str) -> ParsedWorkflow:
         explicit_tags=explicit_tags,
     )
     references, diagnostics = inspector.inspect(root)
-    return ParsedWorkflow(
+    workflow = ParsedWorkflow(
         references=references,
         diagnostics=diagnostics,
         node_count=node_count,
+    )
+    security = _SecurityFactExtractor(edge_marks=edge_marks).inspect(root)
+    return ParsedWorkflowBundle(
+        workflow=workflow,
+        security=security,
     )
 
 

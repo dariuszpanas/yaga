@@ -33,6 +33,12 @@ from yaga.workflows.models import (
     WorkflowReport,
     WorkflowResult,
 )
+from yaga.workflows.security_models import (
+    WORKFLOW_SECURITY_RULE_ORDER,
+    WorkflowSecurityProfile,
+    WorkflowSecurityReport,
+    WorkflowSecurityResult,
+)
 
 
 def commit_report(*diagnostics: Diagnostic) -> ValidationReport:
@@ -72,6 +78,19 @@ def lint_report(*diagnostics: WorkflowDiagnostic) -> WorkflowLintReport:
                 diagnostics=diagnostics,
             ),
         )
+    )
+
+
+def security_report(*diagnostics: WorkflowDiagnostic) -> WorkflowSecurityReport:
+    return WorkflowSecurityReport(
+        profile=WorkflowSecurityProfile.RECOMMENDED_V1,
+        rules=WORKFLOW_SECURITY_RULE_ORDER,
+        results=(
+            WorkflowSecurityResult(
+                path=".github/workflows/security.yml",
+                diagnostics=diagnostics,
+            ),
+        ),
     )
 
 
@@ -122,6 +141,10 @@ def test_repository_json_embeds_separate_bounded_provider_contracts() -> None:
                 report=workflow_report(WorkflowDiagnostic("uses.pin", "mutable", 3, 9)),
             ),
             RepositoryCheckResult(
+                provider=RepositoryProvider.WORKFLOW_SECURITY,
+                report=security_report(),
+            ),
+            RepositoryCheckResult(
                 provider=RepositoryProvider.WORKFLOW_LINT,
                 error=InputError("unsafe\n::error:: Docker failure"),
             ),
@@ -135,19 +158,22 @@ def test_repository_json_embeds_separate_bounded_provider_contracts() -> None:
     assert document["status"] == "error"
     assert document["valid"] is False
     assert (document["selected"], document["passed"], document["failed"], document["errored"]) == (
-        3,
-        1,
+        4,
+        2,
         1,
         1,
     )
     assert [check["provider"] for check in document["checks"]] == [
         "commit",
         "workflow",
+        "workflow-security",
         "workflow-lint",
     ]
     assert document["checks"][0]["report"]["commits"][0]["sha"] == "a" * 40
     assert document["checks"][1]["report"]["kind"] == "github_workflow_policy"
-    assert document["checks"][2] == {
+    assert document["checks"][2]["report"]["kind"] == "github_workflow_security"
+    assert document["checks"][2]["report"]["profile"] == "recommended-v1"
+    assert document["checks"][3] == {
         "provider": "workflow-lint",
         "status": "error",
         "report": None,
@@ -163,6 +189,10 @@ def test_repository_text_keeps_provider_reports_in_separate_sections() -> None:
                 report=commit_report(),
             ),
             RepositoryCheckResult(
+                provider=RepositoryProvider.WORKFLOW_SECURITY,
+                report=security_report(),
+            ),
+            RepositoryCheckResult(
                 provider=RepositoryProvider.WORKFLOW_LINT,
                 error=InputError("Docker unavailable"),
             ),
@@ -172,8 +202,9 @@ def test_repository_text_keeps_provider_reports_in_separate_sections() -> None:
     rendered = render_repository_report(report, RepositoryOutputFormat.TEXT)
 
     assert rendered.startswith("== commit [PASSED] ==\nPASSED")
+    assert "== workflow-security [PASSED] ==\nProfile: recommended-v1" in rendered
     assert "== workflow-lint [ERROR] ==\nYAGA input error: Docker unavailable" in rendered
-    assert rendered.endswith("Repository checks: 2 selected; 1 passed, 0 failed, 1 errored.")
+    assert rendered.endswith("Repository checks: 3 selected; 2 passed, 0 failed, 1 errored.")
 
 
 def test_repository_github_report_balances_groups_and_uses_one_global_annotation_budget() -> None:

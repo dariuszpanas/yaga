@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -18,8 +19,18 @@ from yaga.repository.models import (
     RepositoryProvider,
     RepositoryReport,
 )
+from yaga.workflows.security_models import (
+    WorkflowSecurityProfile,
+    WorkflowSecurityReport,
+    WorkflowSecurityResult,
+    WorkflowSecurityRule,
+)
 
 runner = CliRunner()
+
+
+def unstyle(value: str) -> str:
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", value)
 
 
 def git(repository: Path, *arguments: str) -> str:
@@ -55,9 +66,13 @@ def test_repo_help_exposes_closed_explicit_provider_contract() -> None:
     assert group.exit_code == 0
     assert "Run explicit repository check providers" in group.stdout
     assert command.exit_code == 0
-    for provider in ("commit", "workflow", "workflow-lint"):
-        assert provider in command.stdout
-    assert "Repeat explicitly" in command.stdout
+    command_help = unstyle(command.stdout)
+    for provider in ("commit", "workflow", "workflow-security", "workflow-lint"):
+        assert provider in command_help
+    assert "Repeat" in command_help
+    assert "explicitly." in command_help
+    assert "--workflow-security-pr" in command_help
+    assert "--workflow-security-ru" in command_help
 
 
 def test_repo_command_uses_exit_zero_one_and_two_and_stream_contract(
@@ -144,6 +159,15 @@ def test_repo_command_uses_exit_zero_one_and_two_and_stream_contract(
             ["--check", "commit", "--workflow-path", "examples"],
             "requires a workflow check provider",
         ),
+        (
+            [
+                "--check",
+                "workflow",
+                "--workflow-security-profile",
+                "recommended-v1",
+            ],
+            "require --check workflow-security",
+        ),
     ],
 )
 def test_repo_invocation_errors_use_structured_exit_two(
@@ -176,6 +200,8 @@ def test_repo_check_runs_real_pure_python_providers_in_canonical_order(
     workflow.write_text(
         "name: CI\n"
         "on: push\n"
+        "permissions:\n"
+        "  contents: read\n"
         "jobs:\n"
         "  check:\n"
         "    runs-on: ubuntu-latest\n"
@@ -192,6 +218,8 @@ def test_repo_check_runs_real_pure_python_providers_in_canonical_order(
             "--check",
             "workflow",
             "--check",
+            "workflow-security",
+            "--check",
             "commit",
             "--repo",
             str(repository),
@@ -203,6 +231,55 @@ def test_repo_check_runs_real_pure_python_providers_in_canonical_order(
     assert result.exit_code == 0, result.stderr
     document = json.loads(result.stdout)
     assert document["status"] == "passed"
-    assert [check["provider"] for check in document["checks"]] == ["commit", "workflow"]
+    assert [check["provider"] for check in document["checks"]] == [
+        "commit",
+        "workflow",
+        "workflow-security",
+    ]
     assert document["checks"][0]["report"]["checked"] == 1
     assert document["checks"][1]["report"]["references_checked"] == 1
+    assert document["checks"][2]["report"]["profile"] == "recommended-v1"
+
+
+def test_repo_command_passes_exact_security_selection_to_orchestrator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_check_repository(*args: object, **kwargs: object) -> RepositoryReport:
+        captured.update(kwargs)
+        return RepositoryReport(
+            checks=(
+                RepositoryCheckResult(
+                    provider=RepositoryProvider.WORKFLOW_SECURITY,
+                    report=WorkflowSecurityReport(
+                        profile=WorkflowSecurityProfile.CUSTOM,
+                        rules=(WorkflowSecurityRule.PERMISSIONS_EXPLICIT,),
+                        results=(WorkflowSecurityResult(path="ci.yml", diagnostics=()),),
+                    ),
+                ),
+            )
+        )
+
+    monkeypatch.setattr(repo_commands, "check_repository", fake_check_repository)
+
+    result = runner.invoke(
+        app,
+        [
+            "repo",
+            "check",
+            "--check",
+            "workflow-security",
+            "--repo",
+            str(tmp_path),
+            "--workflow-security-rule",
+            "permissions.explicit",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert captured["workflow_security_profile"] is None
+    assert captured["workflow_security_rules"] == ["permissions.explicit"]
