@@ -91,6 +91,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "body_min_length": policy.body_min_length,
         "body_min_words": policy.body_min_words,
         "body_max_line_length": policy.body_max_line_length,
+        "dependabot_pull_requests": policy.dependabot_pull_requests.value,
         "merge_commits": policy.merge_commits.value,
         "ignored_headers": _json_values(policy.ignored_headers, maximum=256),
         "max_commits": policy.max_commits,

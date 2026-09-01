@@ -46,6 +46,7 @@ def _action_fixture(
     head_message: str = "feat(action): check pull requests",
     pull_request_title: str = "feat(action): check pull requests",
     config: str | None = None,
+    author: dict[str, object] | None = None,
 ) -> tuple[Path, Path, dict[str, str]]:
     repository = tmp_path / "repository"
     repository.mkdir()
@@ -57,6 +58,8 @@ def _action_fixture(
         (repository / ".yaga.toml").write_text(config, encoding="utf-8")
         _git(repository, "add", ".yaga.toml")
     head = _commit(repository, head_message)
+    if author is None:
+        author = {"login": "octocat", "id": 1, "type": "User"}
     event = {
         "action": "opened",
         "number": 17,
@@ -66,6 +69,7 @@ def _action_fixture(
             "title": pull_request_title,
             "state": "open",
             "draft": False,
+            "user": author,
             "base": {
                 "sha": base,
                 "ref": "main",
@@ -182,6 +186,53 @@ def test_commit_action_runs_without_site_packages_or_installed_cli(tmp_path: Pat
     assert completed.stderr == ""
     assert "YAGA checked pull request #17" in completed.stdout
     assert "typer" not in completed.stdout.casefold()
+
+
+def test_isolated_commit_action_honors_explicit_dependabot_skip_policy(
+    tmp_path: Path,
+) -> None:
+    repository, event_file, action_environment = _action_fixture(
+        tmp_path,
+        head_message="not conventional",
+        pull_request_title="also not conventional",
+        config='config-version = 1\n[commit]\ndependabot-pull-requests = "skip"\n',
+        author={"login": "dependabot[bot]", "id": 49_699_333, "type": "Bot"},
+    )
+    environment = os.environ.copy()
+    environment.update(action_environment)
+    environment["PYTHONPATH"] = str(ROOT / "src")
+    environment["YAGA_COMMIT_ACTION_RUNTIME"] = "1"
+    environment.pop("YAGA_ACTION_RUNTIME", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            "-S",
+            "-m",
+            "yaga",
+            "github",
+            "pull-request",
+            "check",
+            "--event-file",
+            str(event_file),
+            "--repo",
+            str(repository),
+            "--format",
+            "github",
+        ],
+        cwd=repository,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stderr == ""
+    assert "0 failed, 2 skipped" in completed.stdout
+    assert "Skip reason: Dependabot pull request." in completed.stdout
+    assert "::error" not in completed.stdout
 
 
 def test_isolated_commit_action_reports_body_word_policy(tmp_path: Path) -> None:

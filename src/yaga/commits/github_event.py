@@ -12,16 +12,22 @@ from typing import Any
 from yaga.commits.checker import check_header, check_target
 from yaga.commits.config import load_config
 from yaga.commits.git import read_commit, read_range
-from yaga.commits.models import CheckResult, CommitTarget
+from yaga.commits.models import CheckResult, CommitTarget, DependabotPullRequestPolicy
+from yaga.commits.parser import header_from
 from yaga.errors import GitError, InputError
 from yaga.files import read_file_prefix
 
 MAX_PULL_REQUEST_EVENT_BYTES = 1024 * 1024
 MAX_PULL_REQUEST_TITLE_BYTES = 1024
 MAX_PULL_REQUEST_NUMBER = 9_223_372_036_854_775_807
+MAX_PULL_REQUEST_AUTHOR_LOGIN_BYTES = 128
+MAX_PULL_REQUEST_AUTHOR_TYPE_BYTES = 32
 MAX_REF_BYTES = 255
+DEPENDABOT_PULL_REQUEST_SKIP_REASON = "Dependabot pull request"
 
 _ACTION = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
+_AUTHOR_LOGIN = re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?\Z")
+_AUTHOR_TYPE = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,31}\Z")
 _OBJECT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}\Z")
 _SUPPORTED_ACTIONS = frozenset({"edited", "opened", "ready_for_review", "reopened", "synchronize"})
@@ -41,6 +47,9 @@ class PullRequestEvent:
     repository: str
     repository_id: int
     draft: bool
+    author_login: str
+    author_id: int
+    author_type: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,11 +135,20 @@ def check_pull_request(
         f"{event.base_sha}..{event.head_sha}",
         max_commits=loaded.policy.max_commits,
     )
-    title = check_header(
-        CommitTarget(label=f"pull request #{event.number} title", message=event.title),
-        loaded.policy,
+    title_target = CommitTarget(
+        label=f"pull request #{event.number} title",
+        message=event.title,
     )
-    commits = tuple(check_target(target, loaded.policy) for target in targets)
+    if (
+        loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.SKIP
+        and event.author_login == "dependabot[bot]"
+        and event.author_type == "Bot"
+    ):
+        title = _dependabot_skip_result(title_target)
+        commits = tuple(_dependabot_skip_result(target) for target in targets)
+    else:
+        title = check_header(title_target, loaded.policy)
+        commits = tuple(check_target(target, loaded.policy) for target in targets)
     return PullRequestValidationReport(
         event=event,
         title=title,
@@ -167,6 +185,10 @@ def load_pull_request_event(path: Path) -> PullRequestEvent:
 
     root = _object(document, "pull request event")
     pull_request = _object(root.get("pull_request"), "pull request")
+    author = _object(pull_request.get("user"), "pull request author")
+    author_login = _author_login(author.get("login"))
+    author_id = _positive_int(author.get("id"), "pull request author ID")
+    author_type = _author_type(author.get("type"))
     repository = _object(root.get("repository"), "event repository")
     repository_id = _positive_int(repository.get("id"), "event repository ID")
     repository_name = _repository_name(repository.get("full_name"), "event repository")
@@ -225,6 +247,9 @@ def load_pull_request_event(path: Path) -> PullRequestEvent:
         repository=repository_name,
         repository_id=repository_id,
         draft=draft,
+        author_login=author_login,
+        author_id=author_id,
+        author_type=author_type,
     )
 
 
@@ -281,6 +306,40 @@ def _positive_int(value: object, label: str) -> int:
     ):
         raise InputError(f"{label} must be a bounded positive integer")
     return value
+
+
+def _author_login(value: object) -> str:
+    if not isinstance(value, str):
+        raise InputError("pull request author login must be a bounded GitHub login")
+    try:
+        encoded = value.encode("ascii")
+    except UnicodeEncodeError as error:
+        raise InputError("pull request author login must be a bounded GitHub login") from error
+    if (
+        not encoded
+        or len(encoded) > MAX_PULL_REQUEST_AUTHOR_LOGIN_BYTES
+        or _AUTHOR_LOGIN.fullmatch(value) is None
+    ):
+        raise InputError("pull request author login must be a bounded GitHub login")
+    return value
+
+
+def _author_type(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) > MAX_PULL_REQUEST_AUTHOR_TYPE_BYTES
+        or _AUTHOR_TYPE.fullmatch(value) is None
+    ):
+        raise InputError("pull request author type must be a bounded GitHub account type")
+    return value
+
+
+def _dependabot_skip_result(target: CommitTarget) -> CheckResult:
+    return CheckResult(
+        target=target,
+        header=header_from(target.message),
+        skipped_reason=DEPENDABOT_PULL_REQUEST_SKIP_REASON,
+    )
 
 
 def _object_id(value: object, label: str) -> str:

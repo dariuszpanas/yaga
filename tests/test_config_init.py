@@ -13,6 +13,7 @@ from yaga.commits.config_init import initialize_config
 from yaga.commits.models import (
     BreakingMarkerPolicy,
     CasePolicy,
+    DependabotPullRequestPolicy,
     EndingPolicy,
     MergePolicy,
     PresencePolicy,
@@ -43,6 +44,7 @@ description-min-length = 3
 description-ending = "forbid"
 body-policy = "optional"
 body-max-line-length = 100
+dependabot-pull-requests = "check"
 merge-commits = "reject"
 ignored-headers = []
 max-commits = 64
@@ -103,6 +105,7 @@ def test_initialized_configuration_round_trips_to_the_recommended_policy(
     assert policy.body_min_length == 0
     assert policy.body_min_words == 0
     assert policy.body_max_line_length == 100
+    assert policy.dependabot_pull_requests is DependabotPullRequestPolicy.CHECK
     assert policy.merge_commits is MergePolicy.REJECT
     assert policy.ignored_headers == ()
     assert policy.max_commits == 64

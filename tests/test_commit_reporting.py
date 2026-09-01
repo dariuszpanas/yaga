@@ -9,6 +9,7 @@ from yaga.commits.models import (
     BreakingMarkerPolicy,
     CommitPolicy,
     CommitTarget,
+    DependabotPullRequestPolicy,
     LoadedConfig,
     OutputFormat,
     PresencePolicy,
@@ -107,6 +108,19 @@ def test_config_reports_the_effective_breaking_marker_policy() -> None:
 
     assert "breaking-markers: paired" in rendered
     assert document["config"]["breaking_markers"] == "paired"
+
+
+def test_config_reports_the_effective_dependabot_pull_request_policy() -> None:
+    loaded = LoadedConfig(
+        policy=CommitPolicy(dependabot_pull_requests=DependabotPullRequestPolicy.SKIP),
+        path=None,
+    )
+
+    rendered = render_config(loaded, OutputFormat.TEXT)
+    document = json.loads(render_config(loaded, OutputFormat.JSON))
+
+    assert "dependabot-pull-requests: skip" in rendered
+    assert document["config"]["dependabot_pull_requests"] == "skip"
 
 
 def test_config_reports_scope_policy_overrides_with_spelling_and_order() -> None:

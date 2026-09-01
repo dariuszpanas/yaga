@@ -6,7 +6,10 @@ import json
 from enum import StrEnum
 from typing import Any
 
-from yaga.commits.github_event import PullRequestValidationReport
+from yaga.commits.github_event import (
+    DEPENDABOT_PULL_REQUEST_SKIP_REASON,
+    PullRequestValidationReport,
+)
 from yaga.commits.models import CheckResult, OutputFormat
 from yaga.commits.reporting import (
     MAX_DIAGNOSTIC_MESSAGE,
@@ -115,6 +118,11 @@ def _report_document(report: PullRequestValidationReport) -> dict[str, Any]:
             "repository": event.repository,
             "repository_id": event.repository_id,
             "draft": event.draft,
+            "author": {
+                "login": event.author_login,
+                "id": event.author_id,
+                "type": event.author_type,
+            },
             "title": result_document(report.title),
             "commits": [result_document(result) for result in report.commits],
         },
@@ -142,11 +150,16 @@ def _render_github_report(report: PullRequestValidationReport) -> str:
     lines.extend(
         f"::error title=YAGA commit policy::{_workflow_data(message)}" for message in visible
     )
-    lines.append(
+    summary = (
         f"YAGA checked pull request #{report.event.number}: one title and "
         f"{len(report.commits)} commit(s); {report.failed} failed, "
         f"{report.skipped} skipped."
     )
+    if any(
+        result.skipped_reason == DEPENDABOT_PULL_REQUEST_SKIP_REASON for result in report.results
+    ):
+        summary += f" Skip reason: {DEPENDABOT_PULL_REQUEST_SKIP_REASON}."
+    lines.append(summary)
     return "\n".join(lines)
 
 

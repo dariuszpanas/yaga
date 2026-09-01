@@ -16,7 +16,14 @@ from yaga.commits.models import CheckResult, CommitTarget, Diagnostic
 from yaga.errors import InputError
 
 
-def _report(*, diagnostics: tuple[Diagnostic, ...] = ()) -> PullRequestValidationReport:
+def _report(
+    *,
+    diagnostics: tuple[Diagnostic, ...] = (),
+    skipped_reason: str | None = None,
+    author_login: str = "octocat",
+    author_id: int = 1,
+    author_type: str = "User",
+) -> PullRequestValidationReport:
     event = PullRequestEvent(
         action="opened",
         number=17,
@@ -28,15 +35,20 @@ def _report(*, diagnostics: tuple[Diagnostic, ...] = ()) -> PullRequestValidatio
         repository="owner/repository",
         repository_id=100,
         draft=False,
+        author_login=author_login,
+        author_id=author_id,
+        author_type=author_type,
     )
     title = CheckResult(
         target=CommitTarget(label="pull request #17 title", message=event.title),
         header=event.title,
+        skipped_reason=skipped_reason,
     )
     commit = CheckResult(
         target=CommitTarget(label="commit", message="bad", sha="b" * 40),
         header="bad",
         diagnostics=diagnostics,
+        skipped_reason=skipped_reason,
     )
     return PullRequestValidationReport(
         event=event,
@@ -58,7 +70,38 @@ def test_text_and_json_reports_keep_title_separate_from_commits() -> None:
     assert document["schema_version"] == 1
     assert document["valid"] is False
     assert document["pull_request"]["title"]["source"] == "pull request #17 title"
+    assert document["pull_request"]["author"] == {
+        "login": "octocat",
+        "id": 1,
+        "type": "User",
+    }
     assert len(document["pull_request"]["commits"]) == 1
+
+
+def test_dependabot_skip_reason_is_visible_in_every_report_format() -> None:
+    report = _report(
+        skipped_reason="Dependabot pull request",
+        author_login="dependabot[bot]",
+        author_id=49_699_333,
+        author_type="Bot",
+    )
+
+    text = render_pull_request_report(report, PullRequestOutputFormat.TEXT)
+    document = json.loads(render_pull_request_report(report, PullRequestOutputFormat.JSON))
+    github = render_pull_request_report(report, PullRequestOutputFormat.GITHUB)
+
+    assert text.count("skipped: Dependabot pull request") == 2
+    assert document["valid"] is True
+    assert document["failed"] == 0
+    assert document["skipped"] == 2
+    assert document["pull_request"]["author"] == {
+        "login": "dependabot[bot]",
+        "id": 49_699_333,
+        "type": "Bot",
+    }
+    assert document["pull_request"]["title"]["skipped_reason"] == "Dependabot pull request"
+    assert document["pull_request"]["commits"][0]["skipped_reason"] == ("Dependabot pull request")
+    assert github.endswith("2 skipped. Skip reason: Dependabot pull request.")
 
 
 def test_github_report_escapes_commands_and_bounds_annotation_count() -> None:

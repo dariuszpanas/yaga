@@ -98,6 +98,7 @@ body-policy = "optional"
 body-min-length = 0
 body-min-words = 8
 body-max-line-length = 100
+dependabot-pull-requests = "skip" # check or skip in event-aware PR checks
 merge-commits = "reject"         # ignore, check, or reject
 ignored-headers = ['Revert "*"'] # bounded, case-sensitive glob patterns
 max-commits = 64
@@ -107,6 +108,22 @@ A standalone `.yaga.toml` uses `config-version = 1` and `[commit]` instead of th
 `[tool.yaga...]` tables. Omit `allowed-types` or `allowed-scopes` to allow any value. An explicit
 empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must not be empty.
 `yaga config show` prints every effective value and the source file, with `--format json` for tools.
+
+`dependabot-pull-requests` defaults to `"check"`. Setting it to `"skip"` skips Conventional Commit
+policy evaluation only in `yaga github pull-request check` and the read-only commit-check Action,
+and only when the event's pull-request author is exactly the GitHub `dependabot[bot]` Bot account,
+following [GitHub's event-author guidance for Dependabot
+automation](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions?learn=dependency_version_updates).
+The adapter still validates the complete event and runner context, verifies the checked-out head,
+loads configuration, and enumerates the bounded exact commit range before returning a visible
+`Dependabot pull request` skip. It does not skip tree, size, change, workflow, test, or review-gate
+checks.
+
+Ordinary `commit check` and the `commit` provider inside `repo check` never infer Dependabot from a
+Git author name, email, message, or branch because those values are author-controlled. They keep
+checking normally. A saved event file can reproduce the adapter decision for diagnosis, but its
+author identity is only asserted local input; the fixed Action gets host-issued event provenance
+from `GITHUB_EVENT_PATH`.
 
 `scope-policy-by-type` defaults to an empty mapping. Each entry replaces the global
 `scope-policy` only for that Conventional Commit type, so a project can require scopes for
@@ -489,6 +506,12 @@ every commit in the exact event `base.sha..head.sha` range. Body and merge rules
 title; all configured header, type, scope, and description rules do. Text, versioned JSON, and
 escaped `--format github` annotations share exit codes `0`, `1`, and `2` with `commit check`.
 
+When `dependabot-pull-requests = "skip"`, the adapter recognizes only a strictly parsed PR author
+with login `dependabot[bot]` and account type `Bot`. Both the title and every selected commit are
+reported as skipped with the reason `Dependabot pull request`, and the command exits `0`. A human
+PR, a near-match account, malformed event data, a checkout mismatch, missing history, or an
+over-limit range is never converted into a skip.
+
 For local diagnosis, save a `pull_request` event and check out its exact head before running:
 
 ```bash
@@ -529,8 +552,9 @@ shallow history, a missing object, an empty range, or a checkout that does not e
 The Action has no token input or write/API code path, and the YAGA runtime never fetches Git history
 or installs YAGA dependencies; the reference workflow grants only `contents: read`. It strictly
 binds the event name, repository ID/name, base/head refs, and open PR payload to the runner context,
-and caps workflow annotations at 50. Its pinned `actions/setup-python` bootstrap receives an
-explicit empty token and may obtain the declared Python 3.12 runtime before YAGA starts.
+strictly parses the PR author record used by the optional Dependabot policy, and caps workflow
+annotations at 50. Its pinned `actions/setup-python` bootstrap receives an explicit empty token and
+may obtain the declared Python 3.12 runtime before YAGA starts.
 
 This remains an unprivileged PR check and therefore a quality signal, not a security authority. The
 policy file comes from the PR-head worktree and can be changed by the PR; review policy changes like

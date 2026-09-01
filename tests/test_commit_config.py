@@ -13,6 +13,7 @@ from yaga.commits.models import (
     CasePolicy,
     CommitPolicy,
     CommitTarget,
+    DependabotPullRequestPolicy,
     EndingPolicy,
     MergePolicy,
     PresencePolicy,
@@ -42,6 +43,7 @@ def test_missing_configuration_uses_spec_only_defaults(tmp_path: Path) -> None:
     assert loaded.policy.breaking_markers is BreakingMarkerPolicy.EITHER
     assert loaded.policy.required_footer_tokens == ()
     assert loaded.policy.forbidden_footer_tokens == ()
+    assert loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.CHECK
     assert loaded.policy.merge_commits is MergePolicy.IGNORE
 
 
@@ -75,6 +77,7 @@ def test_commit_policy_preserves_the_legacy_positional_constructor() -> None:
     assert policy.required_footer_tokens == ()
     assert policy.forbidden_footer_tokens == ()
     assert policy.scope_policy_by_type == ()
+    assert policy.dependabot_pull_requests is DependabotPullRequestPolicy.CHECK
 
 
 def test_nearest_pyproject_is_discovered_from_a_nested_directory(tmp_path: Path) -> None:
@@ -413,6 +416,34 @@ def test_body_min_words_rejects_invalid_values(tmp_path: Path, value: str) -> No
     project = write_pyproject(tmp_path, f"body-min-words = {value}\n")
 
     with pytest.raises(ConfigurationError, match="body-min-words must be an integer"):
+        load_config(project)
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [
+        ("check", DependabotPullRequestPolicy.CHECK),
+        ("skip", DependabotPullRequestPolicy.SKIP),
+    ],
+)
+def test_dependabot_pull_requests_accepts_its_closed_values(
+    tmp_path: Path,
+    configured: str,
+    expected: DependabotPullRequestPolicy,
+) -> None:
+    project = write_pyproject(tmp_path, f'dependabot-pull-requests = "{configured}"\n')
+
+    assert load_config(project).policy.dependabot_pull_requests is expected
+
+
+@pytest.mark.parametrize("value", ['"ignore"', '"SKIP"', "true", "1"])
+def test_dependabot_pull_requests_rejects_values_outside_its_closed_enum(
+    tmp_path: Path,
+    value: str,
+) -> None:
+    project = write_pyproject(tmp_path, f"dependabot-pull-requests = {value}\n")
+
+    with pytest.raises(ConfigurationError, match="dependabot-pull-requests must be"):
         load_config(project)
 
 
