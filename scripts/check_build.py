@@ -202,6 +202,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     branch_policy = consumer / "branch-policy.toml"
     change_policy = consumer / "change-policy.toml"
     repository_plan = consumer / "repository-plan.toml"
+    tree_policy = consumer / "tree-policy.toml"
     executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
     if not executable.is_file():
         raise SystemExit("installed wheel does not expose the yaga executable")
@@ -409,6 +410,21 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         encoding="utf-8",
         newline="\n",
     )
+    tree_required_paths = [
+        ".yaga.toml",
+        "tree-policy.toml",
+        "src/package.py",
+        "tests/test_package.py",
+    ]
+    tree_forbidden_patterns = ["**/.env", "**/*.pyc", "dist/**"]
+    tree_policy.write_text(
+        "tree-policy-version = 1\n"
+        'required-paths = [".yaga.toml", "tree-policy.toml", '
+        '"src/package.py", "tests/test_package.py"]\n'
+        'forbidden-patterns = ["**/.env", "**/*.pyc", "dist/**"]\n',
+        encoding="utf-8",
+        newline="\n",
+    )
     git = shutil.which("git")
     if git is None:
         raise SystemExit("git is required for the installed change-policy smoke test")
@@ -454,6 +470,51 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         [git, "-C", str(consumer), "rev-parse", "HEAD"],
         text=True,
     ).strip()
+    tree_sha = subprocess.check_output(
+        [git, "-C", str(consumer), "rev-parse", f"{head_sha}^{{tree}}"],
+        text=True,
+    ).strip()
+    (consumer / ".env").write_text("UNTRACKED=1\n", encoding="utf-8", newline="\n")
+    untracked_dist = consumer / "dist"
+    untracked_dist.mkdir()
+    (untracked_dist / "artifact.whl").write_bytes(b"untracked")
+    tree_completed = run_bounded(
+        [
+            str(executable),
+            "tree",
+            "check",
+            "--policy",
+            str(tree_policy),
+            "--revision",
+            head_sha,
+            "--repo",
+            str(consumer),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    tree_document = successful_json(tree_completed, operation="tree check")
+    if not (
+        tree_document.get("schema_version") == 1
+        and tree_document.get("kind") == "tree_policy"
+        and tree_document.get("status") == "passed"
+        and tree_document.get("valid") is True
+        and tree_document.get("policy_path") == str(tree_policy.resolve())
+        and tree_document.get("repository_path") == str(consumer.resolve())
+        and tree_document.get("revision") == head_sha
+        and tree_document.get("commit_sha") == head_sha
+        and tree_document.get("tree_sha") == tree_sha
+        and tree_document.get("entries_checked") == 8
+        and tree_document.get("required_paths") == tree_required_paths
+        and tree_document.get("forbidden_patterns") == tree_forbidden_patterns
+        and tree_document.get("diagnostics") == []
+        and tree_document.get("diagnostics_omitted") == 0
+        and tree_document.get("missing_required") == 0
+        and tree_document.get("forbidden_paths") == 0
+    ):
+        raise SystemExit("installed wheel CLI tree check emitted the wrong report contract")
     change_completed = run_bounded(
         [
             str(executable),
@@ -585,6 +646,7 @@ def main() -> int:
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
                 "yaga/commands/repo.py",
+                "yaga/commands/tree.py",
                 "yaga/commands/workflow.py",
                 "yaga/commits/checker.py",
                 "yaga/commits/github_event.py",
@@ -605,6 +667,14 @@ def main() -> int:
                 "yaga/changes/policy.py",
                 "yaga/changes/reporting.py",
                 "yaga/changes/service.py",
+                "yaga/trees/__init__.py",
+                "yaga/trees/checker.py",
+                "yaga/trees/git.py",
+                "yaga/trees/models.py",
+                "yaga/trees/patterns.py",
+                "yaga/trees/policy.py",
+                "yaga/trees/reporting.py",
+                "yaga/trees/service.py",
                 "yaga/files.py",
                 "yaga/repository/checker.py",
                 "yaga/repository/models.py",

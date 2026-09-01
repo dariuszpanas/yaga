@@ -1,0 +1,24 @@
+tree-policy-version = 1
+required-paths = [
+  ".yaga/tree-policy.toml",
+  "LICENSE",
+  "README.md",
+  "SECURITY.md",
+  "pyproject.toml",
+  "uv.lock",
+]
+forbidden-patterns = [
+  "**/.env",
+  "**/__pycache__/**",
+  "**/.mypy_cache/**",
+  "**/.pytest_cache/**",
+  "**/.ruff_cache/**",
+  "**/.tox/**",
+  "**/.venv/**",
+  "**/*.pyc",
+  "**/*.pyo",
+  "build/**",
+  "dist/**",
+  "htmlcov/**",
+  "**/.coverage",
+]

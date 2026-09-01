@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -196,6 +197,50 @@ def test_branch_policy_contract_is_documented_and_dogfooded() -> None:
     assert "one through 64 unique, case-sensitive patterns" in readme
     assert "does not inspect the current checkout, invoke Git" in readme
     assert "not a claim about every Git host" in readme
+
+
+def test_ci_tree_policy_uses_the_exact_unprivileged_source_commit() -> None:
+    workflow = read(".github/workflows/ci.yml")
+
+    assert section_keys(workflow, "permissions") == {"contents"}
+    assert "pull_request_target:" not in workflow
+    assert "workflow_run:" not in workflow
+    assert "name: Check committed-tree policy" in workflow
+    assert (
+        "YAGA_TREE_REVISION: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}" in workflow
+    )
+    assert "yaga tree check" in workflow
+    assert "--policy .yaga/tree-policy.toml" in workflow
+    assert '--revision "$YAGA_TREE_REVISION"' in workflow
+    assert '--revision "${{ github.' not in workflow
+    assert "fetch-depth: 0" in workflow
+    assert "persist-credentials: false" in workflow
+
+
+def test_tree_policy_contract_is_documented_and_kept_out_of_repo_plan_v1() -> None:
+    readme = read("README.md")
+    contributing = read("CONTRIBUTING.md")
+    agents = read("AGENTS.md")
+    plan = read(".yaga/checks/ci.toml")
+
+    for document in (readme, contributing, agents):
+        assert "tree check" in document
+        assert "`tree.required`" in document
+        assert "`tree.forbidden`" in document
+        assert "10,000,000" in document
+        assert "50,000" in document
+        assert "gitlink" in document
+        assert "Shallow" in document or "shallow" in document
+        assert "--no-lazy-fetch" in document
+        assert "alternate" in document
+        assert "cycle-safe" in document
+
+    assert "This is path policy, not secret-content detection" in readme
+    assert "may differ from the selected tree" in readme
+    assert "outermost enclosing repository" in readme
+    assert re.search(r"does\s+not claim policy provenance", readme)
+    assert "tree" not in tomllib.loads(plan)["checks"]
 
 
 def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:
