@@ -25,6 +25,10 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   contract. The former is pure-Python immutable-reference policy; the latter is a pinned actionlint
   adapter that requires Docker. Do not merge their diagnostics or imply that either replaces the
   other.
+- Keep `repo check` installed-only and argument-driven. Require an explicit, unique provider set;
+  run `commit`, `workflow`, and `workflow-lint` in canonical order; share one bounded workflow load;
+  and keep child reports separate. Do not add an implicit `all`, silently skip unavailable Docker,
+  or weaken exit precedence: provider errors require exit 2 even alongside findings.
 - Keep `.pre-commit-hooks.yaml` as one direct Python `commit-msg` adapter to
   `yaga commit check --file`. Do not add a wrapper, filters, policy arguments, or hook-only
   dependencies; local hooks are bypassable and cannot enforce merge parent policy.

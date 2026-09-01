@@ -1,0 +1,1 @@
+"""Aggregate installed repository checks."""

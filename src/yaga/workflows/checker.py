@@ -6,7 +6,11 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from yaga.errors import InputError
-from yaga.workflows.inputs import load_workflow_inputs
+from yaga.workflows.inputs import (
+    WorkflowInput,
+    _validate_preloaded_workflow_inputs,
+    load_workflow_inputs,
+)
 from yaga.workflows.models import WorkflowReport, WorkflowResult
 from yaga.workflows.references import check_reference
 from yaga.workflows.yaml import parse_workflow
@@ -21,12 +25,18 @@ def check_workflows(
     selections: Sequence[Path] = (),
 ) -> WorkflowReport:
     """Check selected workflow files or the default GitHub workflow directory."""
+    return check_workflow_inputs(load_workflow_inputs(repository, selections))
+
+
+def check_workflow_inputs(inputs: tuple[WorkflowInput, ...]) -> WorkflowReport:
+    """Check one bounded tuple returned by ``load_workflow_inputs``."""
+    _validate_preloaded_workflow_inputs(inputs)
     results: list[WorkflowResult] = []
     total_nodes = 0
     total_references = 0
     total_diagnostics = 0
 
-    for workflow in load_workflow_inputs(repository, selections):
+    for workflow in inputs:
         parsed = parse_workflow(workflow.content, label=workflow.relative_path)
         total_nodes += parsed.node_count
         if total_nodes > MAX_TOTAL_NODES:

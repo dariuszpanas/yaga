@@ -24,7 +24,7 @@ MAX_DIAGNOSTIC_MESSAGE = 500
 def render_report(report: ValidationReport, output_format: OutputFormat) -> str:
     """Render one complete validation report."""
     if output_format is OutputFormat.JSON:
-        return json.dumps(_report_document(report), ensure_ascii=False, indent=2)
+        return json.dumps(commit_report_document(report), ensure_ascii=False, indent=2)
     return _render_text_report(report)
 
 
@@ -124,7 +124,8 @@ def _render_text_report(report: ValidationReport) -> str:
     return "\n".join(lines)
 
 
-def _report_document(report: ValidationReport) -> dict[str, Any]:
+def commit_report_document(report: ValidationReport) -> dict[str, Any]:
+    """Return the bounded JSON-ready Conventional Commit report."""
     return {
         "schema_version": SCHEMA_VERSION,
         "valid": report.valid,

@@ -33,7 +33,7 @@ def render_workflow_report(
 ) -> str:
     """Render one complete workflow-policy report."""
     if output_format is WorkflowOutputFormat.JSON:
-        return json.dumps(_report_document(report), ensure_ascii=False, indent=2)
+        return json.dumps(workflow_report_document(report), ensure_ascii=False, indent=2)
     if output_format is WorkflowOutputFormat.GITHUB:
         return _render_github_report(report)
     return _render_text_report(report)
@@ -45,7 +45,7 @@ def render_workflow_lint_report(
 ) -> str:
     """Render one complete actionlint report."""
     if output_format is WorkflowOutputFormat.JSON:
-        return json.dumps(_lint_report_document(report), ensure_ascii=False, indent=2)
+        return json.dumps(workflow_lint_report_document(report), ensure_ascii=False, indent=2)
     if output_format is WorkflowOutputFormat.GITHUB:
         return _render_lint_github_report(report)
     return _render_lint_text_report(report)
@@ -123,7 +123,8 @@ def _render_lint_text_report(report: WorkflowLintReport) -> str:
     return "\n".join(lines)
 
 
-def _report_document(report: WorkflowReport) -> dict[str, Any]:
+def workflow_report_document(report: WorkflowReport) -> dict[str, Any]:
+    """Return the bounded JSON-ready immutable-reference report."""
     return {
         "schema_version": SCHEMA_VERSION,
         "kind": "github_workflow_policy",
@@ -136,7 +137,8 @@ def _report_document(report: WorkflowReport) -> dict[str, Any]:
     }
 
 
-def _lint_report_document(report: WorkflowLintReport) -> dict[str, Any]:
+def workflow_lint_report_document(report: WorkflowLintReport) -> dict[str, Any]:
+    """Return the bounded JSON-ready actionlint report."""
     return {
         "schema_version": SCHEMA_VERSION,
         "kind": "github_workflow_lint",

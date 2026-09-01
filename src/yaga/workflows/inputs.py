@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from yaga.errors import InputError, safe_error_text
 from yaga.files import read_file_prefix
@@ -65,10 +65,94 @@ def load_workflow_inputs(
     return tuple(loaded)
 
 
+def _validate_preloaded_workflow_inputs(
+    workflows: tuple[WorkflowInput, ...],
+    *,
+    repository: Path | None = None,
+) -> Path:
+    """Validate the bounded, single-repository contract of an already-loaded tuple."""
+    if not isinstance(workflows, tuple) or not workflows:
+        raise InputError("preloaded workflow inputs must be a nonempty tuple")
+    if len(workflows) > MAX_WORKFLOW_FILES:
+        raise InputError(
+            f"preloaded workflow inputs exceed the hard {MAX_WORKFLOW_FILES}-file limit"
+        )
+
+    expected_repository = _resolve_repository(repository) if repository is not None else None
+    inferred_repository: Path | None = None
+    relative_paths: set[str] = set()
+    resolved_paths: set[Path] = set()
+    total_bytes = 0
+    for workflow in workflows:
+        if not isinstance(workflow, WorkflowInput):
+            raise InputError("preloaded workflow inputs contain an invalid item")
+        if not isinstance(workflow.path, Path) or not isinstance(workflow.relative_path, str):
+            raise InputError("preloaded workflow input has an invalid path")
+        if not workflow.path.is_absolute():
+            raise InputError("preloaded workflow input path must be absolute and resolved")
+        if not isinstance(workflow.content, bytes):
+            raise InputError("preloaded workflow input content must be bytes")
+
+        posix_path = PurePosixPath(workflow.relative_path)
+        if (
+            posix_path.as_posix() != workflow.relative_path
+            or "\x00" in workflow.relative_path
+            or "\\" in workflow.relative_path
+            or PureWindowsPath(workflow.relative_path).drive
+        ):
+            raise InputError(
+                "preloaded workflow input path is not canonical and repository-relative"
+            )
+        validate_workflow_relative_path(workflow.relative_path)
+        if posix_path.suffix.lower() not in _WORKFLOW_SUFFIXES:
+            raise InputError("preloaded workflow files must use a .yml or .yaml extension")
+        if workflow.relative_path in relative_paths:
+            raise InputError("preloaded workflow inputs contain a duplicate path")
+        relative_paths.add(workflow.relative_path)
+
+        if len(workflow.content) > MAX_WORKFLOW_BYTES:
+            raise InputError(
+                f"preloaded workflow input exceeds the hard {MAX_WORKFLOW_BYTES}-byte limit"
+            )
+        total_bytes += len(workflow.content)
+        if total_bytes > MAX_TOTAL_BYTES:
+            raise InputError(
+                f"preloaded workflow inputs exceed the hard {MAX_TOTAL_BYTES}-byte total limit"
+            )
+
+        try:
+            resolved_path = workflow.path.expanduser().resolve()
+        except (OSError, RuntimeError, ValueError) as error:
+            raise InputError("preloaded workflow input path cannot be resolved safely") from error
+        if workflow.path != resolved_path:
+            raise InputError("preloaded workflow input path must be absolute and resolved")
+        if resolved_path in resolved_paths:
+            raise InputError("preloaded workflow inputs contain a duplicate resolved path")
+        resolved_paths.add(resolved_path)
+        parts = posix_path.parts
+        input_repository = resolved_path
+        for _part in parts:
+            input_repository = input_repository.parent
+        if input_repository.joinpath(*parts) != resolved_path:
+            raise InputError(
+                "preloaded workflow input path does not match its repository-relative path"
+            )
+        if inferred_repository is None:
+            inferred_repository = input_repository
+        elif input_repository != inferred_repository:
+            raise InputError("preloaded workflow inputs do not belong to one repository")
+        if expected_repository is not None and input_repository != expected_repository:
+            raise InputError("preloaded workflow inputs do not belong to the provided repository")
+
+    if inferred_repository is None:  # pragma: no cover - guarded by the nonempty check
+        raise InputError("preloaded workflow inputs must be a nonempty tuple")
+    return expected_repository or inferred_repository
+
+
 def _resolve_repository(repository: Path) -> Path:
     try:
         resolved = repository.expanduser().resolve()
-    except (OSError, RuntimeError) as error:
+    except (OSError, RuntimeError, ValueError) as error:
         raise InputError("workflow repository path cannot be resolved") from error
     try:
         is_directory = resolved.is_dir()

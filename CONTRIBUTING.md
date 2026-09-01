@@ -14,8 +14,8 @@ uv sync --group dev
 uv run make ci
 ```
 
-The full gate invokes the installed `yaga workflow lint` command, which requires Docker for its
-pinned actionlint container. The installed CLI uses the locked Typer dependency. The write-capable
+The full gate invokes `yaga repo check` with the Docker-backed `workflow-lint` provider. The
+installed CLI uses the locked Typer dependency. The write-capable
 root Action import graph—`__main__` in gate mode, `action_cli`, `action`, `codex`, and the generic
 GitHub primitives—must remain Python-standard-library-only and must not import the installed CLI,
 command, commit-policy, or presentation modules. The separate read-only commit Action may import
@@ -29,8 +29,8 @@ with project and Python environment leakage removed.
 
 ## CLI and commit policy contract
 
-The public installed command groups are `commit`, `config`, `github`, `workflow`, and `gate`. Keep
-Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
+The public installed command groups are `commit`, `config`, `github`, `repo`, `workflow`, and `gate`.
+Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
 
@@ -79,6 +79,15 @@ Force-remove and verify labeled containers and the private volume on every catch
 an uncertain late Docker create or unconfirmed cleanup is an operational failure. Preserve exits `0`
 for success, `1` for lint findings, and `2` for operational failure. The lint command and its runner
 must remain absent from both dependency-free composite Action import graphs.
+
+The installed-only `repo check` aggregate lives under `src/yaga/repository/`. It requires an
+explicit, unique provider list closed to `commit`, `workflow`, and `workflow-lint`; never add an
+implicit `all` path that changes when a provider is introduced. Execute in canonical order, load
+workflow inputs once, keep provider reports separate, and continue independent providers after
+expected operational errors. Preserve one global GitHub annotation budget and exits `0` for all
+passed, `1` for findings only, and `2` when any provider errors. Provider-specific arguments must
+fail when their provider is absent. The aggregate remains outside both Action import graphs and
+does not replace the event-bound commit Action.
 
 The pre-commit provider manifest exposes exactly one `commit-msg` hook. Keep it as a direct
 `language: python` adapter to `yaga commit check --file`; do not add shell indirection, filename

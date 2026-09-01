@@ -12,13 +12,18 @@ import threading
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from types import FrameType
 
 from yaga.errors import InputError, YagaError, safe_error_text
 from yaga.workflows import actionlint_runtime as _runtime
 from yaga.workflows import actionlint_snapshot as _snapshot
-from yaga.workflows.inputs import MAX_WORKFLOW_BYTES, WorkflowInput, load_workflow_inputs
+from yaga.workflows.inputs import (
+    MAX_WORKFLOW_BYTES,
+    WorkflowInput,
+    _validate_preloaded_workflow_inputs,
+    load_workflow_inputs,
+)
 from yaga.workflows.models import WorkflowDiagnostic, WorkflowLintReport, WorkflowLintResult
 
 # Transitional private aliases keep the focused low-level tests readable without making
@@ -82,6 +87,7 @@ __all__ = [
     "_run_bounded_process",
     "_run_docker_control_process",
     "_validate_snapshot_relative_path",
+    "lint_workflow_inputs",
     "lint_workflows",
 ]
 
@@ -106,8 +112,15 @@ def lint_workflows(
     selections: Sequence[Path] = (),
 ) -> WorkflowLintReport:
     """Lint selected workflows with the immutable, isolated actionlint image."""
-    workflows = load_workflow_inputs(repository, selections)
-    repo = _repository_from_workflow(workflows[0].path, workflows[0].relative_path)
+    return lint_workflow_inputs(repository, load_workflow_inputs(repository, selections))
+
+
+def lint_workflow_inputs(
+    repository: Path,
+    inputs: tuple[WorkflowInput, ...],
+) -> WorkflowLintReport:
+    """Lint one bounded, repository-consistent tuple returned by the shared loader."""
+    repo = _validate_preloaded_workflow_inputs(inputs, repository=repository)
     docker = _find_docker(repo)
     if docker is None:
         raise InputError("Docker is required for workflow linting")
@@ -116,7 +129,7 @@ def lint_workflows(
         with tempfile.TemporaryDirectory(prefix="yaga-actionlint-") as temporary_directory:
             return _lint_in_temporary_workspace(
                 repo,
-                workflows,
+                inputs,
                 docker,
                 Path(temporary_directory).resolve(),
             )
@@ -220,16 +233,6 @@ def _cleanup_on_termination() -> Iterator[None]:
     finally:
         for selected_signal, previous in reversed(previous_handlers):
             signal.signal(selected_signal, previous)
-
-
-def _repository_from_workflow(path: Path, relative_path: str) -> Path:
-    parts = PurePosixPath(relative_path).parts
-    if not parts:
-        raise InputError("workflow input has no repository-relative path")
-    repository = path
-    for _part in parts:
-        repository = repository.parent
-    return repository
 
 
 def _remaining_actionlint_time(deadline: float) -> float:
