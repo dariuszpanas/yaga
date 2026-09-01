@@ -78,6 +78,8 @@ description-min-length = 3
 description-max-length = 72
 description-ending = "forbid"    # allow, require, or forbid . ! ?
 breaking-markers = "paired"      # either or paired
+required-footer-tokens = ["Signed-off-by"]
+forbidden-footer-tokens = ["WIP"]
 body-policy = "optional"
 body-min-length = 0
 body-min-words = 8
@@ -97,6 +99,28 @@ empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must
 `"paired"` policy requires both markers or neither; exactly one produces
 `breaking.marker-pair`. Marker pairing applies to complete commit messages, not pull-request titles,
 whose policy check intentionally covers only the Conventional Commit header.
+
+`required-footer-tokens` and `forbidden-footer-tokens` default to empty lists. They apply to complete
+commit messages, including every commit selected by a range or a pull-request event, but never to
+the pull-request title's header-only check. Matching is exact and ASCII case-insensitive: configured
+`Signed-off-by` matches `SIGNED-OFF-BY: A User`, but not a token with an added prefix or suffix.
+Both `Token: value` and `Token #value` count, provided the value starts with a non-whitespace
+character. Repeated tokens are allowed; one occurrence satisfies a requirement, while any
+occurrence violates a prohibition. These are presence checks only: requiring `Signed-off-by` does
+not validate signer identity, DCO compliance, or a cryptographic signature.
+
+Configured footer tokens contain only one through 128 ASCII letters, digits, or hyphens, and the
+two lists may contain at most 128 entries combined. Configuration rejects case-insensitive
+duplicates within either list, overlap between the lists, and both reserved breaking-marker token
+spellings, `BREAKING CHANGE` and `BREAKING-CHANGE`.
+
+A footer block begins only when a valid footer token starts the first content paragraph or a new
+paragraph after a blank line. Once that boundary is found, the rest of the message is footer
+content: blank and non-token lines continue a multiline footer value, while a later valid token
+starts another footer even without an intervening blank line. Reporting remains bounded:
+`footer.required` reports only the first configured missing token at line 1 plus a count of any
+other missing tokens, and `footer.forbidden` reports only the earliest forbidden occurrence at its
+exact source line.
 
 `body-min-length` and `body-min-words` are independent lower bounds on the parsed prose body.
 `body-min-words` accepts an integer from `0` through `100000` and defaults to `0`; it counts
@@ -120,8 +144,8 @@ checks at most 64 commits per range. Initialization creates only `.yaga.toml`: i
 directory. Use `--format json` when another tool needs the created path and effective policy.
 
 Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`,
-`header.length`, `breaking.marker-pair`, and `body.word-count`. Text and versioned JSON reports use
-these exit codes:
+`header.length`, `breaking.marker-pair`, `body.word-count`, `footer.required`, and
+`footer.forbidden`. Text and versioned JSON reports use these exit codes:
 
 | Exit | Meaning |
 | --- | --- |
@@ -137,7 +161,7 @@ audited immutable commit that contains `.pre-commit-hooks.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/dariuszpanas/yaga
-    rev: b9a4bada0cf4cc633dc699376ec1c6dc4af6a291
+    rev: e3870e19a9c2697d961309552b87e86c72f93c25
     hooks:
       - id: yaga-commit-check
 ```
@@ -206,7 +230,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: dariuszpanas/yaga/actions/commit-check@b9a4bada0cf4cc633dc699376ec1c6dc4af6a291
+      - uses: dariuszpanas/yaga/actions/commit-check@e3870e19a9c2697d961309552b87e86c72f93c25
 ```
 
 The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,

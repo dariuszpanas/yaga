@@ -30,6 +30,13 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   alphanumeric character, exclude recognized final footers, and do not make an optional absent
   body required. Reject a nonzero minimum when body policy is forbidden, and preserve
   `body.word-count` in every report.
+- Keep `required-footer-tokens` and `forbidden-footer-tokens` in schema v1 as empty-default,
+  full-commit-only presence checks. Match exact tokens case-insensitively in `Token: value` and
+  `Token #value`, allow repeats, and never imply that `Signed-off-by` proves identity, DCO
+  compliance, or a signature. Preserve the one-to-128-character ASCII token grammar, 128-entry
+  combined bound, duplicate/overlap and breaking-token rejection, paragraph-boundary start,
+  multiline suffix parsing, and bounded `footer.required`/`footer.forbidden` diagnostics. PR
+  titles remain header-only.
 - Keep `workflow check`, `workflow security`, and `workflow lint` on the same default and explicit
   path-selection contract. They respectively own immutable-reference policy, a narrow pure-Python
   trust policy, and pinned actionlint syntax checks. Freeze the documented `recommended-v1`

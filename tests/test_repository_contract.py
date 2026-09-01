@@ -9,7 +9,7 @@ ROOT = Path(__file__).parents[1]
 FULL_SHA = re.compile(r"dariuszpanas/yaga@([0-9a-f]{40})(?:\s|$)")
 RESERVED_STATUS_NAMES = {"codex review", "ci gate"}
 COMMIT_CHECK_ACTION = (
-    "dariuszpanas/yaga/actions/commit-check@b9a4bada0cf4cc633dc699376ec1c6dc4af6a291"
+    "dariuszpanas/yaga/actions/commit-check@e3870e19a9c2697d961309552b87e86c72f93c25"
 )
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 
@@ -183,9 +183,26 @@ def test_pre_commit_provider_is_one_closed_file_adapter() -> None:
         '  minimum_pre_commit_version: "3.2.0"\n'
     )
     assert "repo: https://github.com/dariuszpanas/yaga" in readme
-    assert "rev: b9a4bada0cf4cc633dc699376ec1c6dc4af6a291" in readme
+    assert "rev: e3870e19a9c2697d961309552b87e86c72f93c25" in readme
     assert "id: yaga-commit-check" in readme
     assert "pre-commit install --hook-type commit-msg --install-hooks" in readme
+
+
+def test_footer_policy_contract_is_documented_for_maintainers_and_users() -> None:
+    readme = read("README.md")
+    contributing = read("CONTRIBUTING.md")
+    agents = read("AGENTS.md")
+
+    for document in (readme, contributing, agents):
+        assert "`required-footer-tokens`" in document
+        assert "`forbidden-footer-tokens`" in document
+        assert "`Signed-off-by`" in document
+        assert "DCO" in document
+        assert "`footer.required`" in document
+        assert "`footer.forbidden`" in document
+
+    assert "at most 128 entries combined" in readme
+    assert "pull-request title's header-only check" in readme
 
 
 def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:

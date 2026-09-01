@@ -36,6 +36,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "hatchling==1.32.0" in project["dependency-groups"]["dev"]
     assert "pre-commit>=4.6.2,<5" in project["dependency-groups"]["dev"]
     assert project["tool"]["uv"]["required-version"] == "==0.9.18"
+    commit_policy = project["tool"]["yaga"]["commit"]
+    assert commit_policy["breaking-markers"] == "paired"
+    assert commit_policy["forbidden-footer-tokens"] == ["WIP"]
+    assert "required-footer-tokens" not in commit_policy
 
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
