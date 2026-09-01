@@ -10,6 +10,7 @@ import pytest
 import yaga.commits.checker as commit_checker
 from yaga.commits.checker import check_header, check_target
 from yaga.commits.models import (
+    BreakingMarkerPolicy,
     CasePolicy,
     CheckResult,
     CommitPolicy,
@@ -99,6 +100,94 @@ def test_description_ending_policy_supports_require_and_forbid() -> None:
         "fix: require punctuation",
         CommitPolicy(description_ending=EndingPolicy.REQUIRE),
     ) == ["description.ending"]
+
+
+@pytest.mark.parametrize(
+    ("message", "valid"),
+    [
+        ("feat: preserve compatibility", True),
+        ("feat!: remove the old command", False),
+        (
+            "feat: remove the old command\n\nBREAKING CHANGE: use the replacement",
+            False,
+        ),
+        (
+            "feat!: remove the old command\n\nBREAKING CHANGE: use the replacement",
+            True,
+        ),
+    ],
+)
+def test_paired_breaking_markers_use_an_exact_truth_table(message: str, valid: bool) -> None:
+    checked = result(
+        message,
+        CommitPolicy(breaking_markers=BreakingMarkerPolicy.PAIRED),
+    )
+
+    assert checked.valid is valid
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == (
+        [] if valid else ["breaking.marker-pair"]
+    )
+
+
+def test_breaking_marker_pair_diagnostic_is_stable_and_ordered_before_body_rules() -> None:
+    checked = result(
+        "feat: remove the old command\n\nBREAKING CHANGE: use the replacement",
+        CommitPolicy(
+            body_policy=PresencePolicy.REQUIRED,
+            breaking_markers=BreakingMarkerPolicy.PAIRED,
+        ),
+    )
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == [
+        "breaking.marker-pair",
+        "body.required",
+    ]
+    assert checked.diagnostics[0].message == (
+        "breaking changes must use both ! and a BREAKING CHANGE footer"
+    )
+    assert checked.diagnostics[0].line == 1
+
+
+def test_paired_breaking_markers_accept_the_hyphenated_footer_synonym() -> None:
+    policy = CommitPolicy(breaking_markers=BreakingMarkerPolicy.PAIRED)
+
+    assert result(
+        "feat!: remove the old command\n\nBREAKING-CHANGE: use the replacement",
+        policy,
+    ).valid
+
+
+def test_paired_breaking_footer_continuation_is_excluded_from_body_policy() -> None:
+    policy = CommitPolicy(
+        body_min_words=100,
+        breaking_markers=BreakingMarkerPolicy.PAIRED,
+    )
+
+    assert result(
+        "feat!: remove the old command\n\n"
+        "BREAKING CHANGE: use the replacement\n\n"
+        "Migrate callers before upgrading to the next release.",
+        policy,
+    ).valid
+
+
+def test_lowercase_breaking_footer_does_not_complete_the_marker_pair() -> None:
+    policy = CommitPolicy(breaking_markers=BreakingMarkerPolicy.PAIRED)
+
+    assert codes(
+        "feat!: remove the old command\n\nbreaking change: use the replacement",
+        policy,
+    ) == ["breaking.marker-pair"]
+
+
+def test_either_breaking_marker_policy_preserves_spec_permitted_forms() -> None:
+    policy = CommitPolicy(breaking_markers=BreakingMarkerPolicy.EITHER)
+
+    assert result("feat!: remove the old command", policy).valid
+    assert result(
+        "feat: remove the old command\n\nBREAKING CHANGE: use the replacement",
+        policy,
+    ).valid
 
 
 def test_body_policy_does_not_count_footers_as_body() -> None:
@@ -272,9 +361,10 @@ def test_header_check_applies_header_rules_without_commit_body_policy() -> None:
         body_min_length=100,
         body_min_words=100,
         body_max_line_length=1,
+        breaking_markers=BreakingMarkerPolicy.PAIRED,
     )
 
-    valid = check_header(CommitTarget(label="title", message="fix: repair title"), policy)
+    valid = check_header(CommitTarget(label="title", message="fix!: repair title"), policy)
     invalid = check_header(CommitTarget(label="title", message="feat: wrong type"), policy)
 
     assert valid.valid

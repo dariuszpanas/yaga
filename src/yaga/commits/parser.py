@@ -70,28 +70,25 @@ def parse_message(message: str) -> ParsedCommit | None:
 
 
 def _split_body_and_footers(lines: list[str]) -> tuple[list[str], list[str]]:
-    """Split a final Git-trailer-style footer block from free-form body text."""
-    if not lines:
-        return [], []
-    paragraph_start = 0
+    """Split the first boundary-delimited footer token and its complete suffix."""
+    footer_start: int | None = None
+    at_paragraph_start = True
     for index, line in enumerate(lines):
-        if line == "":
-            paragraph_start = index + 1
-    candidate = lines[paragraph_start:]
-    if not _is_footer_block(candidate):
+        if at_paragraph_start and _FOOTER_START.match(line) is not None:
+            footer_start = index
+            break
+        at_paragraph_start = line == ""
+    if footer_start is None:
         return lines, []
-    body = lines[:paragraph_start]
+
+    body = lines[:footer_start]
     while body and body[-1] == "":
         body.pop()
-    return body, candidate
-
-
-def _is_footer_block(lines: list[str]) -> bool:
-    # The Conventional Commits grammar allows footer values to contain newlines
-    # without prescribing indentation. The final paragraph is therefore a footer
-    # block when its first line starts a footer; later lines are either additional
-    # footers or continuation text for a preceding value.
-    return bool(lines and _FOOTER_START.match(lines[0]) is not None)
+    # Footer values may contain newlines, including empty lines. Once a valid
+    # boundary token starts the footer block, its entire remaining suffix is
+    # therefore footer content; a later valid token terminates the preceding
+    # value rather than returning to body parsing.
+    return body, lines[footer_start:]
 
 
 def _is_component_token(value: str) -> bool:

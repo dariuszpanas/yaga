@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from yaga.commits.models import (
+    BreakingMarkerPolicy,
     CasePolicy,
     CommitPolicy,
     EndingPolicy,
@@ -44,6 +45,7 @@ _COMMIT_KEYS = frozenset(
         "body-min-length",
         "body-min-words",
         "body-max-line-length",
+        "breaking-markers",
         "merge-commits",
         "ignored-headers",
         "max-commits",
@@ -266,6 +268,12 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         body_min_words=body_min_words,
         body_max_line_length=_optional_integer(
             raw_commit, "body-max-line-length", minimum=1, maximum=100_000, path=path
+        ),
+        breaking_markers=_enum(
+            raw_commit.get("breaking-markers", BreakingMarkerPolicy.EITHER.value),
+            BreakingMarkerPolicy,
+            "breaking-markers",
+            path,
         ),
         merge_commits=_enum(
             raw_commit.get("merge-commits", MergePolicy.IGNORE.value),

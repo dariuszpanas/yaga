@@ -39,6 +39,13 @@ class MergePolicy(StrEnum):
     REJECT = "reject"
 
 
+class BreakingMarkerPolicy(StrEnum):
+    """How header and footer breaking-change markers relate."""
+
+    EITHER = "either"
+    PAIRED = "paired"
+
+
 class OutputFormat(StrEnum):
     """Supported stable report formats."""
 
@@ -67,6 +74,7 @@ class CommitPolicy:
     ignored_headers: tuple[str, ...] = ()
     max_commits: int = 256
     body_min_words: int = 0
+    breaking_markers: BreakingMarkerPolicy = BreakingMarkerPolicy.EITHER
 
 
 @dataclass(frozen=True, slots=True)
