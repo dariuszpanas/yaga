@@ -52,6 +52,8 @@ def test_root_help_exposes_local_policy_and_preserved_gate_commands() -> None:
     assert "config" in result.stdout
     assert "gate" in result.stdout
     assert "github" in result.stdout
+    assert "mode" in result.stdout
+    assert "path" in result.stdout
     assert "repo" in result.stdout
     assert "size" in result.stdout
     assert "tree" in result.stdout

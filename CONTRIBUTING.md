@@ -30,8 +30,8 @@ with project and Python environment leakage removed.
 
 ## CLI and commit policy contract
 
-The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `path`,
-`repo`, `size`, `tree`, `workflow`, and `gate`.
+The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `mode`,
+`path`, `repo`, `size`, `tree`, `workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
@@ -193,6 +193,28 @@ most the first 256 canonical diagnostics while keeping exact totals and per-code
 legacy graft overlays before revision resolution and recheck after enumeration; shallow history is
 allowed when the selected objects exist. Keep this provider outside both Action import graphs and
 repository-plan v1.
+
+Committed entry-mode policy lives under `src/yaga/modes/` and remains installed-only. `mode check`
+requires one explicit versioned policy and one explicit commit-ish; only `--repo` may default to
+`.`. Never infer `HEAD`, discover policy, fetch, parse events, read the worktree/index/untracked
+set, inspect tracked content or symlink targets, or recurse into gitlinks. Schema v1 requires one
+nonempty unique `default-allowed-modes` list and accepts at most 128 ordered `path-overrides`.
+Override patterns are unique and case-sensitive, use the canonical anchored
+literal/component-`*`/whole-component-`**` grammar, and replace the default at the first match.
+Every override carries a nonempty unique mode list. Keep the closed canonical names `regular`
+(`100644`), `executable` (`100755`), `symlink` (`120000`), and `gitlink` (`160000`), one shared
+10,000,000-unit matcher-work ceiling, and stable `mode.disallowed` diagnostics.
+
+Resolve exactly one commit and tree through the shared bounded Git runtime, then enumerate
+recursive full-tree mode, type, object-ID, and path metadata with NUL-delimited `ls-tree` output.
+Validate every closed mode/type pair, preserve structurally valid names that `path check` may
+diagnose, and reject malformed UTF-8, absolute or structurally invalid paths, duplicate leaves,
+and inconsistent topology. Preserve the 4,096-byte, 64-component, 50,000-entry, 64 MiB,
+30-second, and 256-stored-diagnostic boundaries. Reject legacy graft overlays before revision
+resolution and recheck after enumeration; shallow history is allowed when the selected objects
+exist. A permitted mode says nothing about shebangs, file content, ACLs, ownership, symlink-target
+safety, `.gitmodules` consistency, submodule provenance, or object availability. Keep this
+provider outside both Action import graphs and repository-plan v1.
 
 Workflow reference policy lives under `src/yaga/workflows/` and remains installed-CLI-only. Parse
 untrusted YAML through the bounded pure-Python `SafeLoader` composition boundary without

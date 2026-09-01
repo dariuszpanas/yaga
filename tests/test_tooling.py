@@ -52,6 +52,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert (
         "uv run yaga change check --policy .yaga/change-policy.toml --range HEAD^..HEAD" in makefile
     )
+    assert "uv run yaga mode check --policy .yaga/mode-policy.toml --revision HEAD" in makefile
     assert "uv run yaga path check --policy .yaga/path-policy.toml --revision HEAD" in makefile
     assert "uv run yaga size check --policy .yaga/size-policy.toml --revision HEAD" in makefile
     assert "uv run yaga tree check --policy .yaga/tree-policy.toml --revision HEAD" in makefile
@@ -86,6 +87,11 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         "branch-policy-version": 1,
         "allowed-patterns": ["main", "feat/*", "fix/*", "dependabot/*/**"],
     }
+    mode_policy = tomllib.loads((ROOT / ".yaga" / "mode-policy.toml").read_text(encoding="utf-8"))
+    assert mode_policy == {
+        "mode-policy-version": 1,
+        "default-allowed-modes": ["regular"],
+    }
     path_policy = tomllib.loads((ROOT / ".yaga" / "path-policy.toml").read_text(encoding="utf-8"))
     assert path_policy == {
         "path-policy-version": 1,
@@ -102,6 +108,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert tree_policy == {
         "tree-policy-version": 1,
         "required-paths": [
+            ".yaga/mode-policy.toml",
             ".yaga/path-policy.toml",
             ".yaga/size-policy.toml",
             ".yaga/tree-policy.toml",
@@ -156,6 +163,14 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         "github.event.pull_request.head.sha || github.sha }}" in ci
     )
     assert '--revision "$YAGA_PATH_REVISION"' in ci
+    assert "Check committed entry modes" in ci
+    assert "yaga mode check" in ci
+    assert "--policy .yaga/mode-policy.toml" in ci
+    assert (
+        "YAGA_MODE_REVISION: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}" in ci
+    )
+    assert '--revision "$YAGA_MODE_REVISION"' in ci
     assert "Check committed blob sizes" in ci
     assert "yaga size check" in ci
     assert "--policy .yaga/size-policy.toml" in ci
@@ -214,12 +229,14 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"workflow", "lint", "--help"' in build_gate
     assert '"repo",\n            "check"' in build_gate
     assert '"tree",\n            "check"' in build_gate
+    assert '"mode",\n            "check"' in build_gate
     assert '"size",\n            "check"' in build_gate
     assert '"path",\n            "check"' in build_gate
     assert '"yaga/commands/repo.py"' in build_gate
     assert '"yaga/commands/change.py"' in build_gate
     assert '"yaga/commands/branch.py"' in build_gate
     assert '"yaga/commands/tree.py"' in build_gate
+    assert '"yaga/commands/mode.py"' in build_gate
     assert '"yaga/commands/size.py"' in build_gate
     assert '"yaga/commands/path.py"' in build_gate
     assert '"yaga/git/__init__.py"' in build_gate
@@ -249,6 +266,14 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/trees/policy.py"' in build_gate
     assert '"yaga/trees/reporting.py"' in build_gate
     assert '"yaga/trees/service.py"' in build_gate
+    assert '"yaga/modes/__init__.py"' in build_gate
+    assert '"yaga/modes/checker.py"' in build_gate
+    assert '"yaga/modes/git.py"' in build_gate
+    assert '"yaga/modes/models.py"' in build_gate
+    assert '"yaga/modes/patterns.py"' in build_gate
+    assert '"yaga/modes/policy.py"' in build_gate
+    assert '"yaga/modes/reporting.py"' in build_gate
+    assert '"yaga/modes/service.py"' in build_gate
     assert '"yaga/sizes/__init__.py"' in build_gate
     assert '"yaga/sizes/checker.py"' in build_gate
     assert '"yaga/sizes/git.py"' in build_gate

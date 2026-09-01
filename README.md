@@ -30,6 +30,7 @@ yaga commit check                  # validate one message, commit, or range
 yaga config init                   # create a safe standalone starter policy
 yaga config show                   # explain the effective policy and its source
 yaga github pull-request check     # validate one exact GitHub PR event
+yaga mode check                    # enforce committed entry modes
 yaga path check                    # validate committed path portability
 yaga repo check --check commit     # aggregate an explicit provider set
 yaga size check                    # enforce blob and total bytes for one committed tree
@@ -54,9 +55,9 @@ yaga commit check --range origin/main..HEAD
 
 Git commit and range sources read complete messages without fetching or invoking a shell. Exact
 commit checks select one commit; range checks preserve oldest-first order. Both require complete,
-non-shallow history because Git's shallow boundary can hide stored parents. Commit, change, path,
-tree, and size selection reject legacy graft overlays, and replacement refs are disabled for all
-five.
+non-shallow history because Git's shallow boundary can hide stored parents. Commit, change, mode,
+path, tree, and size selection reject legacy graft overlays, and replacement refs are disabled for
+all six.
 An empty range, a missing ref, or a selection above the configured commit limit is an operational
 error.
 
@@ -118,8 +119,8 @@ following [GitHub's event-author guidance for Dependabot
 automation](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions?learn=dependency_version_updates).
 The adapter still validates the complete event and runner context, verifies the checked-out head,
 loads configuration, and enumerates the bounded exact commit range before returning a visible
-`Dependabot pull request` skip. It does not skip tree, size, change, workflow, test, or review-gate
-checks.
+`Dependabot pull request` skip. It does not skip change, mode, path, size, tree, workflow, test, or
+review-gate checks.
 
 Ordinary `commit check` and the `commit` provider inside `repo check` never infer Dependabot from a
 Git author name, email, message, or branch because those values are author-controlled. They keep
@@ -514,6 +515,73 @@ CI should pass the exact checked-out commit through one quoted value:
     uv run yaga path check
     --policy .yaga/path-policy.toml
     --revision "$YAGA_PATH_REVISION"
+    --format github
+```
+
+## Committed entry-mode checks
+
+`yaga mode check` verifies the Git mode of every leaf in one exact committed tree. It catches
+executable-bit drift that is easy to miss on a Windows checkout, and it can make symlink or
+gitlink presence an explicit repository policy rather than an accidental platform-dependent
+surprise:
+
+```toml
+# .yaga/mode-policy.toml
+mode-policy-version = 1
+default-allowed-modes = ["regular"]
+
+[[path-overrides]]
+pattern = "scripts/**"
+allowed-modes = ["executable"]
+
+[[path-overrides]]
+pattern = "vendor/dependency"
+allowed-modes = ["gitlink"]
+```
+
+```bash
+yaga mode check \
+  --policy .yaga/mode-policy.toml \
+  --revision HEAD
+```
+
+Schema version 1 uses the closed canonical mode names `regular` (`100644`), `executable`
+(`100755`), `symlink` (`120000`), and `gitlink` (`160000`). The default allowed-mode list is
+required, nonempty, and unique. A policy may add up to 128 ordered overrides with unique
+case-sensitive patterns and nonempty unique allowed-mode lists. Patterns are anchored, support
+component-local `*` and whole-component `**`, and the first matching override replaces the
+default. Evaluation shares one hard 10,000,000-work-unit ceiling.
+
+YAGA resolves exactly one commit and tree, then strictly parses bounded, recursive,
+NUL-delimited `ls-tree` mode, type, object-ID, and path records. It never fetches, reads tracked
+content or symlink targets, follows a gitlink, or consults the worktree, index, or untracked files.
+Structurally valid names remain checkable even when `path check` would report them as nonportable.
+Malformed UTF-8, invalid topology, duplicate leaves, unsupported mode/type pairs, graft overlays,
+and exhausted resource limits fail closed. The usual 4,096-byte, 64-component, 50,000-entry,
+64 MiB, and 30-second committed-tree bounds apply. Shallow history is accepted when the selected
+commit and tree objects exist.
+
+A mismatch reports `mode.disallowed` in lexical path order. Versioned JSON retains exact entry,
+per-mode, and finding counts while storing the first 256 canonical diagnostics. Text and escaped
+GitHub reports use smaller bounded previews. Exit `0` means the tree passes, exit `1` means mode
+findings, and exit `2` means an input, policy, Git, malformed-tree, or resource-limit error.
+
+This policy observes only Git's committed entry kinds and executable bit, as documented by Git's
+[data model](https://git-scm.com/docs/gitdatamodel.html). An allowed mode does not validate a
+shebang, content, ACLs, ownership, symlink-target safety, `.gitmodules` consistency, submodule
+provenance, or object availability. The explicit policy carries no provenance claim. This
+installed provider remains outside both Action import graphs and repository-plan v1.
+
+CI should pass the exact checked-out commit through one quoted value:
+
+```yaml
+- name: Check committed entry modes
+  env:
+    YAGA_MODE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  run: >-
+    uv run yaga mode check
+    --policy .yaga/mode-policy.toml
+    --revision "$YAGA_MODE_REVISION"
     --format github
 ```
 

@@ -14,6 +14,7 @@ from yaga.commands.commit import app as commit_app
 from yaga.commands.config import app as config_app
 from yaga.commands.gate import app as gate_app
 from yaga.commands.github import app as github_app
+from yaga.commands.mode import app as mode_app
 from yaga.commands.path import app as path_app
 from yaga.commands.repo import app as repo_app
 from yaga.commands.size import app as size_app
@@ -32,6 +33,7 @@ app.add_typer(commit_app, name="commit")
 app.add_typer(config_app, name="config")
 app.add_typer(gate_app, name="gate")
 app.add_typer(github_app, name="github")
+app.add_typer(mode_app, name="mode")
 app.add_typer(path_app, name="path")
 app.add_typer(repo_app, name="repo")
 app.add_typer(size_app, name="size")
