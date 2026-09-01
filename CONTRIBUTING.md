@@ -58,6 +58,15 @@ actionlint and out of both dependency-free composite Action import graphs. Treat
 references as commit-bound; `./` is a compatibility path whose integrity depends on the caller's
 trusted checkout and must not imply an immutable-reference guarantee.
 
+`workflow security` is a separate pure-Python provider over immutable, source-located facts from
+that same bounded composition. Keep `recommended-v1` frozen to its documented permission,
+`write-all`, named-secret, and privileged-checkout rules; future defaults require a new versioned
+profile. Exact custom rules are closed, unique, and canonical. Do not duplicate actionlint's script
+injection or schema checks, infer arbitrary job permissions, expose raw facts, or let this installed
+provider enter either dependency-free Action import graph.
+The privileged-checkout rule deliberately rejects dynamic `ref` or `repository` expressions and
+any non-false `allow-unsafe-pr-checkout` value instead of approximating GitHub's expression parser.
+
 `workflow lint` shares `workflow check`'s default and explicit path-selection contract, but it is an
 installed-only adapter around the fixed
 `rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667`
@@ -81,13 +90,15 @@ for success, `1` for lint findings, and `2` for operational failure. The lint co
 must remain absent from both dependency-free composite Action import graphs.
 
 The installed-only `repo check` aggregate lives under `src/yaga/repository/`. It requires an
-explicit, unique provider list closed to `commit`, `workflow`, and `workflow-lint`; never add an
-implicit `all` path that changes when a provider is introduced. Execute in canonical order, load
-workflow inputs once, keep provider reports separate, and continue independent providers after
-expected operational errors. Preserve one global GitHub annotation budget and exits `0` for all
-passed, `1` for findings only, and `2` when any provider errors. Provider-specific arguments must
-fail when their provider is absent. The aggregate remains outside both Action import graphs and
-does not replace the event-bound commit Action.
+explicit, unique provider list closed to `commit`, `workflow`, `workflow-security`, and
+`workflow-lint`; never add an implicit `all` path that changes when a provider is introduced.
+Execute in that canonical order, load workflow inputs once, share one bounded composition between
+the pure workflow providers, keep provider reports separate, and continue independent providers
+after expected operational errors. A pure parse error belongs to the selected pure providers but
+must not suppress independent actionlint. Preserve one global GitHub annotation budget and exits
+`0` for all passed, `1` for findings only, and `2` when any provider errors. Provider-specific
+arguments must fail when their provider is absent. The aggregate remains outside both Action import
+graphs and does not replace the event-bound commit Action.
 
 The pre-commit provider manifest exposes exactly one `commit-msg` hook. Keep it as a direct
 `language: python` adapter to `yaga commit check --file`; do not add shell indirection, filename

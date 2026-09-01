@@ -37,6 +37,11 @@ from yaga.workflows.reporting import (
     workflow_lint_report_document,
     workflow_report_document,
 )
+from yaga.workflows.security_models import WorkflowSecurityReport, WorkflowSecurityResult
+from yaga.workflows.security_reporting import (
+    render_workflow_security_report,
+    workflow_security_report_document,
+)
 
 MAX_REPOSITORY_ANNOTATIONS = 50
 
@@ -119,6 +124,8 @@ def _provider_document(check: RepositoryCheckResult) -> dict[str, Any]:
         return commit_report_document(report)
     if isinstance(report, WorkflowLintReport):
         return workflow_lint_report_document(report)
+    if isinstance(report, WorkflowSecurityReport):
+        return workflow_security_report_document(report)
     if isinstance(report, WorkflowReport):
         return workflow_report_document(report)
     raise AssertionError("repository provider report has an unknown type")
@@ -144,6 +151,8 @@ def _provider_text(check: RepositoryCheckResult) -> str:
         return render_report(report, OutputFormat.TEXT)
     if isinstance(report, WorkflowLintReport):
         return render_workflow_lint_report(report, WorkflowOutputFormat.TEXT)
+    if isinstance(report, WorkflowSecurityReport):
+        return render_workflow_security_report(report, WorkflowOutputFormat.TEXT)
     if isinstance(report, WorkflowReport):
         return render_workflow_report(report, WorkflowOutputFormat.TEXT)
     raise AssertionError("repository provider report has an unknown type")
@@ -213,6 +222,12 @@ def _provider_annotations(check: RepositoryCheckResult) -> list[str]:
             for result in report.results
             for diagnostic in result.diagnostics
         ]
+    if isinstance(report, WorkflowSecurityReport):
+        return [
+            _workflow_annotation(result, diagnostic)
+            for result in report.results
+            for diagnostic in result.diagnostics
+        ]
     if isinstance(report, WorkflowReport):
         return [
             _workflow_annotation(result, diagnostic)
@@ -223,7 +238,7 @@ def _provider_annotations(check: RepositoryCheckResult) -> list[str]:
 
 
 def _workflow_annotation(
-    result: WorkflowResult | WorkflowLintResult,
+    result: WorkflowResult | WorkflowLintResult | WorkflowSecurityResult,
     diagnostic: WorkflowDiagnostic,
 ) -> str:
     path = _github_property(result.path, maximum=MAX_DISPLAY_PATH)

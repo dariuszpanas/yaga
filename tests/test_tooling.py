@@ -41,7 +41,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
     assert "uv run yaga workflow lint .github/workflows examples" in makefile
     assert (
-        "uv run yaga repo check --check commit --check workflow --check workflow-lint "
+        "uv run yaga repo check --check commit --check workflow --check workflow-security "
+        "--check workflow-lint "
         "--commit HEAD --workflow-path .github/workflows --workflow-path examples"
     ) in makefile
 
@@ -58,7 +59,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "grep -F -- '[syntax.header]'" in ci
     assert "Run aggregate repository checks" in ci
     assert "yaga repo check" in ci
-    assert "--check commit --check workflow --check workflow-lint" in ci
+    assert "--check commit --check workflow --check workflow-security --check workflow-lint" in ci
     assert (
         "ref: ${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}"
@@ -85,6 +86,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "cwd=consumer" in build_gate
     assert '"config",\n            "init"' in build_gate
     assert '"workflow",\n            "check"' in build_gate
+    assert '"workflow",\n            "security"' in build_gate
     assert '"workflow", "lint", "--help"' in build_gate
     assert '"repo",\n            "check"' in build_gate
     assert '"yaga/commands/repo.py"' in build_gate
@@ -92,6 +94,12 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/repository/checker.py"' in build_gate
     assert '"yaga/workflows/inputs.py"' in build_gate
     assert '"yaga/workflows/lint.py"' in build_gate
+    assert '"yaga/workflows/parser.py"' in build_gate
+    assert '"yaga/workflows/security.py"' in build_gate
+    assert '"yaga/workflows/security_facts.py"' in build_gate
+    assert '"yaga/workflows/security_models.py"' in build_gate
+    assert '"yaga/workflows/security_reporting.py"' in build_gate
+    assert '"yaga/workflows/security_rules.py"' in build_gate
     assert "config.write_text" not in build_gate
     assert 'completed.stdout.decode("utf-8")' in build_gate
     assert '"pip",\n            "check"' in build_gate

@@ -30,6 +30,7 @@ yaga config show                   # explain the effective policy and its source
 yaga github pull-request check     # validate one exact GitHub PR event
 yaga repo check --check commit     # aggregate an explicit provider set
 yaga workflow check                # require immutable workflow references
+yaga workflow security             # enforce a bounded Actions trust policy
 yaga workflow lint                 # lint workflow syntax with pinned actionlint
 yaga gate codex-review <operation> # run the retained review gate
 ```
@@ -236,6 +237,40 @@ duplicate keys and merge keys remain visible and fail closed. Text, versioned JS
 GitHub annotations use exit `0` for success, `1` for policy findings, and `2` for discovery, input,
 YAML, or resource-limit errors.
 
+`yaga workflow security` applies a narrow, pure-Python trust policy to the same bounded workflow
+selection. Its versioned `recommended-v1` profile requires an explicit read-only top-level
+`permissions` boundary, keeps write scopes at individual jobs, rejects `write-all`, requires named
+secret handoff instead of `secrets: inherit`, and hardens `actions/checkout` under privileged
+`pull_request_target` or `workflow_run`. In those workflows, `ref` and `repository` selections must
+be literal rather than dynamic expressions, while `allow-unsafe-pr-checkout` must be absent or the
+literal value `false`. These rules follow GitHub's
+[secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use) and
+[permission model](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions),
+but intentionally remain a small policy checker rather than a replacement for CodeQL, Scorecard,
+or a broader Actions security scanner.
+
+The frozen profile exposes five independently selectable rule IDs:
+
+- `permissions.explicit` requires a top-level permission boundary.
+- `permissions.top_level_write` moves mapping write scopes from the workflow to individual jobs.
+- `permissions.write_all` rejects scalar `write-all` at workflow or job scope.
+- `secrets.inherit` requires reusable-workflow jobs to name each forwarded secret.
+- `checkout.untrusted_ref` applies the privileged-checkout restrictions above.
+
+```bash
+yaga workflow security
+yaga workflow security .github/workflows examples --format github
+yaga workflow security \
+  --rule permissions.explicit \
+  --rule checkout.untrusted_ref
+```
+
+With no selection options, `recommended-v1` is stable: adding a future rule will require a new
+profile instead of silently changing an existing gate. Repeat `--rule` to replace the profile with
+one exact, unique custom rule set; do not combine custom rules with `--profile`. Text, versioned
+JSON, and escaped GitHub output preserve the same `0`/`1`/`2` success, finding, and operational-error
+contract as the immutable-reference checker.
+
 `yaga workflow lint` complements that pure-Python reference policy with GitHub workflow syntax and
 schema checks. It accepts the same paths as `workflow check`: no paths selects direct `.yml` and
 `.yaml` children of `.github/workflows`, while explicit files or direct-child directories select
@@ -277,34 +312,37 @@ a pinned adapter around native actionlint, not a pure-Python schema linter. Sani
 versioned JSON, and escaped GitHub reports use exit `0` for success, `1` for lint findings, and `2`
 for Docker, snapshot, cleanup, input, or malformed-tool-output failures.
 
-Both workflow commands are installed-CLI providers, not composite Actions. Run them after installing
-the locked YAGA environment in ordinary unprivileged CI. Keep syntax linting and immutable-reference
-policy as separate checks; neither replaces the other.
+All three workflow commands are installed-CLI providers, not composite Actions. Run them after
+installing the locked YAGA environment in ordinary unprivileged CI. Keep immutable-reference,
+security, and syntax diagnostics separate; none replaces another.
 
 ## Aggregate repository checks
 
 `yaga repo check` runs a closed, explicitly selected set of the existing providers and keeps their
-reports separate. Repeat `--check` with `commit`, `workflow`, or `workflow-lint`; at least one is
-required. There is deliberately no implicit `all` selection, so adding a future YAGA provider never
-changes an existing local command or CI gate.
+reports separate. Repeat `--check` with `commit`, `workflow`, `workflow-security`, or
+`workflow-lint`; at least one is required. There is deliberately no implicit `all` selection, so
+adding a future YAGA provider never changes an existing local command or CI gate.
 
 ```bash
 yaga repo check \
   --check commit \
   --check workflow \
+  --check workflow-security \
   --check workflow-lint \
   --commit HEAD \
   --workflow-path .github/workflows \
   --workflow-path examples
 ```
 
-Providers execute once in canonical order regardless of option order. The commit provider accepts
-one `--commit` or `--range` and defaults to `HEAD`; it never fetches or weakens history. Both
-workflow providers consume the same bounded workflow bytes selected by repeatable
-`--workflow-path` options, while lint may add its bounded transitive support snapshot. Omitting
-`workflow-lint` keeps the aggregate pure Python and does not require Docker. Commit source and
-configuration options are rejected unless `commit` is selected, and workflow paths are rejected
-unless a workflow provider is selected.
+Providers execute once in canonical `commit`, `workflow`, `workflow-security`, `workflow-lint`
+order regardless of option order. The commit provider accepts one `--commit` or `--range` and
+defaults to `HEAD`; it never fetches or weakens history. The pure workflow providers consume one
+bounded parse of the same workflow bytes selected by repeatable `--workflow-path` options, while
+lint may add its bounded transitive support snapshot. Omitting `workflow-lint` keeps the aggregate
+pure Python and does not require Docker. Commit source and configuration options are rejected
+unless `commit` is selected, and workflow paths or security-selection options are rejected unless
+their provider is selected. Use `--workflow-security-profile recommended-v1` or repeat
+`--workflow-security-rule` for an exact custom selection in the aggregate command.
 
 Text preserves one section per provider. Versioned JSON embeds each existing provider document
 under a `repository_check` envelope. GitHub output uses balanced provider groups and one shared
