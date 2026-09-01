@@ -55,7 +55,8 @@ def check_repo(
         typer.Option(
             "--workflow-security-profile",
             help=(
-                "Versioned workflow-security profile: recommended-v1 (default) or recommended-v2."
+                "Versioned workflow-security profile: recommended-v1 (default), "
+                "recommended-v2, or recommended-v3."
             ),
         ),
     ] = None,

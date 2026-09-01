@@ -36,6 +36,7 @@ from yaga.workflows.models import (
 from yaga.workflows.security_models import (
     RECOMMENDED_V1_RULES,
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityReport,
     WorkflowSecurityResult,
@@ -234,6 +235,41 @@ def test_repository_reports_preserve_recommended_v2_selection() -> None:
     assert security["rules"] == [rule.value for rule in RECOMMENDED_V2_RULES]
     assert "Profile: recommended-v2" in rendered
     assert "checkout.persist_credentials" in rendered
+
+
+def test_repository_reports_preserve_recommended_v3_selection() -> None:
+    report = RepositoryReport(
+        checks=(
+            RepositoryCheckResult(
+                provider=RepositoryProvider.WORKFLOW_SECURITY,
+                report=security_report(
+                    WorkflowDiagnostic(
+                        "security.permissions.pull_request_write",
+                        (
+                            "pull_request workflows must not grant pull-requests or statuses "
+                            "write access"
+                        ),
+                        6,
+                        22,
+                    ),
+                    profile=WorkflowSecurityProfile.RECOMMENDED_V3,
+                    rules=RECOMMENDED_V3_RULES,
+                ),
+            ),
+        )
+    )
+
+    document = json.loads(render_repository_report(report, RepositoryOutputFormat.JSON))
+    rendered = render_repository_report(report, RepositoryOutputFormat.TEXT)
+
+    security = document["checks"][0]["report"]
+    assert security["profile"] == "recommended-v3"
+    assert security["rules"] == [rule.value for rule in RECOMMENDED_V3_RULES]
+    assert security["workflows"][0]["diagnostics"][0]["code"] == (
+        "security.permissions.pull_request_write"
+    )
+    assert "Profile: recommended-v3" in rendered
+    assert "permissions.pull_request_write" in rendered
 
 
 def test_repository_github_report_balances_groups_and_uses_one_global_annotation_budget() -> None:

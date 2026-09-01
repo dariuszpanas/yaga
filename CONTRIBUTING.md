@@ -78,6 +78,14 @@ that same bounded composition. Keep `recommended-v1` frozen to its documented pe
 wrapper Actions. Match the runner's slash and backslash path segmentation conservatively, and fail
 closed on non-scalar, non-ASCII, duplicate, or runner-environment-colliding input evidence and on
 unsupported scalar tags.
+`recommended-v3` is the explicit opt-in superset of v2 that adds
+`permissions.pull_request_write`. Whenever any `pull_request` trigger is present, reject exact
+`pull-requests: write` and `statuses: write` values at workflow and job scope. Mixed-event
+workflows and conditionally guarded writer jobs still fail; split the writer into a trusted
+`pull_request_target` or `workflow_run` publisher. Those trusted triggers remain allowed by this
+rule when `pull_request` is absent, subject to all other profile rules. Keep the rule deliberately
+narrow: it does not cover other scopes, alternate tokens, reusable-workflow permission inheritance,
+or expressions.
 Future defaults require another versioned profile. Exact custom rules are closed, unique, and
 canonical.
 Do not duplicate actionlint's script injection or schema checks, infer arbitrary job permissions,

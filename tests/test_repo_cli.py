@@ -21,6 +21,7 @@ from yaga.repository.models import (
 )
 from yaga.workflows.security_models import (
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityReport,
     WorkflowSecurityResult,
@@ -76,6 +77,7 @@ def test_repo_help_exposes_closed_explicit_provider_contract() -> None:
     assert "--workflow-security-ru" in command_help
     assert "recommended-v1" in command_help
     assert "recommended-v2" in command_help
+    assert "recommended-v3" in command_help
 
 
 def test_repo_command_uses_exit_zero_one_and_two_and_stream_contract(
@@ -280,6 +282,46 @@ def test_repo_check_accepts_and_reports_recommended_v2(tmp_path: Path) -> None:
     security = document["checks"][0]["report"]
     assert security["profile"] == "recommended-v2"
     assert security["rules"] == [rule.value for rule in RECOMMENDED_V2_RULES]
+    assert security["valid"] is True
+
+
+def test_repo_check_accepts_and_reports_recommended_v3(tmp_path: Path) -> None:
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text(
+        "on: pull_request\n"
+        "permissions: {}\n"
+        "jobs:\n"
+        "  check:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          persist-credentials: false\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "repo",
+            "check",
+            "--check",
+            "workflow-security",
+            "--repo",
+            str(tmp_path),
+            "--workflow-security-profile",
+            "recommended-v3",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    security = document["checks"][0]["report"]
+    assert security["profile"] == "recommended-v3"
+    assert security["rules"] == [rule.value for rule in RECOMMENDED_V3_RULES]
     assert security["valid"] is True
 
 

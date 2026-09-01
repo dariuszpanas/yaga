@@ -20,6 +20,7 @@ from yaga.workflows.security import (
 from yaga.workflows.security_models import (
     RECOMMENDED_V1_RULES,
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityRule,
 )
@@ -86,6 +87,35 @@ def test_preloaded_security_accepts_recommended_v2(tmp_path: Path) -> None:
 
     assert report.profile is WorkflowSecurityProfile.RECOMMENDED_V2
     assert report.rules == RECOMMENDED_V2_RULES
+    assert report.valid is True
+
+
+def test_preloaded_security_accepts_recommended_v3(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    selected = (
+        _workflow(
+            repository,
+            ".github/workflows/ci.yml",
+            (
+                b"on: pull_request\n"
+                b"permissions: {}\n"
+                b"jobs:\n"
+                b"  check:\n"
+                b"    permissions:\n"
+                b"      contents: read\n"
+                b"    steps:\n"
+                b"      - uses: actions/checkout@v4\n"
+                b"        with:\n"
+                b"          persist-credentials: false\n"
+            ),
+        ),
+    )
+
+    report = check_workflow_security_inputs(selected, profile="recommended-v3")
+
+    assert report.profile is WorkflowSecurityProfile.RECOMMENDED_V3
+    assert report.rules == RECOMMENDED_V3_RULES
     assert report.valid is True
 
 

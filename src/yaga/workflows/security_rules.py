@@ -17,6 +17,7 @@ from yaga.workflows.security_facts import (
 from yaga.workflows.security_models import (
     RECOMMENDED_V1_RULES,
     RECOMMENDED_V2_RULES,
+    RECOMMENDED_V3_RULES,
     WORKFLOW_SECURITY_RULE_ORDER,
     WorkflowSecurityProfile,
     WorkflowSecurityRule,
@@ -27,6 +28,7 @@ MAX_SECURITY_RULES = len(WORKFLOW_SECURITY_RULE_ORDER)
 
 _CODE_PREFIX = "security."
 _PERSIST_CREDENTIALS_ENV_NAME = "PERSIST-CREDENTIALS"
+_PULL_REQUEST_WRITE_PERMISSION_KEYS = frozenset({"pull-requests", "statuses"})
 _YAML_BOOLEAN_TAG = "tag:yaml.org,2002:bool"
 _YAML_STRING_TAG = "tag:yaml.org,2002:str"
 _MESSAGES = {
@@ -44,11 +46,15 @@ _MESSAGES = {
     WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS: (
         "actions/checkout must disable persisted credentials"
     ),
+    WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE: (
+        "pull_request workflows must not grant pull-requests or statuses write access"
+    ),
 }
 
 _PROFILE_RULES = {
     WorkflowSecurityProfile.RECOMMENDED_V1: RECOMMENDED_V1_RULES,
     WorkflowSecurityProfile.RECOMMENDED_V2: RECOMMENDED_V2_RULES,
+    WorkflowSecurityProfile.RECOMMENDED_V3: RECOMMENDED_V3_RULES,
 }
 
 
@@ -157,12 +163,7 @@ def evaluate_workflow_security(
                     )
 
     if WorkflowSecurityRule.CHECKOUT_UNTRUSTED_REF in selected:
-        events = {
-            scalar.value
-            for trigger in facts.triggers
-            for event in trigger.events
-            if (scalar := _scalar(event)) is not None
-        }
+        events = _trigger_events(facts)
         pull_request_target = "pull_request_target" in events
         workflow_run = "workflow_run" in events
         if pull_request_target or workflow_run:
@@ -177,6 +178,34 @@ def evaluate_workflow_security(
         for job in facts.jobs:
             for step in job.steps:
                 _check_checkout_persist_credentials(diagnostics, step)
+
+    if (
+        WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE in selected
+        and "pull_request" in _trigger_events(facts)
+    ):
+        for permissions in facts.permissions:
+            for value in _mapping_values_for_keys(
+                permissions,
+                entry_keys=_PULL_REQUEST_WRITE_PERMISSION_KEYS,
+                entry_value="write",
+            ):
+                _diagnose_at(
+                    diagnostics,
+                    WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,
+                    value,
+                )
+        for job in facts.jobs:
+            for permissions in job.permissions:
+                for value in _mapping_values_for_keys(
+                    permissions,
+                    entry_keys=_PULL_REQUEST_WRITE_PERMISSION_KEYS,
+                    entry_value="write",
+                ):
+                    _diagnose_at(
+                        diagnostics,
+                        WorkflowSecurityRule.PERMISSIONS_PULL_REQUEST_WRITE,
+                        value,
+                    )
 
     diagnostics.sort(key=lambda item: (item.line, item.column, item.code, item.message))
     return tuple(diagnostics)
@@ -196,6 +225,37 @@ def _mapping_values(
         if entry_key is not None and value is not None and value.value == entry_value:
             selected.append(value)
     return tuple(selected)
+
+
+def _mapping_values_for_keys(
+    field: WorkflowFieldFact,
+    *,
+    entry_keys: frozenset[str],
+    entry_value: str,
+) -> tuple[LocatedScalar, ...]:
+    if field.value.kind is not WorkflowValueKind.MAPPING:
+        return ()
+    selected: list[LocatedScalar] = []
+    for entry in field.entries:
+        entry_key = _scalar(entry.key)
+        value = _scalar(entry.value)
+        if (
+            entry_key is not None
+            and entry_key.value in entry_keys
+            and value is not None
+            and value.value == entry_value
+        ):
+            selected.append(value)
+    return tuple(selected)
+
+
+def _trigger_events(facts: WorkflowSecurityFacts) -> frozenset[str]:
+    return frozenset(
+        scalar.value
+        for trigger in facts.triggers
+        for event in trigger.events
+        if (scalar := _scalar(event)) is not None
+    )
 
 
 def _field_scalar(field: WorkflowFieldFact) -> LocatedScalar | None:
