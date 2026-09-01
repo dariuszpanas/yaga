@@ -36,6 +36,9 @@ jobs:
       - run: >-
           uv run --frozen --python 3.12 yaga commit check
           --message "feat(ci): exercise the installed CLI"
+      - run: >-
+          uv run --frozen --python 3.12 yaga workflow check
+          .github/workflows examples --format github
       - name: Exercise the pre-commit provider
         run: |
           printf '%s\n' 'not conventional' > "$RUNNER_TEMP/YAGA_COMMIT_EDITMSG"

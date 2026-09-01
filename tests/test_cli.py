@@ -42,6 +42,7 @@ def test_root_help_exposes_local_policy_and_preserved_gate_commands() -> None:
     assert "config" in result.stdout
     assert "gate" in result.stdout
     assert "github" in result.stdout
+    assert "workflow" in result.stdout
 
 
 def test_version_is_available_from_the_installed_command() -> None:
@@ -423,6 +424,46 @@ def test_config_help_explains_safe_standalone_initialization() -> None:
     assert result.exit_code == 0
     assert "standalone .yaga.toml" in result.stdout
     assert "without overwriting" in result.stdout
+
+
+def test_workflow_check_uses_exit_zero_one_and_two(tmp_path: Path) -> None:
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True)
+    prefix = "name: CI\non: push\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n"
+    workflow.write_text(
+        prefix + "      - uses: actions/checkout@" + "a" * 40 + "\n",
+        encoding="utf-8",
+    )
+    arguments = [
+        "workflow",
+        "check",
+        "--repo",
+        str(tmp_path),
+        "--format",
+        "json",
+    ]
+
+    passed = runner.invoke(app, arguments)
+    assert passed.exit_code == 0
+    assert json.loads(passed.stdout)["kind"] == "github_workflow_policy"
+
+    workflow.write_text(prefix + "      - uses: actions/checkout@main\n", encoding="utf-8")
+    failed = runner.invoke(app, arguments)
+    assert failed.exit_code == 1
+    assert json.loads(failed.stdout)["workflows"][0]["diagnostics"][0]["code"] == "uses.pin"
+
+    workflow.write_text("jobs: [\n", encoding="utf-8")
+    errored = runner.invoke(app, arguments)
+    assert errored.exit_code == 2
+    assert json.loads(errored.stderr)["error"]["kind"] == "input"
+
+
+def test_workflow_help_describes_default_and_explicit_paths() -> None:
+    result = runner.invoke(app, ["workflow", "check", "--help"])
+
+    assert result.exit_code == 0
+    assert ".github/workflows" in result.stdout
+    assert "immutable external references" in result.stdout
 
 
 def test_gate_help_lists_every_preserved_operation() -> None:

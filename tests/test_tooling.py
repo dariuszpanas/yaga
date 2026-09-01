@@ -82,7 +82,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert project["project"]["name"] == "yaga-cli"
     assert project["project"]["scripts"] == {"yaga": "yaga.cli:main"}
-    assert project["project"]["dependencies"] == ["typer>=0.27.2,<1"]
+    assert project["project"]["dependencies"] == [
+        "pyyaml>=6.0.3,<7",
+        "typer>=0.27.2,<1",
+    ]
     build_requirements = project["build-system"]["requires"]
     assert build_requirements == ["hatchling==1.32.0"]
     assert "hatchling==1.32.0" in project["dependency-groups"]["dev"]
@@ -112,11 +115,12 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     ):
         assert f'"{locked_argument}"' in build_gate
     assert '"--no-hashes"' not in build_gate
-    assert 'EXPECTED_REQUIRES_DIST = ["typer<1,>=0.27.2"]' in build_gate
+    assert 'EXPECTED_REQUIRES_DIST = ["pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]' in build_gate
     assert '"PYTHONPATH"' in build_gate
     assert '"YAGA_ACTION_RUNTIME"' in build_gate
     assert "cwd=consumer" in build_gate
     assert '"config",\n            "init"' in build_gate
+    assert '"workflow",\n            "check"' in build_gate
     assert "config.write_text" not in build_gate
     assert 'completed.stdout.decode("utf-8")' in build_gate
     assert '"pip",\n            "check"' in build_gate
@@ -124,11 +128,18 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
 
 
 def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
-    valid = b"Metadata-Version: 2.4\nRequires-Python: >=3.12\nRequires-Dist: typer<1,>=0.27.2\n\n"
+    valid = (
+        b"Metadata-Version: 2.4\n"
+        b"Requires-Python: >=3.12\n"
+        b"Requires-Dist: pyyaml<7,>=6.0.3\n"
+        b"Requires-Dist: typer<1,>=0.27.2\n\n"
+    )
     check_build.validate_wheel_metadata(valid)
 
     for malformed in (
-        b"Metadata-Version: 2.4\nRequires-Python: >=3.12\n\n",
+        valid.replace(b"Requires-Dist: pyyaml<7,>=6.0.3\n", b""),
+        valid.replace(b"Requires-Dist: typer<1,>=0.27.2\n", b""),
+        valid.replace(b"pyyaml<7,>=6.0.3", b"pyyaml>=6.0.3"),
         valid.replace(b"typer<1,>=0.27.2", b"typer>=0.27.2"),
         valid.replace(
             b"Requires-Dist: typer<1,>=0.27.2",
@@ -168,6 +179,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "from yaga.cli" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.commits" not in source, path
+        assert "from yaga.workflows" not in source, path
 
 
 def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
@@ -184,5 +196,6 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "from yaga.cli" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.codex" not in source, path
+        assert "from yaga.workflows" not in source, path
         assert "from yaga.github import" not in source, path
         assert "GITHUB_TOKEN" not in source, path
