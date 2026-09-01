@@ -11,6 +11,7 @@ from yaga.commits.models import (
     CommitTarget,
     LoadedConfig,
     OutputFormat,
+    PresencePolicy,
     ValidationReport,
 )
 from yaga.commits.reporting import render_config, render_error, render_report, safe_text
@@ -106,6 +107,28 @@ def test_config_reports_the_effective_breaking_marker_policy() -> None:
 
     assert "breaking-markers: paired" in rendered
     assert document["config"]["breaking_markers"] == "paired"
+
+
+def test_config_reports_scope_policy_overrides_with_spelling_and_order() -> None:
+    loaded = LoadedConfig(
+        policy=CommitPolicy(
+            scope_policy_by_type=(
+                ("FEAT", PresencePolicy.REQUIRED),
+                ("revert", PresencePolicy.FORBIDDEN),
+            )
+        ),
+        path=None,
+    )
+
+    rendered = render_config(loaded, OutputFormat.TEXT)
+    document = json.loads(render_config(loaded, OutputFormat.JSON))
+
+    assert "scope-policy-by-type: FEAT=required, revert=forbidden" in rendered
+    assert document["config"]["scope_policy_by_type"] == {
+        "FEAT": "required",
+        "revert": "forbidden",
+    }
+    assert list(document["config"]["scope_policy_by_type"]) == ["FEAT", "revert"]
 
 
 def test_config_reports_footer_tokens_with_configured_spelling_and_order() -> None:

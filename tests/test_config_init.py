@@ -89,6 +89,7 @@ def test_initialized_configuration_round_trips_to_the_recommended_policy(
     )
     assert policy.type_case is CasePolicy.LOWER
     assert policy.scope_policy is PresencePolicy.OPTIONAL
+    assert policy.scope_policy_by_type == ()
     assert policy.allowed_scopes is None
     assert policy.scope_case is CasePolicy.LOWER
     assert policy.header_max_length == 100

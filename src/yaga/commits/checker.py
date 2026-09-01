@@ -102,13 +102,14 @@ def _check_target(
             )
         )
 
+    scope_policy = _scope_policy_for_type(policy, parsed.commit_type)
     if parsed.scope is None:
-        if policy.scope_policy is PresencePolicy.REQUIRED:
+        if scope_policy is PresencePolicy.REQUIRED:
             diagnostics.append(
                 Diagnostic(code="scope.required", message="a scope is required by policy")
             )
     else:
-        if policy.scope_policy is PresencePolicy.FORBIDDEN:
+        if scope_policy is PresencePolicy.FORBIDDEN:
             diagnostics.append(
                 Diagnostic(code="scope.forbidden", message="scopes are forbidden by policy")
             )
@@ -272,6 +273,17 @@ def _check_case(
 def _contains_casefold(values: tuple[str, ...], candidate: str) -> bool:
     folded = candidate.casefold()
     return any(value.casefold() == folded for value in values)
+
+
+def _scope_policy_for_type(policy: CommitPolicy, commit_type: str) -> PresencePolicy:
+    """Resolve one case-insensitive per-type override or the global fallback."""
+    if not policy.scope_policy_by_type:
+        return policy.scope_policy
+    folded_type = commit_type.casefold()
+    for configured_type, override in policy.scope_policy_by_type:
+        if configured_type.casefold() == folded_type:
+            return override
+    return policy.scope_policy
 
 
 def _check_footer_tokens(

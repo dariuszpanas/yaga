@@ -74,6 +74,10 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "allowed_types": _json_values(policy.allowed_types, maximum=128),
         "type_case": policy.type_case.value,
         "scope_policy": policy.scope_policy.value,
+        "scope_policy_by_type": {
+            commit_type: scope_policy.value
+            for commit_type, scope_policy in policy.scope_policy_by_type
+        },
         "allowed_scopes": (_json_values(policy.allowed_scopes, maximum=128)),
         "scope_case": policy.scope_case.value,
         "header_max_length": policy.header_max_length,
@@ -175,6 +179,13 @@ def result_document(result: CheckResult) -> dict[str, Any]:
 def _text_value(value: object) -> str:
     if value is None:
         return "unlimited"
+    if isinstance(value, dict):
+        if not value:
+            return "none"
+        return safe_text(
+            ", ".join(f"{key}={item}" for key, item in value.items()),
+            maximum=2000,
+        )
     if isinstance(value, list):
         return safe_text(", ".join(str(item) for item in value), maximum=2000) if value else "none"
     return safe_text(str(value), maximum=2000)

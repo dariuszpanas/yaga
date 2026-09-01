@@ -511,6 +511,7 @@ def test_config_show_reports_the_discovered_source(tmp_path: Path) -> None:
         "config-version = 1\n"
         "[commit]\n"
         'allowed-types = ["feat"]\n'
+        'scope-policy-by-type = { feat = "required" }\n'
         'breaking-markers = "paired"\n'
         "body-min-words = 4\n",
         encoding="utf-8",
@@ -525,6 +526,7 @@ def test_config_show_reports_the_discovered_source(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert document["config_path"] == str(config)
     assert document["config"]["allowed_types"] == ["feat"]
+    assert document["config"]["scope_policy_by_type"] == {"feat": "required"}
     assert document["config"]["breaking_markers"] == "paired"
     assert document["config"]["body_min_words"] == 4
 
@@ -556,6 +558,7 @@ def test_config_init_creates_and_reports_a_standalone_policy(tmp_path: Path) -> 
         "test",
     ]
     assert document["config"]["merge_commits"] == "reject"
+    assert document["config"]["scope_policy_by_type"] == {}
 
 
 def test_config_init_refuses_to_overwrite_and_uses_exit_two(tmp_path: Path) -> None:

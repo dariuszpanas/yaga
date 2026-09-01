@@ -78,6 +78,7 @@ class CommitPolicy:
     breaking_markers: BreakingMarkerPolicy = BreakingMarkerPolicy.EITHER
     required_footer_tokens: tuple[str, ...] = ()
     forbidden_footer_tokens: tuple[str, ...] = ()
+    scope_policy_by_type: tuple[tuple[str, PresencePolicy], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
