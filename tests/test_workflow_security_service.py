@@ -17,7 +17,12 @@ from yaga.workflows.security import (
     check_workflow_security,
     check_workflow_security_inputs,
 )
-from yaga.workflows.security_models import WorkflowSecurityProfile, WorkflowSecurityRule
+from yaga.workflows.security_models import (
+    RECOMMENDED_V1_RULES,
+    RECOMMENDED_V2_RULES,
+    WorkflowSecurityProfile,
+    WorkflowSecurityRule,
+)
 
 
 def _workflow(
@@ -52,8 +57,36 @@ def test_standalone_security_loads_the_requested_selection_once(
 
     assert calls == [(repository, paths)]
     assert report.profile is WorkflowSecurityProfile.RECOMMENDED_V1
+    assert report.rules == RECOMMENDED_V1_RULES
     assert report.valid is True
     assert [result.path for result in report.results] == [".github/workflows/ci.yml"]
+
+
+def test_preloaded_security_accepts_recommended_v2(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    selected = (
+        _workflow(
+            repository,
+            ".github/workflows/ci.yml",
+            (
+                b"permissions: {}\n"
+                b"jobs:\n"
+                b"  check:\n"
+                b"    runs-on: ubuntu-latest\n"
+                b"    steps:\n"
+                b"      - uses: actions/checkout@v4\n"
+                b"        with:\n"
+                b"          persist-credentials: false\n"
+            ),
+        ),
+    )
+
+    report = check_workflow_security_inputs(selected, profile="recommended-v2")
+
+    assert report.profile is WorkflowSecurityProfile.RECOMMENDED_V2
+    assert report.rules == RECOMMENDED_V2_RULES
+    assert report.valid is True
 
 
 def test_preloaded_security_uses_exact_content_without_rediscovery(

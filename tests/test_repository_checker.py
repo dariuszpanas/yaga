@@ -20,7 +20,8 @@ from yaga.workflows.models import (
 )
 from yaga.workflows.parser import ParsedWorkflowInput, parse_workflow_inputs
 from yaga.workflows.security_models import (
-    WORKFLOW_SECURITY_RULE_ORDER,
+    RECOMMENDED_V1_RULES,
+    RECOMMENDED_V2_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityReport,
     WorkflowSecurityResult,
@@ -77,7 +78,7 @@ def passing_lint_report() -> WorkflowLintReport:
 def passing_security_report() -> WorkflowSecurityReport:
     return WorkflowSecurityReport(
         profile=WorkflowSecurityProfile.RECOMMENDED_V1,
-        rules=WORKFLOW_SECURITY_RULE_ORDER,
+        rules=RECOMMENDED_V1_RULES,
         results=(WorkflowSecurityResult(path="ci.yml", diagnostics=()),),
     )
 
@@ -155,6 +156,46 @@ def test_security_selection_errors_precede_workflow_discovery(
             workflow_security_profile="recommended-v1",
             workflow_security_rules=["permissions.explicit"],
         )
+
+
+def test_recommended_v2_profile_is_forwarded_to_the_shared_security_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workflow = WorkflowInput(
+        path=tmp_path / "ci.yml",
+        relative_path="ci.yml",
+        content=b"permissions: {}\njobs: {}\n",
+    )
+    parsed = parse_workflow_inputs((workflow,))
+
+    monkeypatch.setattr(checker, "load_workflow_inputs", lambda *args, **kwargs: (workflow,))
+    monkeypatch.setattr(checker, "parse_workflow_inputs", lambda inputs: parsed)
+
+    def fake_security(
+        inputs: tuple[ParsedWorkflowInput, ...],
+        **kwargs: object,
+    ) -> WorkflowSecurityReport:
+        assert inputs == parsed
+        assert kwargs == {"profile": "recommended-v2", "rules": ()}
+        return WorkflowSecurityReport(
+            profile=WorkflowSecurityProfile.RECOMMENDED_V2,
+            rules=RECOMMENDED_V2_RULES,
+            results=(WorkflowSecurityResult(path="ci.yml", diagnostics=()),),
+        )
+
+    monkeypatch.setattr(checker, "check_parsed_workflow_security_inputs", fake_security)
+
+    report = checker.check_repository(
+        tmp_path,
+        ["workflow-security"],
+        workflow_security_profile="recommended-v2",
+    )
+
+    assert report.status is RepositoryCheckStatus.PASSED
+    security = report.checks[0].report
+    assert isinstance(security, WorkflowSecurityReport)
+    assert security.profile is WorkflowSecurityProfile.RECOMMENDED_V2
 
 
 def test_providers_execute_once_in_canonical_order_with_one_shared_workflow_load(

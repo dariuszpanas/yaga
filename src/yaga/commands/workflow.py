@@ -70,7 +70,7 @@ def check_workflow_security_policy(
         str | None,
         typer.Option(
             "--profile",
-            help="Versioned rule profile. Defaults to recommended-v1 without --rule.",
+            help=("Versioned rule profile: recommended-v1 (default) or recommended-v2."),
         ),
     ] = None,
     rules: Annotated[

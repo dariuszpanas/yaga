@@ -24,10 +24,14 @@ operations through `yaga gate` and keep the composite Action as a supported adap
 - Keep `workflow check`, `workflow security`, and `workflow lint` on the same default and explicit
   path-selection contract. They respectively own immutable-reference policy, a narrow pure-Python
   trust policy, and pinned actionlint syntax checks. Freeze the documented `recommended-v1`
-  security rules; future defaults require a new profile. Do not merge their diagnostics or imply
-  that one replaces another. Immutable-reference policy includes `uses`, job-container images, and
-  service-container images; container images require literal lowercase SHA-256 digests, except for
-  GitHub's quoted-empty disabled service image.
+  security rules and keep them as the no-option default. `recommended-v2` is the explicit opt-in
+  superset that also requires every direct runner-resolved `actions/checkout` step to set exactly
+  one literal `with.persist-credentials: false`; wrapper Actions remain outside that rule. Match the
+  runner's remote-reference segmentation conservatively and reject ambiguous scalar tags or input
+  environment-name collisions. Future defaults require a new profile. Do not merge the providers'
+  diagnostics or imply that one replaces another. Immutable-reference policy includes `uses`,
+  job-container images, and service-container images; container images require literal lowercase
+  SHA-256 digests, except for GitHub's quoted-empty disabled service image.
 - Keep privileged checkout analysis fail-closed without emulating GitHub expressions: on
   `pull_request_target` or `workflow_run`, dynamic `actions/checkout` `ref` or `repository` inputs
   fail, as does any `allow-unsafe-pr-checkout` value other than literal `false`.

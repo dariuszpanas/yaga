@@ -43,7 +43,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert (
         "uv run yaga repo check --check commit --check workflow --check workflow-security "
         "--check workflow-lint "
-        "--commit HEAD --workflow-path .github/workflows --workflow-path examples"
+        "--commit HEAD --workflow-path .github/workflows --workflow-path examples "
+        "--workflow-security-profile recommended-v2"
     ) in makefile
 
     for documentation in ("README.md", "CONTRIBUTING.md"):
@@ -60,6 +61,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "Run aggregate repository checks" in ci
     assert "yaga repo check" in ci
     assert "--check commit --check workflow --check workflow-security --check workflow-lint" in ci
+    assert "--workflow-security-profile recommended-v2" in ci
     assert (
         "ref: ${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}"

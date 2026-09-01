@@ -63,12 +63,20 @@ expressions instead of approximating the Actions expression language.
 
 `workflow security` is a separate pure-Python provider over immutable, source-located facts from
 that same bounded composition. Keep `recommended-v1` frozen to its documented permission,
-`write-all`, named-secret, and privileged-checkout rules; future defaults require a new versioned
-profile. Exact custom rules are closed, unique, and canonical. Do not duplicate actionlint's script
-injection or schema checks, infer arbitrary job permissions, expose raw facts, or let this installed
-provider enter either dependency-free Action import graph.
+`write-all`, named-secret, and privileged-checkout rules, and keep it as the no-option default.
+`recommended-v2` is the explicit opt-in superset that also requires direct runner-resolved
+`actions/checkout` steps to set one literal `with.persist-credentials: false`; it does not inspect
+wrapper Actions. Match the runner's slash and backslash path segmentation conservatively, and fail
+closed on non-scalar, non-ASCII, duplicate, or runner-environment-colliding input evidence and on
+unsupported scalar tags.
+Future defaults require another versioned profile. Exact custom rules are closed, unique, and
+canonical.
+Do not duplicate actionlint's script injection or schema checks, infer arbitrary job permissions,
+expose raw facts, or let this installed provider enter either dependency-free Action import graph.
 The privileged-checkout rule deliberately rejects dynamic `ref` or `repository` expressions and
 any non-false `allow-unsafe-pr-checkout` value instead of approximating GitHub's expression parser.
+The persisted-credentials rule likewise rejects missing, dynamic, non-scalar, or ambiguous inputs
+instead of approximating checkout or expression behavior.
 
 `workflow lint` shares `workflow check`'s default and explicit path-selection contract, but it is an
 installed-only adapter around the fixed

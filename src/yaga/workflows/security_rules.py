@@ -15,16 +15,20 @@ from yaga.workflows.security_facts import (
     WorkflowValueKind,
 )
 from yaga.workflows.security_models import (
+    RECOMMENDED_V1_RULES,
+    RECOMMENDED_V2_RULES,
     WORKFLOW_SECURITY_RULE_ORDER,
     WorkflowSecurityProfile,
     WorkflowSecurityRule,
     WorkflowSecuritySelection,
 )
 
-RECOMMENDED_V1_RULES = WORKFLOW_SECURITY_RULE_ORDER
-MAX_SECURITY_RULES = len(RECOMMENDED_V1_RULES)
+MAX_SECURITY_RULES = len(WORKFLOW_SECURITY_RULE_ORDER)
 
 _CODE_PREFIX = "security."
+_PERSIST_CREDENTIALS_ENV_NAME = "PERSIST-CREDENTIALS"
+_YAML_BOOLEAN_TAG = "tag:yaml.org,2002:bool"
+_YAML_STRING_TAG = "tag:yaml.org,2002:str"
 _MESSAGES = {
     WorkflowSecurityRule.PERMISSIONS_EXPLICIT: "workflow must declare top-level permissions",
     WorkflowSecurityRule.PERMISSIONS_TOP_LEVEL_WRITE: (
@@ -37,6 +41,14 @@ _MESSAGES = {
     WorkflowSecurityRule.CHECKOUT_UNTRUSTED_REF: (
         "privileged workflow must not check out an untrusted event ref"
     ),
+    WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS: (
+        "actions/checkout must disable persisted credentials"
+    ),
+}
+
+_PROFILE_RULES = {
+    WorkflowSecurityProfile.RECOMMENDED_V1: RECOMMENDED_V1_RULES,
+    WorkflowSecurityProfile.RECOMMENDED_V2: RECOMMENDED_V2_RULES,
 }
 
 
@@ -63,7 +75,7 @@ def normalize_security_rules(
             raise InputError("the custom workflow security profile requires explicit rules")
         return WorkflowSecuritySelection(
             profile=normalized_profile,
-            rules=RECOMMENDED_V1_RULES,
+            rules=_PROFILE_RULES[normalized_profile],
         )
 
     if len(rules) > MAX_SECURITY_RULES:
@@ -81,7 +93,7 @@ def normalize_security_rules(
     if len(set(normalized)) != len(normalized):
         raise InputError("workflow security rules must not be repeated")
     selected = frozenset(normalized)
-    canonical = tuple(rule for rule in RECOMMENDED_V1_RULES if rule in selected)
+    canonical = tuple(rule for rule in WORKFLOW_SECURITY_RULE_ORDER if rule in selected)
     return WorkflowSecuritySelection(
         profile=WorkflowSecurityProfile.CUSTOM,
         rules=canonical,
@@ -161,6 +173,11 @@ def evaluate_workflow_security(
                         step,
                     )
 
+    if WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS in selected:
+        for job in facts.jobs:
+            for step in job.steps:
+                _check_checkout_persist_credentials(diagnostics, step)
+
     diagnostics.sort(key=lambda item: (item.line, item.column, item.code, item.message))
     return tuple(diagnostics)
 
@@ -223,6 +240,54 @@ def _check_privileged_checkout(
             )
 
 
+def _check_checkout_persist_credentials(
+    diagnostics: list[WorkflowDiagnostic],
+    step: WorkflowSecurityStep,
+) -> None:
+    checkout_uses = tuple(
+        scalar
+        for uses in step.uses
+        if (scalar := _scalar(uses)) is not None and _is_checkout(scalar.value)
+    )
+    if not checkout_uses or _persist_credentials_disabled(step):
+        return
+    for scalar in checkout_uses:
+        _diagnose_at(
+            diagnostics,
+            WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,
+            scalar,
+        )
+
+
+def _persist_credentials_disabled(step: WorkflowSecurityStep) -> bool:
+    if len(step.inputs) != 1:
+        return False
+    inputs = step.inputs[0]
+    if inputs.value.kind is not WorkflowValueKind.MAPPING:
+        return False
+    candidates: list[tuple[LocatedScalar, LocatedValue]] = []
+    for entry in inputs.entries:
+        key = _scalar(entry.key)
+        if key is None or not key.value.isascii():
+            return False
+        environment_name = key.value.replace(" ", "_").upper()
+        if environment_name == _PERSIST_CREDENTIALS_ENV_NAME:
+            candidates.append((key, entry.value))
+    if len(candidates) != 1:
+        return False
+    key, value = candidates[0]
+    return key.tag == _YAML_STRING_TAG and _checkout_literal_false(value)
+
+
+def _checkout_literal_false(value: LocatedValue) -> bool:
+    scalar = _scalar(value)
+    return (
+        scalar is not None
+        and scalar.tag in {_YAML_BOOLEAN_TAG, _YAML_STRING_TAG}
+        and scalar.value == "false"
+    )
+
+
 def _dynamic_expression(value: str) -> bool:
     return "${{" in value
 
@@ -234,7 +299,16 @@ def _literal_false(value: LocatedValue) -> bool:
 
 def _is_checkout(value: str) -> bool:
     path, separator, _revision = value.partition("@")
-    return bool(separator) and path.casefold() == "actions/checkout"
+    if not separator:
+        return False
+    segments = tuple(segment for segment in path.replace("\\", "/").split("/") if segment)
+    return (
+        len(segments) >= 2
+        and segments[0].isascii()
+        and segments[1].isascii()
+        and segments[0].lower() == "actions"
+        and segments[1].lower() == "checkout"
+    )
 
 
 def _diagnose_at(

@@ -245,7 +245,7 @@ annotations use exit `0` for success, `1` for policy findings, and `2` for disco
 or resource-limit errors.
 
 `yaga workflow security` applies a narrow, pure-Python trust policy to the same bounded workflow
-selection. Its versioned `recommended-v1` profile requires an explicit read-only top-level
+selection. The default, frozen `recommended-v1` profile requires an explicit read-only top-level
 `permissions` boundary, keeps write scopes at individual jobs, rejects `write-all`, requires named
 secret handoff instead of `secrets: inherit`, and hardens `actions/checkout` under privileged
 `pull_request_target` or `workflow_run`. In those workflows, `ref` and `repository` selections must
@@ -256,7 +256,7 @@ literal value `false`. These rules follow GitHub's
 but intentionally remain a small policy checker rather than a replacement for CodeQL, Scorecard,
 or a broader Actions security scanner.
 
-The frozen profile exposes five independently selectable rule IDs:
+The frozen `recommended-v1` profile exposes five independently selectable rule IDs:
 
 - `permissions.explicit` requires a top-level permission boundary.
 - `permissions.top_level_write` moves mapping write scopes from the workflow to individual jobs.
@@ -264,19 +264,30 @@ The frozen profile exposes five independently selectable rule IDs:
 - `secrets.inherit` requires reusable-workflow jobs to name each forwarded secret.
 - `checkout.untrusted_ref` applies the privileged-checkout restrictions above.
 
+The opt-in `recommended-v2` profile contains those same five rules and adds
+`checkout.persist_credentials`. Every direct step that the runner resolves to the
+`actions/checkout` repository must provide exactly one scalar `with.persist-credentials` value with
+the literal spelling `false`; plain and quoted values are accepted. A missing input, another value,
+an expression, a non-scalar value, or an ambiguous duplicate fails closed at the checkout step.
+Input names must be scalar ASCII values so Unicode or environment-name collisions cannot shadow
+the required setting. This rule covers direct `actions/checkout` calls only: a wrapper Action must
+enforce and document its own credential handling.
+
 ```bash
 yaga workflow security
+yaga workflow security --profile recommended-v2
 yaga workflow security .github/workflows examples --format github
 yaga workflow security \
   --rule permissions.explicit \
   --rule checkout.untrusted_ref
 ```
 
-With no selection options, `recommended-v1` is stable: adding a future rule will require a new
-profile instead of silently changing an existing gate. Repeat `--rule` to replace the profile with
-one exact, unique custom rule set; do not combine custom rules with `--profile`. Text, versioned
-JSON, and escaped GitHub output preserve the same `0`/`1`/`2` success, finding, and operational-error
-contract as the immutable-reference checker.
+With no selection options, YAGA still selects `recommended-v1`; opting in to `recommended-v2` is an
+explicit policy migration. Adding another future default requires another versioned profile instead
+of silently changing either existing gate. Repeat `--rule` to replace the profile with one exact,
+unique custom rule set; do not combine custom rules with `--profile`. Text, versioned JSON, and
+escaped GitHub output preserve the same `0`/`1`/`2` success, finding, and operational-error contract
+as the immutable-reference checker.
 
 `yaga workflow lint` complements that pure-Python reference policy with GitHub workflow syntax and
 schema checks. It accepts the same paths as `workflow check`: no paths selects direct `.yml` and
@@ -348,8 +359,10 @@ bounded parse of the same workflow bytes selected by repeatable `--workflow-path
 lint may add its bounded transitive support snapshot. Omitting `workflow-lint` keeps the aggregate
 pure Python and does not require Docker. Commit source and configuration options are rejected
 unless `commit` is selected, and workflow paths or security-selection options are rejected unless
-their provider is selected. Use `--workflow-security-profile recommended-v1` or repeat
-`--workflow-security-rule` for an exact custom selection in the aggregate command.
+their provider is selected. Use `--workflow-security-profile recommended-v1` for the frozen
+default, `--workflow-security-profile recommended-v2` to require checkout credential persistence
+to be disabled, or repeat `--workflow-security-rule` for an exact custom selection in the
+aggregate command.
 
 Text preserves one section per provider. Versioned JSON embeds each existing provider document
 under a `repository_check` envelope. GitHub output uses balanced provider groups and one shared
