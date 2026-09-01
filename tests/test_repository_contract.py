@@ -10,7 +10,7 @@ ROOT = Path(__file__).parents[1]
 FULL_SHA = re.compile(r"dariuszpanas/yaga@([0-9a-f]{40})(?:\s|$)")
 RESERVED_STATUS_NAMES = {"codex review", "ci gate"}
 COMMIT_CHECK_ACTION = (
-    "dariuszpanas/yaga/actions/commit-check@407c9ba487e8b8aa15476f6884f9b8df43100c8e"
+    "dariuszpanas/yaga/actions/commit-check@cd02385e3216ac544e7783c7dd6929340e230e95"
 )
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 
@@ -285,7 +285,7 @@ def test_pre_commit_provider_is_one_closed_file_adapter() -> None:
         '  minimum_pre_commit_version: "3.2.0"\n'
     )
     assert "repo: https://github.com/dariuszpanas/yaga" in readme
-    assert "rev: 407c9ba487e8b8aa15476f6884f9b8df43100c8e" in readme
+    assert "rev: cd02385e3216ac544e7783c7dd6929340e230e95" in readme
     assert "id: yaga-commit-check" in readme
     assert "pre-commit install --hook-type commit-msg --install-hooks" in readme
 
