@@ -107,8 +107,20 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   names a worktree subdirectory, including bounded `.git`, linked-worktree `commondir`, and external
   object-directory resolution plus cycle-safe local alternate chains capped at 128 directories;
   unsupported older Git clients fail closed. Shallow repositories are allowed when the selected
-  objects exist. Keep the provider out of both Action graphs and repository-plan v1 until explicitly
-  added.
+  objects exist; reject legacy graft overlays before resolution and recheck after enumeration. Keep
+  the provider out of both Action graphs and repository-plan v1 until explicitly added.
+- Keep `size check` installed-only and require an explicit versioned policy plus exact commit-ish;
+  only `--repo` may default to `.`. Never infer HEAD, discover policy, fetch, parse events, inspect
+  worktree/index/untracked state, or recurse into gitlinks. Schema v1 uses a required nonnegative
+  default blob limit, optional total limit, and at most 128 ordered first-match path overrides with
+  the canonical anchored literal/component-`*`/whole-component-`**` grammar and one shared
+  10,000,000-unit work ceiling. Keep every individual and aggregate byte count at or below the
+  2^53 - 1 portable-integer limit. Resolve one commit and tree, then strictly parse bounded
+  recursive full-tree `ls-tree` object metadata. Count regular, executable, and symlink blob bytes; exclude
+  gitlinks; count duplicate OIDs per path; treat LFS pointers as stored pointer bytes; preserve
+  `size.blob` then `size.total` ordering, 50,000-entry and 64 MiB caps, and shallow support only when
+  all selected objects exist. Reject legacy graft overlays before resolution and recheck after
+  enumeration. Keep it out of both Action graphs and repository-plan v1.
 - The installed CLI may use the locked Typer dependency. The write-capable root Action may not
   import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
   the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the
