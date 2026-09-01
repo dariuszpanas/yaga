@@ -186,6 +186,9 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/commands/change.py"' in build_gate
     assert '"yaga/commands/branch.py"' in build_gate
     assert '"yaga/commands/tree.py"' in build_gate
+    assert '"yaga/git/__init__.py"' in build_gate
+    assert '"yaga/git/process.py"' in build_gate
+    assert '"yaga/git/runtime.py"' in build_gate
     assert '"yaga/commits/service.py"' in build_gate
     assert '"yaga/changes/__init__.py"' in build_gate
     assert '"yaga/changes/checker.py"' in build_gate
@@ -292,6 +295,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         ROOT / "src" / "yaga" / "commit_action_cli.py",
         ROOT / "src" / "yaga" / "commit_action_runtime.py",
         ROOT / "src" / "yaga" / "files.py",
+        *(ROOT / "src" / "yaga" / "git").glob("*.py"),
         *(ROOT / "src" / "yaga" / "commits").glob("*.py"),
     ]
 

@@ -50,10 +50,18 @@ yaga commit check --commit HEAD~1
 yaga commit check --range origin/main..HEAD
 ```
 
-Range checks read complete commit messages from Git in oldest-first order. They do not fetch missing
-history or invoke a shell, and they reject shallow repositories rather than silently weaken a
-selection. An empty range, a missing ref, or a selection above the configured commit limit is an
-operational error.
+Git commit and range sources read complete messages without fetching or invoking a shell. Exact
+commit checks select one commit; range checks preserve oldest-first order. Both require complete,
+non-shallow history because Git's shallow boundary can hide stored parents, and both reject legacy
+graft overlays. Replacement refs are disabled for commit, change, and tree selection. An empty
+range, a missing ref, or a selection above the configured commit limit is an operational error.
+
+All Git-backed checks share one bounded runtime. It resolves an absolute regular Git executable
+outside the enclosing worktree and its resolved metadata and object-store boundaries, starts no
+shell, inherits only a minimal environment, disables pagers and prompts, contains the spawned
+process tree, and enforces hard time and output limits including bounded termination cleanup. Every
+command uses Git's global `--no-lazy-fetch` option, so an unsupported client or a missing promised
+object fails closed instead of contacting a remote.
 
 The built-in policy enforces only Conventional Commit structure, accepts any type and scope, and
 ignores commits that Git proves have multiple parents. Put stricter project policy in the nearest
@@ -375,11 +383,11 @@ YAGA resolves the selected value as exactly one commit and enumerates its tree w
 NUL-delimited Git output. It never fetches, reads tracked file contents, follows a submodule, or
 consults the worktree, index, or untracked files. Regular and executable files, symlinks, and
 gitlinks all count as leaf paths. A shallow checkout is acceptable when the selected commit and
-tree objects already exist. Every Git command uses the global `--no-lazy-fetch` control, so Git
-versions that do not support that fail closed rather than contacting a promisor remote. Git
-executable checks cover the outermost enclosing repository even when `--repo` names a worktree
-subdirectory, plus bounded resolved `.git`, linked-worktree `commondir`, object-directory, and local
-alternate-object-store metadata. Alternate chains are cycle-safe and limited to 128 directories.
+tree objects already exist. The runtime checks the outermost enclosing repository even when
+`--repo` names a worktree subdirectory, plus bounded resolved `.git`, linked-worktree `commondir`,
+object-directory, and local alternate-object-store metadata. Alternate chains are cycle-safe and
+limited to 128 directories. Repository pointer and alternate metadata must be bounded regular files
+that retain their identity while opened; special files fail closed before Git starts.
 This is path policy, not secret-content detection.
 
 Missing paths report `tree.required`; tracked paths matching the first configured forbidden
