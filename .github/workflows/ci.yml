@@ -56,6 +56,7 @@ jobs:
           --check commit --check workflow --check workflow-security --check workflow-lint
           --commit HEAD
           --workflow-path .github/workflows --workflow-path examples
+          --workflow-security-profile recommended-v2
           --format github
       - name: Exercise the cached actionlint integration
         run: >-

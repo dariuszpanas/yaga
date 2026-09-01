@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from yaga.workflows.security_models import WorkflowSecurityRule
-from yaga.workflows.security_rules import RECOMMENDED_V1_RULES, evaluate_workflow_security
+from yaga.workflows.security_rules import (
+    RECOMMENDED_V1_RULES,
+    RECOMMENDED_V2_RULES,
+    evaluate_workflow_security,
+)
 from yaga.workflows.yaml import parse_workflow_bundle
 
 PIN = "a" * 40
@@ -255,3 +259,212 @@ def test_exact_custom_rule_selection_does_not_run_unselected_rules() -> None:
     raw = "permissions: write-all\njobs: {}\n"
 
     assert _codes(raw, (WorkflowSecurityRule.PERMISSIONS_EXPLICIT,)) == []
+
+
+def test_recommended_v1_remains_frozen_without_checkout_credential_policy() -> None:
+    raw = f"""\
+permissions: {{}}
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@{PIN}
+"""
+
+    assert _codes(raw, RECOMMENDED_V1_RULES) == []
+    assert _codes(raw, RECOMMENDED_V2_RULES) == ["security.checkout.persist_credentials"]
+
+
+@pytest.mark.parametrize(
+    "inputs",
+    [
+        "",
+        "        with:\n          fetch-depth: 0\n",
+        "        with: false\n",
+        "        with: []\n",
+        "        with:\n          persist-credentials: true\n",
+        "        with:\n          persist-credentials: TRUE\n",
+        "        with:\n          persist-credentials: ${{ false }}\n",
+        "        with:\n          persist-credentials: {}\n",
+        "        with:\n          persist-credentials: [false]\n",
+        "        with:\n          persist-credentials: !!null false\n",
+        "        with:\n          persist-credentials: !custom false\n",
+        "        with:\n          !!null persist-credentials: false\n",
+        "        with:\n          !custom persist-credentials: false\n",
+        "        with:\n          perſist-credentials: false\n",
+        (
+            "        with:\n"
+            "          persist-credentials: false\n"
+            "          !!null persist-credentials: true\n"
+        ),
+        (
+            "        with:\n"
+            "          persist-credentials: false\n"
+            "          perſist-credentials: true\n"
+        ),
+        (
+            "        with:\n"
+            "          persıst-credentials: true\n"
+            "          persist-credentials: false\n"
+        ),
+        (
+            "        with:\n"
+            "          persist-credentials: false\n"
+            "        with:\n"
+            "          persist-credentials: false\n"
+        ),
+        (
+            "        with:\n"
+            "          persist-credentials: false\n"
+            "          PERSIST-CREDENTIALS: false\n"
+        ),
+    ],
+)
+def test_recommended_v2_rejects_missing_or_ambiguous_checkout_credential_policy(
+    inputs: str,
+) -> None:
+    raw = f"""\
+permissions: {{}}
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@{PIN}
+{inputs}"""
+
+    diagnostics = _diagnostics(raw, RECOMMENDED_V2_RULES)
+
+    assert [(item.code, item.line, item.column) for item in diagnostics] == [
+        ("security.checkout.persist_credentials", 5, 15)
+    ]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "false",
+        "'false'",
+        '"false"',
+        "!!bool false",
+        "!!str false",
+    ],
+)
+@pytest.mark.parametrize(
+    "input_name",
+    ["persist-credentials", "PERSIST-CREDENTIALS", "!!str persist-credentials"],
+)
+def test_recommended_v2_accepts_literal_false_checkout_credential_policy(
+    input_name: str,
+    value: str,
+) -> None:
+    raw = f"""\
+permissions: {{}}
+jobs:
+  check:
+    steps:
+      - uses: ACTIONS/CHECKOUT@{PIN}
+        with:
+          {input_name}: {value}
+          fetch-depth: 0
+"""
+
+    assert _codes(raw, RECOMMENDED_V2_RULES) == []
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        f"""\
+permissions: {{}}
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@{PIN}
+        with: {{persist-credentials: false}}
+""",
+        f"""\
+checkout-inputs: &checkout-inputs
+  persist-credentials: false
+permissions: {{}}
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@{PIN}
+        with: *checkout-inputs
+""",
+    ],
+)
+def test_recommended_v2_accepts_inline_and_aliased_safe_inputs(raw: str) -> None:
+    assert _codes(raw, RECOMMENDED_V2_RULES) == []
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        f"owner/checkout@{PIN}",
+        "actions/checkout",
+        "${{ matrix.action }}",
+    ],
+)
+def test_checkout_credential_policy_ignores_non_direct_checkout_references(action: str) -> None:
+    raw = f"""\
+permissions: {{}}
+jobs:
+  check:
+    steps:
+      - uses: {action}
+"""
+
+    assert _codes(raw, (WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,)) == []
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        f"actions//checkout@{PIN}",
+        f"actions\\checkout@{PIN}",
+        f"actions/checkout/.@{PIN}",
+        f"ACTIONS/CHECKOUT/subaction@{PIN}",
+    ],
+)
+def test_checkout_identity_fails_closed_for_runner_compatible_paths(action: str) -> None:
+    raw = f"""\
+on: pull_request_target
+permissions: {{}}
+jobs:
+  check:
+    steps:
+      - uses: {action}
+        with:
+          ref: ${{{{ github.event.pull_request.head.sha }}}}
+"""
+
+    assert _codes(
+        raw,
+        (
+            WorkflowSecurityRule.CHECKOUT_UNTRUSTED_REF,
+            WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,
+        ),
+    ) == [
+        "security.checkout.persist_credentials",
+        "security.checkout.untrusted_ref",
+    ]
+
+
+def test_checkout_credential_policy_reports_each_direct_checkout_occurrence() -> None:
+    raw = f"""\
+permissions: {{}}
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@{PIN}
+        uses: ACTIONS/CHECKOUT@{PIN}
+"""
+
+    diagnostics = _diagnostics(
+        raw,
+        (WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,),
+    )
+
+    assert [(item.code, item.line, item.column) for item in diagnostics] == [
+        ("security.checkout.persist_credentials", 5, 15),
+        ("security.checkout.persist_credentials", 6, 15),
+    ]

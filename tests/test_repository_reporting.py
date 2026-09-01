@@ -34,10 +34,12 @@ from yaga.workflows.models import (
     WorkflowResult,
 )
 from yaga.workflows.security_models import (
-    WORKFLOW_SECURITY_RULE_ORDER,
+    RECOMMENDED_V1_RULES,
+    RECOMMENDED_V2_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityReport,
     WorkflowSecurityResult,
+    WorkflowSecurityRule,
 )
 
 
@@ -81,10 +83,14 @@ def lint_report(*diagnostics: WorkflowDiagnostic) -> WorkflowLintReport:
     )
 
 
-def security_report(*diagnostics: WorkflowDiagnostic) -> WorkflowSecurityReport:
+def security_report(
+    *diagnostics: WorkflowDiagnostic,
+    profile: WorkflowSecurityProfile = WorkflowSecurityProfile.RECOMMENDED_V1,
+    rules: tuple[WorkflowSecurityRule, ...] = RECOMMENDED_V1_RULES,
+) -> WorkflowSecurityReport:
     return WorkflowSecurityReport(
-        profile=WorkflowSecurityProfile.RECOMMENDED_V1,
-        rules=WORKFLOW_SECURITY_RULE_ORDER,
+        profile=profile,
+        rules=rules,
         results=(
             WorkflowSecurityResult(
                 path=".github/workflows/security.yml",
@@ -205,6 +211,29 @@ def test_repository_text_keeps_provider_reports_in_separate_sections() -> None:
     assert "== workflow-security [PASSED] ==\nProfile: recommended-v1" in rendered
     assert "== workflow-lint [ERROR] ==\nYAGA input error: Docker unavailable" in rendered
     assert rendered.endswith("Repository checks: 3 selected; 2 passed, 0 failed, 1 errored.")
+
+
+def test_repository_reports_preserve_recommended_v2_selection() -> None:
+    report = RepositoryReport(
+        checks=(
+            RepositoryCheckResult(
+                provider=RepositoryProvider.WORKFLOW_SECURITY,
+                report=security_report(
+                    profile=WorkflowSecurityProfile.RECOMMENDED_V2,
+                    rules=RECOMMENDED_V2_RULES,
+                ),
+            ),
+        )
+    )
+
+    document = json.loads(render_repository_report(report, RepositoryOutputFormat.JSON))
+    rendered = render_repository_report(report, RepositoryOutputFormat.TEXT)
+
+    security = document["checks"][0]["report"]
+    assert security["profile"] == "recommended-v2"
+    assert security["rules"] == [rule.value for rule in RECOMMENDED_V2_RULES]
+    assert "Profile: recommended-v2" in rendered
+    assert "checkout.persist_credentials" in rendered
 
 
 def test_repository_github_report_balances_groups_and_uses_one_global_annotation_budget() -> None:

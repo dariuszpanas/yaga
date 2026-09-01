@@ -8,7 +8,11 @@ import pytest
 
 from yaga.errors import InputError
 from yaga.workflows.security_models import WorkflowSecurityProfile, WorkflowSecurityRule
-from yaga.workflows.security_rules import RECOMMENDED_V1_RULES, normalize_security_rules
+from yaga.workflows.security_rules import (
+    RECOMMENDED_V1_RULES,
+    RECOMMENDED_V2_RULES,
+    normalize_security_rules,
+)
 
 
 def test_default_and_explicit_recommended_profile_select_canonical_rules() -> None:
@@ -20,13 +24,29 @@ def test_default_and_explicit_recommended_profile_select_canonical_rules() -> No
     assert default.rules == RECOMMENDED_V1_RULES
 
 
+def test_recommended_v2_is_explicit_and_adds_checkout_credential_policy() -> None:
+    selection = normalize_security_rules(profile="recommended-v2")
+
+    assert selection.profile is WorkflowSecurityProfile.RECOMMENDED_V2
+    assert selection.rules == RECOMMENDED_V2_RULES
+    assert selection.rules[:-1] == RECOMMENDED_V1_RULES
+    assert selection.rules[-1] is WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS
+
+
 def test_custom_rules_are_exact_and_canonical_regardless_argument_order() -> None:
-    selection = normalize_security_rules(rules=("secrets.inherit", "permissions.explicit"))
+    selection = normalize_security_rules(
+        rules=(
+            "checkout.persist_credentials",
+            "secrets.inherit",
+            "permissions.explicit",
+        )
+    )
 
     assert selection.profile is WorkflowSecurityProfile.CUSTOM
     assert selection.rules == (
         WorkflowSecurityRule.PERMISSIONS_EXPLICIT,
         WorkflowSecurityRule.SECRETS_INHERIT,
+        WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,
     )
 
 

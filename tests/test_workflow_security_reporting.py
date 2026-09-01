@@ -9,7 +9,8 @@ import pytest
 from yaga.errors import InputError
 from yaga.workflows.models import WorkflowDiagnostic, WorkflowOutputFormat
 from yaga.workflows.security_models import (
-    WORKFLOW_SECURITY_RULE_ORDER,
+    RECOMMENDED_V1_RULES,
+    RECOMMENDED_V2_RULES,
     WorkflowSecurityProfile,
     WorkflowSecurityReport,
     WorkflowSecurityResult,
@@ -37,7 +38,7 @@ def diagnostic(
 def report_with(
     *results: WorkflowSecurityResult,
     profile: WorkflowSecurityProfile = WorkflowSecurityProfile.RECOMMENDED_V1,
-    rules: tuple[WorkflowSecurityRule, ...] = WORKFLOW_SECURITY_RULE_ORDER,
+    rules: tuple[WorkflowSecurityRule, ...] = RECOMMENDED_V1_RULES,
 ) -> WorkflowSecurityReport:
     return WorkflowSecurityReport(profile=profile, rules=rules, results=results)
 
@@ -143,6 +144,23 @@ def test_custom_rule_selection_serializes_custom_profile_and_canonical_rules() -
     )
 
 
+def test_recommended_v2_selection_renders_its_additive_rule() -> None:
+    report = report_with(
+        profile=WorkflowSecurityProfile.RECOMMENDED_V2,
+        rules=RECOMMENDED_V2_RULES,
+    )
+
+    document = workflow_security_report_document(report)
+
+    assert document["profile"] == "recommended-v2"
+    assert document["rules"] == [rule.value for rule in RECOMMENDED_V2_RULES]
+    assert render_workflow_security_report(report, WorkflowOutputFormat.TEXT).splitlines()[0] == (
+        "Profile: recommended-v2; rules: permissions.explicit, "
+        "permissions.top_level_write, permissions.write_all, secrets.inherit, "
+        "checkout.untrusted_ref, checkout.persist_credentials."
+    )
+
+
 def test_github_annotations_escape_properties_data_and_controls() -> None:
     report = report_with(
         WorkflowSecurityResult(
@@ -244,7 +262,7 @@ def test_empty_report_preserves_profile_rules_and_zero_aggregates() -> None:
     document = json.loads(render_workflow_security_report(report, WorkflowOutputFormat.JSON))
 
     assert document["profile"] == "recommended-v1"
-    assert document["rules"] == [rule.value for rule in WORKFLOW_SECURITY_RULE_ORDER]
+    assert document["rules"] == [rule.value for rule in RECOMMENDED_V1_RULES]
     assert document["valid"] is True
     assert document["checked"] == 0
     assert document["passed"] == 0

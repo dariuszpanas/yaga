@@ -12,6 +12,7 @@ class WorkflowSecurityProfile(StrEnum):
     """Closed workflow-security rule profiles."""
 
     RECOMMENDED_V1 = "recommended-v1"
+    RECOMMENDED_V2 = "recommended-v2"
     CUSTOM = "custom"
 
 
@@ -23,9 +24,21 @@ class WorkflowSecurityRule(StrEnum):
     PERMISSIONS_WRITE_ALL = "permissions.write_all"
     SECRETS_INHERIT = "secrets.inherit"
     CHECKOUT_UNTRUSTED_REF = "checkout.untrusted_ref"
+    CHECKOUT_PERSIST_CREDENTIALS = "checkout.persist_credentials"
 
 
 WORKFLOW_SECURITY_RULE_ORDER = tuple(WorkflowSecurityRule)
+RECOMMENDED_V1_RULES = (
+    WorkflowSecurityRule.PERMISSIONS_EXPLICIT,
+    WorkflowSecurityRule.PERMISSIONS_TOP_LEVEL_WRITE,
+    WorkflowSecurityRule.PERMISSIONS_WRITE_ALL,
+    WorkflowSecurityRule.SECRETS_INHERIT,
+    WorkflowSecurityRule.CHECKOUT_UNTRUSTED_REF,
+)
+RECOMMENDED_V2_RULES = (
+    *RECOMMENDED_V1_RULES,
+    WorkflowSecurityRule.CHECKOUT_PERSIST_CREDENTIALS,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,5 +117,7 @@ def _require_canonical_rules(
     canonical = tuple(rule for rule in WORKFLOW_SECURITY_RULE_ORDER if rule in selected)
     if len(selected) != len(rules) or canonical != rules:
         raise ValueError("workflow security rules must be unique and canonical")
-    if profile is WorkflowSecurityProfile.RECOMMENDED_V1 and rules != WORKFLOW_SECURITY_RULE_ORDER:
+    if profile is WorkflowSecurityProfile.RECOMMENDED_V1 and rules != RECOMMENDED_V1_RULES:
         raise ValueError("recommended-v1 requires its complete canonical rule set")
+    if profile is WorkflowSecurityProfile.RECOMMENDED_V2 and rules != RECOMMENDED_V2_RULES:
+        raise ValueError("recommended-v2 requires its complete canonical rule set")

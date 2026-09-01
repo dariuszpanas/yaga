@@ -19,6 +19,7 @@ RECOMMENDED_V1_RULES = [
     "secrets.inherit",
     "checkout.untrusted_ref",
 ]
+RECOMMENDED_V2_RULES = [*RECOMMENDED_V1_RULES, "checkout.persist_credentials"]
 
 
 def unstyle(value: str) -> str:
@@ -50,6 +51,7 @@ def test_workflow_security_help_exposes_command_and_closed_options() -> None:
     assert "--repo" in command_help
     assert "--profile" in command_help
     assert "recommended-v1" in command_help
+    assert "recommended-v2" in command_help
     assert "--rule" in command_help
     assert "Repeat explicitly" in command_help
     assert "--format" in command_help
@@ -88,6 +90,74 @@ def test_workflow_security_defaults_to_recommended_v1_and_passes_json(
             }
         ],
     }
+
+
+def test_workflow_security_accepts_recommended_v2_and_reports_its_rules(
+    tmp_path: Path,
+) -> None:
+    _write_workflow(
+        tmp_path,
+        "permissions: {}\n"
+        "jobs:\n"
+        "  check:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          persist-credentials: false\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "workflow",
+            "security",
+            "--repo",
+            str(tmp_path),
+            "--profile",
+            "recommended-v2",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    assert document["profile"] == "recommended-v2"
+    assert document["rules"] == RECOMMENDED_V2_RULES
+    assert document["valid"] is True
+
+
+def test_workflow_security_v2_finding_has_stable_github_annotation(tmp_path: Path) -> None:
+    _write_workflow(
+        tmp_path,
+        "permissions: {}\njobs:\n  check:\n    steps:\n      - uses: actions/checkout@v4\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "workflow",
+            "security",
+            "--repo",
+            str(tmp_path),
+            "--profile",
+            "recommended-v2",
+            "--format",
+            "github",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert result.stderr == ""
+    assert result.stdout.splitlines() == [
+        (
+            "::error file=.github/workflows/ci.yml,line=5,col=15,"
+            "title=YAGA security.checkout.persist_credentials::"
+            "actions/checkout must disable persisted credentials"
+        ),
+        "YAGA security checked 1 workflow file(s): 0 passed, 1 failed; 1 diagnostic(s).",
+    ]
 
 
 def test_workflow_security_repeatable_rules_are_an_exact_custom_selection(
