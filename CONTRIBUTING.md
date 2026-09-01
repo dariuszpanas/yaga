@@ -54,6 +54,20 @@ Unicode-whitespace-delimited prose-body tokens containing a Unicode alphanumeric
 recognized final footers and punctuation-only or emoji-only tokens are excluded. A nonzero value
 does not require an absent optional body, and it is invalid with a forbidden body. Keep its
 `body.word-count` diagnostic stable across text, JSON, and GitHub reports.
+`required-footer-tokens` and `forbidden-footer-tokens` are schema-v1 presence policies for complete
+commits only; pull-request titles remain header-only. Match exact tokens case-insensitively in both
+`Token: value` and `Token #value` forms, allow repeats, and do not infer identity, DCO compliance,
+or signature validity from `Signed-off-by`. Preserve the one-to-128-character ASCII token grammar,
+the 128-entry combined limit, case-insensitive duplicate and overlap rejection, and the reserved
+breaking-marker spellings.
+
+Keep footer parsing source-located and bounded. The first valid token must start a content paragraph;
+after that boundary, preserve the complete suffix as footer content, including blank lines in
+multiline values, and recognize later token starts without requiring another blank line. Emit at
+most one `footer.required` diagnostic for the first configured missing token and at most one
+`footer.forbidden` diagnostic for the earliest forbidden occurrence, after existing body
+diagnostics.
+
 `config init` creates only a new standalone `.yaga.toml` with exclusive no-overwrite semantics. It
 must refuse to shadow any effective discovered configuration, never edit `pyproject.toml`, and keep
 its deterministic starter template round-trippable through the strict loader.
