@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 
+from yaga.commands.change import app as change_app
 from yaga.commands.commit import app as commit_app
 from yaga.commands.config import app as config_app
 from yaga.commands.gate import app as gate_app
@@ -21,6 +22,7 @@ app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
+app.add_typer(change_app, name="change")
 app.add_typer(commit_app, name="commit")
 app.add_typer(config_app, name="config")
 app.add_typer(gate_app, name="gate")

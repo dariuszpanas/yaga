@@ -49,6 +49,9 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
     assert "uv run yaga workflow lint .github/workflows examples" in makefile
     assert "uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD" in makefile
+    assert (
+        "uv run yaga change check --policy .yaga/change-policy.toml --range HEAD^..HEAD" in makefile
+    )
     assert "uv run yaga repo check --check" not in makefile
 
     repository_plan = tomllib.loads(
@@ -59,6 +62,19 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         "checks": ["commit", "workflow", "workflow-security", "workflow-lint"],
         "workflow-paths": [".github/workflows", "examples"],
         "workflow-security-profile": "recommended-v3",
+    }
+    change_policy = tomllib.loads(
+        (ROOT / ".yaga" / "change-policy.toml").read_text(encoding="utf-8")
+    )
+    assert change_policy == {
+        "change-policy-version": 1,
+        "rules": [
+            {
+                "name": "python-source-needs-tests",
+                "when-any": ["src/**/*.py"],
+                "require-any": ["tests/**/*.py"],
+            }
+        ],
     }
 
     for documentation in ("README.md", "CONTRIBUTING.md"):
@@ -75,6 +91,13 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "Run aggregate repository checks" in ci
     assert "yaga repo check" in ci
     assert "--plan .yaga/checks/ci.toml" in ci
+    assert "Run changed-path policy" in ci
+    assert "yaga change check" in ci
+    assert "--policy .yaga/change-policy.toml" in ci
+    assert "fetch-depth: 0" in ci
+    assert "YAGA_CHANGE_BASE" in ci
+    assert "YAGA_CHANGE_HEAD" in ci
+    assert "YAGA_CHANGE_SEPARATOR" in ci
     assert (
         "--check commit --check workflow --check workflow-security --check workflow-lint" not in ci
     )
@@ -108,7 +131,16 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"workflow", "lint", "--help"' in build_gate
     assert '"repo",\n            "check"' in build_gate
     assert '"yaga/commands/repo.py"' in build_gate
+    assert '"yaga/commands/change.py"' in build_gate
     assert '"yaga/commits/service.py"' in build_gate
+    assert '"yaga/changes/__init__.py"' in build_gate
+    assert '"yaga/changes/checker.py"' in build_gate
+    assert '"yaga/changes/git.py"' in build_gate
+    assert '"yaga/changes/models.py"' in build_gate
+    assert '"yaga/changes/patterns.py"' in build_gate
+    assert '"yaga/changes/policy.py"' in build_gate
+    assert '"yaga/changes/reporting.py"' in build_gate
+    assert '"yaga/changes/service.py"' in build_gate
     assert '"yaga/repository/checker.py"' in build_gate
     assert '"yaga/repository/plan.py"' in build_gate
     assert '"yaga/workflows/inputs.py"' in build_gate
@@ -175,9 +207,11 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         source = path.read_text(encoding="utf-8")
         assert "import typer" not in source, path
         assert "from yaga.cli" not in source, path
+        assert "from yaga.changes" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.commits" not in source, path
         assert "from yaga.workflows" not in source, path
+        assert "import yaga.changes" not in source, path
 
 
 def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
@@ -192,8 +226,10 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         source = path.read_text(encoding="utf-8")
         assert "import typer" not in source, path
         assert "from yaga.cli" not in source, path
+        assert "from yaga.changes" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.codex" not in source, path
         assert "from yaga.workflows" not in source, path
         assert "from yaga.github import" not in source, path
+        assert "import yaga.changes" not in source, path
         assert "GITHUB_TOKEN" not in source, path
