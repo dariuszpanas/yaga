@@ -36,6 +36,19 @@ jobs:
       - run: >-
           uv run --frozen --python 3.12 yaga commit check
           --message "feat(ci): exercise the installed CLI"
+      - name: Exercise the pre-commit provider
+        run: |
+          printf '%s\n' 'not conventional' > "$RUNNER_TEMP/YAGA_COMMIT_EDITMSG"
+          YAGA_PRE_COMMIT_STATUS=0
+          uv run --frozen --python 3.12 pre-commit try-repo . yaga-commit-check \
+            --hook-stage commit-msg \
+            --commit-msg-filename "$RUNNER_TEMP/YAGA_COMMIT_EDITMSG" \
+            > "$RUNNER_TEMP/yaga-pre-commit.log" 2>&1 || YAGA_PRE_COMMIT_STATUS=$?
+          cat "$RUNNER_TEMP/yaga-pre-commit.log"
+          test "$YAGA_PRE_COMMIT_STATUS" -eq 1
+          grep -F -- 'hook id: yaga-commit-check' "$RUNNER_TEMP/yaga-pre-commit.log"
+          grep -F -- 'exit code: 1' "$RUNNER_TEMP/yaga-pre-commit.log"
+          grep -F -- '[syntax.header]' "$RUNNER_TEMP/yaga-pre-commit.log"
       - run: uv run --frozen --python 3.12 python scripts/run_actionlint.py
       - run: bash -n scripts/composite_smoke_python
       - run: uv run --frozen --python 3.12 python scripts/check_build.py

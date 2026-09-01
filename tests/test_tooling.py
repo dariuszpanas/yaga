@@ -84,13 +84,20 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     build_requirements = project["build-system"]["requires"]
     assert build_requirements == ["hatchling==1.32.0"]
     assert "hatchling==1.32.0" in project["dependency-groups"]["dev"]
+    assert "pre-commit>=4.6.2,<5" in project["dependency-groups"]["dev"]
     assert project["tool"]["uv"]["required-version"] == "==0.9.18"
+
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert ci.count('version: "0.9.18"') == 2
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
     assert 'yaga commit check\n          --message "feat(ci): exercise the installed CLI"' in ci
+    assert "pre-commit try-repo . yaga-commit-check" in ci
+    assert 'test "$YAGA_PRE_COMMIT_STATUS" -eq 1' in ci
+    assert "grep -F -- '[syntax.header]'" in ci
 
 
 def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> None:

@@ -17,6 +17,7 @@ keywords = [
     "conventional-commits",
     "git",
     "github-actions",
+    "pre-commit",
     "quality-assurance",
 ]
 classifiers = [
@@ -47,6 +48,7 @@ yaga = "yaga.cli:app"
 [dependency-groups]
 dev = [
     "hatchling==1.32.0",
+    "pre-commit>=4.6.2,<5",
     "pytest>=8.3",
     "ruff>=0.14.13",
     "ty>=0.0.12",

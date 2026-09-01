@@ -94,10 +94,42 @@ Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.re
 | `1` | At least one commit violated policy. |
 | `2` | Invocation, input, configuration, or Git failed. |
 
-A `commit-msg` hook can call `yaga commit check --file "$1"`. CI should use a non-shallow checkout
-containing the exact base and head, then call `yaga commit check --range "$BASE_SHA..$HEAD_SHA"`. `--quiet`
-suppresses validation reports while operational errors still go to standard error; `--format json`
-provides a stable schema for another tool.
+### Local commit-message hook
+
+YAGA ships a pre-commit provider for the existing file-backed command. Pin the repository to an
+audited immutable commit that contains `.pre-commit-hooks.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/dariuszpanas/yaga
+    rev: <AUDITED_40_CHARACTER_SHA>
+    hooks:
+      - id: yaga-commit-check
+```
+
+Install the non-default hook type and its environment:
+
+```bash
+pre-commit install --hook-type commit-msg --install-hooks
+```
+
+The provider requires pre-commit 3.2 or newer and YAGA requires Python 3.12 or newer. If
+pre-commit's default interpreter is older, set `language_version: python3.12` (or another supported
+interpreter) on the hook.
+
+Repositories that want ordinary `pre-commit install` to include it can add
+`default_install_hook_types: [pre-commit, commit-msg]` to their configuration. Policy remains in
+`.yaga.toml` or `pyproject.toml`; do not duplicate it in hook arguments. The hook runs only after
+explicit installation, can be bypassed with `--no-verify` or `SKIP=yaga-commit-check`, and does not
+run for commits created directly by GitHub, APIs, or bots. File mode has no parent metadata: it
+cannot enforce `merge-commits = "reject"` and may apply ordinary syntax rules to a proposed merge
+message even when actual merge commits would be ignored. Retain the GitHub commit-policy check as
+the repository-side source of truth.
+
+CI should use a non-shallow checkout containing the exact base and head, then call
+`yaga commit check --range "$BASE_SHA..$HEAD_SHA"`. `--quiet` suppresses validation reports while
+operational errors still go to standard error; `--format json` provides a stable schema for another
+tool.
 
 ## Pull-request checks in GitHub Actions
 

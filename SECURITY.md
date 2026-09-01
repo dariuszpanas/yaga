@@ -37,6 +37,13 @@ no network request. A selected `.yaga.toml` or `pyproject.toml` is trusted repos
 shape, types, token lengths, patterns, and schema version are still validated strictly so a typo
 cannot silently weaken checks.
 
+The bundled pre-commit provider is a local convenience boundary over the same file-backed command.
+It runs only after installation, can be bypassed with Git's `--no-verify` option or pre-commit's
+`SKIP=yaga-commit-check`, and does not run for commits created directly by GitHub, APIs, or bots. A
+pending message file does not reveal commit parents, so it cannot enforce merge rejection and may
+check a proposed merge message as an ordinary message even when actual merge commits are ignored.
+Repositories must retain CI range checks for authoritative commit and merge policy.
+
 The installed CLI depends on locked Typer packages. The write-capable root Action does not: its fixed
 `YAGA_ACTION_RUNTIME=1` path runs with Python site packages disabled and enters only the
 standard-library Action/gate import graph. Both frontends call the same gate dispatcher. The GitHub

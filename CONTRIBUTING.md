@@ -39,6 +39,13 @@ Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or
 wrong types, and do not silently merge policies. Stable diagnostic identifiers and JSON schema
 fields are public pre-release interfaces; change them deliberately and test both text and JSON.
 
+The pre-commit provider manifest exposes exactly one `commit-msg` hook. Keep it as a direct
+`language: python` adapter to `yaga commit check --file`; do not add shell indirection, filename
+filters, duplicated policy arguments, or extra dependencies. Validate the manifest and exercise a
+real `pre-commit try-repo` installation when changing the hook or package metadata. Local hooks are
+bypassable and cannot determine merge parent count, so they complement rather than replace CI range
+checks.
+
 The write-capable root Action uses the same `gate codex-review <operation>` command path through a fixed
 `YAGA_ACTION_RUNTIME=1` standard-library bootstrap. It installs no package and makes no network
 request for dependencies. Never accept `github-token` as argv, configuration, output, or logs.

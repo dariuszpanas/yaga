@@ -1,0 +1,8 @@
+- id: yaga-commit-check
+  name: YAGA commit check
+  description: Validate the pending commit message with repository-local YAGA policy.
+  entry: yaga commit check --file
+  language: python
+  stages: [commit-msg]
+  pass_filenames: true
+  minimum_pre_commit_version: "3.2.0"

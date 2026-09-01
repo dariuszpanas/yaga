@@ -210,6 +210,31 @@ def test_file_and_stdin_sources_preserve_full_messages(tmp_path: Path) -> None:
     assert from_stdin.exit_code == 0
 
 
+def test_file_source_preserves_policy_and_operational_exit_codes(tmp_path: Path) -> None:
+    message_file = tmp_path / "COMMIT_EDITMSG"
+    arguments = [
+        "commit",
+        "check",
+        "--file",
+        str(message_file),
+        "--repo",
+        str(tmp_path),
+    ]
+    message_file.write_text("not conventional\n", encoding="utf-8")
+
+    failed = runner.invoke(app, arguments)
+
+    assert failed.exit_code == 1
+    assert "syntax.header" in failed.stdout
+
+    message_file.write_bytes(b"feat: invalid \xff\n")
+    errored = runner.invoke(app, arguments)
+
+    assert errored.exit_code == 2
+    assert "YAGA input error" in errored.stderr
+    assert "Traceback" not in errored.stderr
+
+
 def test_default_commit_explicit_commit_and_range_use_the_same_cli_policy(tmp_path: Path) -> None:
     git(tmp_path, "init", "--initial-branch=main")
     git(tmp_path, "config", "user.email", "yaga@example.com")
