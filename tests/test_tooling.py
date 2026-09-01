@@ -76,6 +76,13 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
             }
         ],
     }
+    branch_policy = tomllib.loads(
+        (ROOT / ".yaga" / "branch-policy.toml").read_text(encoding="utf-8")
+    )
+    assert branch_policy == {
+        "branch-policy-version": 1,
+        "allowed-patterns": ["main", "feat/*", "fix/*", "dependabot/*/**"],
+    }
 
     for documentation in ("README.md", "CONTRIBUTING.md"):
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
@@ -85,6 +92,13 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
     assert 'yaga commit check\n          --message "feat(ci): exercise the installed CLI"' in ci
+    assert "Check pull-request branch name" in ci
+    assert "Check pushed branch name" in ci
+    assert ci.count("yaga branch check") == 2
+    assert ci.count("--policy .yaga/branch-policy.toml") == 2
+    assert "YAGA_BRANCH_NAME: ${{ github.head_ref }}" in ci
+    assert "YAGA_BRANCH_NAME: ${{ github.ref_name }}" in ci
+    assert ci.count('--name "$YAGA_BRANCH_NAME"') == 2
     assert "pre-commit try-repo . yaga-commit-check" in ci
     assert 'test "$YAGA_PRE_COMMIT_STATUS" -eq 1' in ci
     assert "grep -F -- '[syntax.header]'" in ci
@@ -126,12 +140,17 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"YAGA_ACTION_RUNTIME"' in build_gate
     assert "cwd=consumer" in build_gate
     assert '"config",\n            "init"' in build_gate
+    assert '"branch",\n            "check"' in build_gate
+    assert build_gate.index("branch_completed = run_bounded") < build_gate.index(
+        'git = shutil.which("git")'
+    )
     assert '"workflow",\n            "check"' in build_gate
     assert '"workflow",\n            "security"' in build_gate
     assert '"workflow", "lint", "--help"' in build_gate
     assert '"repo",\n            "check"' in build_gate
     assert '"yaga/commands/repo.py"' in build_gate
     assert '"yaga/commands/change.py"' in build_gate
+    assert '"yaga/commands/branch.py"' in build_gate
     assert '"yaga/commits/service.py"' in build_gate
     assert '"yaga/changes/__init__.py"' in build_gate
     assert '"yaga/changes/checker.py"' in build_gate
@@ -141,6 +160,13 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/changes/policy.py"' in build_gate
     assert '"yaga/changes/reporting.py"' in build_gate
     assert '"yaga/changes/service.py"' in build_gate
+    assert '"yaga/branches/__init__.py"' in build_gate
+    assert '"yaga/branches/checker.py"' in build_gate
+    assert '"yaga/branches/models.py"' in build_gate
+    assert '"yaga/branches/patterns.py"' in build_gate
+    assert '"yaga/branches/policy.py"' in build_gate
+    assert '"yaga/branches/reporting.py"' in build_gate
+    assert '"yaga/branches/service.py"' in build_gate
     assert '"yaga/repository/checker.py"' in build_gate
     assert '"yaga/repository/plan.py"' in build_gate
     assert '"yaga/workflows/inputs.py"' in build_gate
@@ -208,10 +234,12 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "import typer" not in source, path
         assert "from yaga.cli" not in source, path
         assert "from yaga.changes" not in source, path
+        assert "from yaga.branches" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.commits" not in source, path
         assert "from yaga.workflows" not in source, path
         assert "import yaga.changes" not in source, path
+        assert "import yaga.branches" not in source, path
 
 
 def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
@@ -227,9 +255,11 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "import typer" not in source, path
         assert "from yaga.cli" not in source, path
         assert "from yaga.changes" not in source, path
+        assert "from yaga.branches" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.codex" not in source, path
         assert "from yaga.workflows" not in source, path
         assert "from yaga.github import" not in source, path
         assert "import yaga.changes" not in source, path
+        assert "import yaga.branches" not in source, path
         assert "GITHUB_TOKEN" not in source, path

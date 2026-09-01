@@ -1,0 +1,7 @@
+branch-policy-version = 1
+allowed-patterns = [
+  "main",
+  "feat/*",
+  "fix/*",
+  "dependabot/*/**",
+]

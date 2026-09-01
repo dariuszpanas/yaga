@@ -86,6 +86,14 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   Git paths, visible gitlink changes, disabled rename/external-diff/textconv behavior,
   unique-pattern caching, and the shared 10,000,000-unit matcher-work ceiling. Keep it out of both
   Action import graphs.
+- Keep `branch check` installed-only and require an explicit versioned policy plus exact short
+  branch name. Never inspect Git, infer checkout or event state, discover policy, normalize full
+  refs/remotes, or read environment in the domain layer. Schema v1 is a bounded ordered list of
+  unique case-sensitive `allowed-patterns` over the portable ASCII name grammar, with component-
+  local `*` and whole-component `**`. Validate names independently, report only `branch.syntax` or
+  `branch.allowed`, preserve the first matching pattern, and keep the 244-byte portability cap.
+  CI may pass guarded `github.head_ref` or branch-only `github.ref_name` through a quoted environment
+  variable. Keep the provider out of both Action import graphs.
 - The installed CLI may use the locked Typer dependency. The write-capable root Action may not
   import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
   the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the

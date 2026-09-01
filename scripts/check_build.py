@@ -199,6 +199,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     consumer = output / "consumer"
     consumer.mkdir()
     config = consumer / ".yaga.toml"
+    branch_policy = consumer / "branch-policy.toml"
     change_policy = consumer / "change-policy.toml"
     repository_plan = consumer / "repository-plan.toml"
     executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
@@ -215,6 +216,39 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         child_environment.pop(variable, None)
     child_environment["PYTHONNOUSERSITE"] = "1"
     child_environment["PYTHONSAFEPATH"] = "1"
+    branch_policy.write_text(
+        'branch-policy-version = 1\nallowed-patterns = ["main", "feat/*", "fix/*"]\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    branch_completed = run_bounded(
+        [
+            str(executable),
+            "branch",
+            "check",
+            "--policy",
+            str(branch_policy),
+            "--name",
+            "feat/wheel-smoke",
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=child_environment,
+    )
+    branch_document = successful_json(branch_completed, operation="branch check")
+    if not (
+        branch_document.get("schema_version") == 1
+        and branch_document.get("kind") == "branch_policy"
+        and branch_document.get("status") == "passed"
+        and branch_document.get("valid") is True
+        and branch_document.get("policy_path") == str(branch_policy.resolve())
+        and branch_document.get("branch") == "feat/wheel-smoke"
+        and branch_document.get("allowed_patterns") == ["main", "feat/*", "fix/*"]
+        and branch_document.get("matched_pattern") == "feat/*"
+        and branch_document.get("diagnostics") == []
+    ):
+        raise SystemExit("installed wheel CLI branch check emitted the wrong report contract")
     initialized = run_bounded(
         [
             str(executable),
@@ -546,6 +580,7 @@ def main() -> int:
                 "yaga/commit_action_runtime.py",
                 "yaga/cli.py",
                 "yaga/codex/runtime.py",
+                "yaga/commands/branch.py",
                 "yaga/commands/change.py",
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
@@ -555,6 +590,13 @@ def main() -> int:
                 "yaga/commits/github_event.py",
                 "yaga/commits/github_reporting.py",
                 "yaga/commits/service.py",
+                "yaga/branches/__init__.py",
+                "yaga/branches/checker.py",
+                "yaga/branches/models.py",
+                "yaga/branches/patterns.py",
+                "yaga/branches/policy.py",
+                "yaga/branches/reporting.py",
+                "yaga/branches/service.py",
                 "yaga/changes/__init__.py",
                 "yaga/changes/checker.py",
                 "yaga/changes/git.py",

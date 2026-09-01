@@ -30,8 +30,8 @@ with project and Python environment leakage removed.
 
 ## CLI and commit policy contract
 
-The public installed command groups are `change`, `commit`, `config`, `github`, `repo`, `workflow`,
-and `gate`.
+The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `repo`,
+`workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
@@ -82,6 +82,18 @@ diagnostics.
 `config init` creates only a new standalone `.yaga.toml` with exclusive no-overwrite semantics. It
 must refuse to shadow any effective discovered configuration, never edit `pyproject.toml`, and keep
 its deterministic starter template round-trippable through the strict loader.
+
+Branch-name policy lives under `src/yaga/branches/` and remains installed-only. `branch check`
+requires one explicit versioned policy and one explicit short name; never inspect Git, infer the
+current branch, discover policy, parse an event, normalize `refs/` or remote prefixes, or read an
+environment variable in the domain layer. Keep schema v1 closed to an ordered list of one through
+64 unique case-sensitive `allowed-patterns`, the bounded portable ASCII name grammar, component-
+local `*`, and whole-component `**`. Names must pass syntax independently of wildcard admission.
+Preserve first-match reporting, stable `branch.syntax` and `branch.allowed` findings, and exits `0`
+for a match, `1` for findings, and `2` for input/policy errors. The 244-byte limit is a deliberate
+YAGA portability boundary. CI adapters must select `github.head_ref` for pull requests or guarded
+branch-only `github.ref_name` for pushes, copy it through an environment variable, and quote it as
+one argument. This provider must not enter either dependency-free Action import graph.
 
 Changed-path coupling lives under `src/yaga/changes/` and remains installed-only. Require one
 explicit versioned policy and one explicit two-dot or three-dot Git range; never infer staged,
