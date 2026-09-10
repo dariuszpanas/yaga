@@ -29,7 +29,8 @@ Continue with [Get started](getting-started.md) for a first repository policy an
 [command reference](commands.md) for provider-specific invocations. The detailed
 [commit policy](commit-policy.md), [repository checks](repository-checks.md), and
 [GitHub Actions](github-actions.md) pages document the complete contract. See the
-[changelog](changelog.md) for the user-facing release history.
+[changelog](changelog.md) for the user-facing release history, and the
+[agent review gate design](agent-review-gate.md) for the provider-neutral multi-agent direction.
 
 ## Project status
 

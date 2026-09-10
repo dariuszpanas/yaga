@@ -19,6 +19,7 @@ nav = [
   { "Repository checks" = "repository-checks.md" },
   { "GitHub Actions" = "github-actions.md" },
   { "Codex review gate" = "codex-gate.md" },
+  { "Agent review gate design" = "agent-review-gate.md" },
   { "Troubleshooting" = "troubleshooting.md" },
   { "Security model" = "security.md" },
   { "Contributing" = "contributing.md" },

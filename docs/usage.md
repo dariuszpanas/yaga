@@ -118,7 +118,9 @@ yaga gate codex-review finalize
 
 Consumers should use the supplied composite Action and trusted default-branch workflow model,
 not invoke write operations from pull-request code. See [Codex review gate](codex-gate.md) for
-the lifecycle, evidence, authorization, and quota requirements.
+the lifecycle, evidence, authorization, and quota requirements. The provider-neutral multi-agent
+direction is documented in [Agent review gate design](agent-review-gate.md); it is not yet a
+runtime replacement for the Codex adapter.
 
 ## Documentation preview and build
 
