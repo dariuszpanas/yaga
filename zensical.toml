@@ -12,6 +12,7 @@ nav = [
   { "Get started" = "getting-started.md" },
   { "Commands" = "commands.md" },
   { "Usage modes" = "usage.md" },
+  { "Adoption recipes" = "recipes.md" },
   { "Configuration" = "configuration.md" },
   { "Commit policy" = "commit-policy.md" },
   { "Repository checks" = "repository-checks.md" },
