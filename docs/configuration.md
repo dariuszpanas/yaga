@@ -81,10 +81,10 @@ a tree or workflow policy:
 | --- | --- | --- |
 | `.yaga/branch-policy.toml` | `branch-policy-version = 1` | explicit `--name` |
 | `.yaga/change-policy.toml` | `change-policy-version = 1` | exact `--range` |
-| `.yaga/tree-policy.toml` | `tree-policy-version = 1` | exact `--commit` |
-| `.yaga/path-policy.toml` | `path-policy-version = 1` | exact `--commit` |
-| `.yaga/mode-policy.toml` | `mode-policy-version = 1` | exact `--commit` |
-| `.yaga/size-policy.toml` | `size-policy-version = 1` | exact `--commit` |
+| `.yaga/tree-policy.toml` | `tree-policy-version = 1` | exact `--revision` |
+| `.yaga/path-policy.toml` | `path-policy-version = 1` | exact `--revision` |
+| `.yaga/mode-policy.toml` | `mode-policy-version = 1` | exact `--revision` |
+| `.yaga/size-policy.toml` | `size-policy-version = 1` | exact `--revision` |
 | `.yaga/checks/*.toml` | `repository-plan-version` | explicit `--plan` |
 
 These files are quality policy only. A pull-request-controlled plan or policy is never trusted

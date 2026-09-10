@@ -12,11 +12,11 @@ for operational errors. Use `yaga <group> --help` for the exact current option s
 | `yaga config init` | Create a starter commit policy. | `--repo .` |
 | `yaga config show` | Show effective policy and source. | `--repo .` |
 | `yaga github pull-request check` | Check one exact GitHub PR event. | event and checkout context |
-| `yaga mode check` | Enforce committed entry modes. | `--policy ... --commit ...` |
-| `yaga path check` | Check committed path portability. | `--policy ... --commit ...` |
+| `yaga mode check` | Enforce committed entry modes. | `--policy ... --revision ...` |
+| `yaga path check` | Check committed path portability. | `--policy ... --revision ...` |
 | `yaga repo check` | Run an explicit provider plan. | `--plan ... --revision ...` |
-| `yaga size check` | Enforce committed blob/total limits. | `--policy ... --commit ...` |
-| `yaga tree check` | Enforce required/forbidden tree paths. | `--policy ... --commit ...` |
+| `yaga size check` | Enforce committed blob/total limits. | `--policy ... --revision ...` |
+| `yaga tree check` | Enforce required/forbidden tree paths. | `--policy ... --revision ...` |
 | `yaga workflow check` | Require immutable action references. | explicit workflow paths |
 | `yaga workflow security` | Apply the versioned Actions trust policy. | explicit workflow paths |
 | `yaga workflow lint` | Run pinned actionlint in a hardened container. | explicit workflow paths |
