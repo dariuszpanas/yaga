@@ -111,17 +111,59 @@ require-any = ["tests/**/*.py"]
 ```toml
 # size-policy.toml
 size-policy-version = 1
-default-blob-limit = 1048576
-total-limit = 8388608
+default-max-blob-bytes = 1048576
+max-total-blob-bytes = 8388608
+
+[[path-limits]]
+pattern = "docs/**"
+max-blob-bytes = 2097152
+```
+
+```toml
+# mode-policy.toml
+mode-policy-version = 1
+default-allowed-modes = ["regular"]
 
 [[path-overrides]]
-pattern = "docs/**"
-blob-limit = 2097152
+pattern = "scripts/**"
+allowed-modes = ["executable"]
+```
+
+```toml
+# path-policy.toml: use the frozen portability profile
+path-policy-version = 1
+profile = "windows-compatible-v1"
+```
+
+```toml
+# tree-policy.toml
+tree-policy-version = 1
+required-paths = ["README.md", "pyproject.toml"]
+forbidden-patterns = ["**/.env", "dist/**"]
 ```
 
 `tree`, `path`, `mode`, and `size` policies operate on committed trees, not the current index or
-untracked files. Their exact required keys and closed pattern grammars are documented in
-[Repository checks](repository-checks.md).
+untracked files. Their policy files are explicit runtime inputs: they are not provenance claims
+about the selected revision. See [Repository checks](repository-checks.md) for the exact limits,
+diagnostics, and revision requirements.
+
+## Choosing policy boundaries
+
+Use the narrowest provider that expresses the requirement. `commit` checks message structure and
+footers; `change` checks relationships between changed paths; `branch` checks one supplied branch
+name; `tree`, `path`, `mode`, and `size` check one committed snapshot; and the workflow providers
+check Actions files. Combine them only through explicit `repo check` selections or a checked-in
+plan. A policy file never causes another provider to run.
+
+For a committed-tree provider, always pass the exact revision that CI checked out:
+
+```bash
+yaga size check --repo . --policy .yaga/size-policy.toml --revision "$GITHUB_SHA"
+```
+
+The CLI does not fetch, infer a revision from the working tree, or inspect staged and untracked
+files. A shallow checkout is valid only when Git already has the selected commit, tree, and (for
+`size`) the required blob objects.
 
 ## Configuration in CI
 
