@@ -255,10 +255,12 @@ def test_preloaded_providers_bound_path_resolution_failures(tmp_path: Path) -> N
         ),
     )
 
-    with pytest.raises(InputError, match="cannot be resolved safely"):
+    with pytest.raises(InputError, match="cannot be resolved safely") as checker_error:
         checker.check_workflow_inputs(selected)
-    with pytest.raises(InputError, match="cannot be resolved safely"):
+    assert str(checker_error.value) == "preloaded workflow input path cannot be resolved safely"
+    with pytest.raises(InputError, match="cannot be resolved safely") as lint_error:
         lint.lint_workflow_inputs(repository, selected)
+    assert str(lint_error.value) == "preloaded workflow input path cannot be resolved safely"
 
 
 def test_preloaded_providers_reject_unresolved_paths_and_invalid_item_shapes(
@@ -323,8 +325,9 @@ def test_preloaded_lint_bounds_invalid_repository_resolution(tmp_path: Path) -> 
     repository.mkdir()
     selected = (_workflow(repository, ".github/workflows/ci.yml"),)
 
-    with pytest.raises(InputError, match="repository path cannot be resolved"):
+    with pytest.raises(InputError, match="repository path cannot be resolved") as raised:
         lint.lint_workflow_inputs(Path("invalid\x00repository"), selected)
+    assert str(raised.value) == "workflow repository path cannot be resolved safely"
 
 
 @pytest.mark.skipif(

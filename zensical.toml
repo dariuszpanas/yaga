@@ -1,0 +1,33 @@
+[project]
+site_name = "YAGA"
+site_description = "Bounded, explicit repository policy checks for local development and CI."
+site_author = "YAGA contributors"
+site_url = "https://dariuszpanas.github.io/yaga/"
+repo_url = "https://github.com/dariuszpanas/yaga"
+repo_name = "dariuszpanas/yaga"
+docs_dir = "docs"
+site_dir = "site"
+nav = [
+  { "Home" = "index.md" },
+  { "Get started" = "getting-started.md" },
+  { "Command reference" = "commands.md" },
+  { "Security model" = "security.md" },
+  { "Contributing" = "contributing.md" },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "navigation.instant",
+  "navigation.tracking",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.footer",
+  "content.code.copy",
+]
+font = false
+
+[project.theme.icon]
+logo = "lucide/shield-check"
+
+[project.plugins.offline]

@@ -120,6 +120,8 @@ def _validate_preloaded_workflow_inputs(
                 f"preloaded workflow inputs exceed the hard {MAX_TOTAL_BYTES}-byte total limit"
             )
 
+        if "\x00" in str(workflow.path):
+            raise InputError("preloaded workflow input path cannot be resolved safely")
         try:
             resolved_path = workflow.path.expanduser().resolve()
         except (OSError, RuntimeError, ValueError) as error:
@@ -150,6 +152,8 @@ def _validate_preloaded_workflow_inputs(
 
 
 def _resolve_repository(repository: Path) -> Path:
+    if "\x00" in str(repository):
+        raise InputError("workflow repository path cannot be resolved safely")
     try:
         resolved = repository.expanduser().resolve()
     except (OSError, RuntimeError, ValueError) as error:

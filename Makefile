@@ -1,7 +1,13 @@
-.PHONY: actionlint build check test ci
+.PHONY: actionlint build check docs docs-serve test ci
 
 actionlint:
 	uv run yaga workflow lint .github/workflows examples
+
+docs:
+	uv run zensical build --strict --clean
+
+docs-serve:
+	uv run zensical serve
 
 build:
 	uv run python scripts/check_build.py
@@ -19,4 +25,4 @@ check:
 test:
 	uv run pytest
 
-ci: check test build
+ci: check test build docs
