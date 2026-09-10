@@ -111,7 +111,7 @@ jobs:
         id: action_smoke
         uses: ./
         with:
-          gate: codex-review
+          gate: agent-review
           operation: invalidate
           github-token: not-used
           owner-id: "15094983"

@@ -12,7 +12,7 @@ def status_payload() -> dict[str, object]:
     return {
         "id": 123,
         "state": "pending",
-        "context": "Codex Review",
+        "context": "Agent Review",
         "description": "Waiting for exact-candidate evidence",
         "target_url": "https://github.com/owner/repository/actions/runs/123",
         "created_at": "2026-08-22T01:00:00Z",
@@ -25,7 +25,7 @@ def test_parse_commit_status_retains_security_relevant_fields() -> None:
 
     assert status.status_id == 123
     assert status.state == "pending"
-    assert status.context == "Codex Review"
+    assert status.context == "Agent Review"
     assert status.creator_id == 41_898_282
     assert status.creator_login == "github-actions[bot]"
 

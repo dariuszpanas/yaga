@@ -104,21 +104,21 @@ policy finding.
 The read-only Action validates one GitHub pull-request event, the runner repository/ref identity,
 the checked-out head, configuration, and the exact commit range. It can apply the opt-in
 Dependabot skip only after all validation succeeds. It never accepts a caller-selected token or
-revision and never runs the Codex gate.
+revision and never runs the Agent review gate.
 
 ## Write-capable review gate
 
 The retained gate is a separate trusted workflow adapter:
 
 ```bash
-yaga gate codex-review prepare
-yaga gate codex-review request
-yaga gate codex-review finalize
+yaga gate agent-review prepare
+yaga gate agent-review request
+yaga gate agent-review finalize
 ```
 
 Consumers should use the supplied composite Action and trusted default-branch workflow model,
-not invoke write operations from pull-request code. See [Codex review gate](codex-gate.md) for
-the lifecycle, evidence, authorization, and quota requirements.
+not invoke write operations from pull-request code. See [Agent review gate](agent-review-gate.md)
+for the lifecycle, evidence, authorization, and quota requirements.
 
 ## Documentation preview and build
 

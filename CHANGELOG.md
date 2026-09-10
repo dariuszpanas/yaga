@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- A direct `agent-review` gate contract with a provider-neutral public name, renamed workflow
+  example, and initial named-lens configuration documentation.
 - An explicit `commit.typos = "check"` mode for bounded commit-message spelling checks through an
   installed Typos CLI, with stable `typos.word` diagnostics.
 - Status-only `--quiet`/`-q` output for the standalone branch, change, mode, path, size, and tree

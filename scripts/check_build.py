@@ -1057,7 +1057,7 @@ def main() -> int:
                 "/actions/commit-check/action.yml": "the commit-check Action",
                 "/.github/workflows/commit-policy.yml": "the commit-policy dogfood workflow",
                 "/.pre-commit-hooks.yaml": "the pre-commit provider manifest",
-                "/examples/codex-review.yml": "the Codex review workflow example",
+                "/examples/agent-review.yml": "the Agent review workflow example",
                 "/examples/commit-policy.yml": "the commit-policy workflow example",
                 "/examples/review-policy.yml": "the review policy workflow example",
                 "/src/yaga/__init__.py": "the yaga package",

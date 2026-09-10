@@ -752,7 +752,7 @@ def test_workflow_lint_temporary_workspace_failures_are_bounded_json_errors(
 
 
 def test_gate_help_lists_every_preserved_operation() -> None:
-    result = runner.invoke(app, ["gate", "codex-review", "--help"])
+    result = runner.invoke(app, ["gate", "agent-review", "--help"])
 
     assert result.exit_code == 0
     for operation in ("authorize", "finalize", "invalidate", "observe", "prepare", "request"):
@@ -774,7 +774,7 @@ def test_installed_gate_commands_share_the_action_dispatcher(
         lambda gate, selected: calls.append((gate, selected)) or 0,
     )
 
-    result = runner.invoke(app, ["gate", "codex-review", operation])
+    result = runner.invoke(app, ["gate", "agent-review", operation])
 
     assert result.exit_code == 0
-    assert calls == [("codex-review", operation)]
+    assert calls == [("agent-review", operation)]

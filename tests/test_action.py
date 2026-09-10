@@ -17,20 +17,20 @@ ROOT = Path(__file__).parents[1]
 
 
 def test_only_the_implemented_gate_is_accepted() -> None:
-    assert SUPPORTED_GATES == {"codex-review"}
-    assert gate_name("codex-review") == "codex-review"
+    assert SUPPORTED_GATES == {"agent-review"}
+    assert gate_name("agent-review") == "agent-review"
     for value in ("codex", "future-gate", "", None):
         with pytest.raises(GateError, match="gate is invalid"):
             gate_name(value)
 
 
-def test_codex_selector_delegates_to_the_single_shipped_runtime(
+def test_agent_selector_delegates_to_the_single_shipped_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
     monkeypatch.setattr(action, "run_action", lambda operation: calls.append(operation) or 0)
 
-    assert action.run_gate("codex-review", "prepare") == 0
+    assert action.run_gate("agent-review", "prepare") == 0
     assert calls == ["prepare"]
 
 
@@ -44,8 +44,8 @@ def test_dependency_free_action_cli_uses_the_shared_dispatcher(
         lambda gate, operation: calls.append((gate, operation)) or 0,
     )
 
-    assert action_cli.main(["gate", "codex-review", "invalidate"]) == 0
-    assert calls == [("codex-review", "invalidate")]
+    assert action_cli.main(["gate", "agent-review", "invalidate"]) == 0
+    assert calls == [("agent-review", "invalidate")]
 
 
 def test_dependency_free_action_cli_sanitizes_gate_errors(
@@ -57,7 +57,7 @@ def test_dependency_free_action_cli_sanitizes_gate_errors(
 
     monkeypatch.setattr(action_cli, "run_gate", fail)
 
-    assert action_cli.main(["gate", "codex-review", "finalize"]) == 1
+    assert action_cli.main(["gate", "agent-review", "finalize"]) == 1
     assert capsys.readouterr().err == "YAGA failed: operation? failed? safely\n"
 
 
@@ -66,8 +66,8 @@ def test_dependency_free_action_cli_sanitizes_gate_errors(
     [
         [],
         ["--help"],
-        ["gate", "codex-review", "--help", "extra"],
-        ["other", "codex-review", "prepare"],
+        ["gate", "agent-review", "--help", "extra"],
+        ["other", "agent-review", "prepare"],
     ],
 )
 def test_dependency_free_action_cli_has_no_help_or_extra_argument_success_path(
@@ -81,7 +81,7 @@ def test_dependency_free_action_cli_has_no_help_or_extra_argument_success_path(
 def test_dependency_free_action_cli_rejects_help_as_an_operation(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert action_cli.main(["gate", "codex-review", "--help"]) == 1
+    assert action_cli.main(["gate", "agent-review", "--help"]) == 1
     assert capsys.readouterr().err == "YAGA failed: operation is invalid\n"
 
 
@@ -99,7 +99,7 @@ def test_composite_action_command_does_not_import_installed_dependencies() -> No
             "-m",
             "yaga",
             "gate",
-            "codex-review",
+            "agent-review",
             "invalidate",
         ],
         cwd=ROOT,

@@ -1181,7 +1181,7 @@ def test_finalize_rejects_delayed_same_head_outcome_with_unsettled_prior_request
     )
 
     assert result.exit_code == 1
-    assert result.message == "CI Gate failed because Codex Review is not successful"
+    assert result.message == "CI Gate failed because Agent Review is not successful"
     ci_writes = [payload for _, payload in api.posts if payload["context"] == CI_STATUS_CONTEXT]
     assert [payload["state"] for payload in ci_writes] == ["pending", "error"]
 

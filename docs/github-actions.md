@@ -57,7 +57,7 @@ arguments, outputs, logs, or exceptions.
 
 The write-capable root runtime uses `YAGA_ACTION_RUNTIME=1` and standard-library-only imports.
 The separate read-only commit Action uses `YAGA_COMMIT_ACTION_RUNTIME=1`; it may use commit policy
-modules but never Typer, the Codex gate, REST transport, or site packages.
+modules but never Typer, the Agent review gate, REST transport, or site packages.
 
 The Action preserves GitHub workflow annotations and writes the same bounded report, including
 operational errors, to `GITHUB_STEP_SUMMARY` inside an escaped `<pre>` block. This makes a failed

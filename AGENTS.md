@@ -7,8 +7,9 @@ fixes use `fix/<topic>`.
 
 YAGA is an extensible CLI for checks that work locally and in CI. Keep the Conventional Commit
 checker under `src/yaga/commits/`, installed Typer commands under `src/yaga/commands/`, and the
-retained Codex review gate under `src/yaga/codex/`. Do not discard the gate experiment: expose its
-operations through `yaga gate` and keep the composite Action as a supported adapter.
+Agent review gate is the public review contract. Its current provider adapter remains under
+`src/yaga/codex/` until the generic adapter split is complete; expose operations through
+`yaga gate agent-review` and keep the composite Action as a supported adapter.
 
 ## Preserve the CLI contract
 
@@ -189,11 +190,11 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   and immediately around their write.
 - Keep external authorization split: cancel stale per-PR `authorize-external` waits, record only a
   non-triggering protected approval marker, then let the separately PR-serialized request worker run
-  with `cancel-in-progress: false`. Only the literal protected `codex-review-approval` route may
+  with `cancel-in-progress: false`. Only the literal protected `agent-review-approval` route may
   authorize a non-owner PR.
-- Require repository variable `YAGA_CODEX_OWNER_ID`. The environment must have that owner as sole
+- Require repository variable `YAGA_AGENT_OWNER_ID`. The environment must have that owner as sole
   required reviewer, prevent self-review, disable admin bypass, store no secrets, and provide
-  `YAGA_CODEX_APPROVAL_MARKER=codex-review-approval:v1`. Verify plan support and canary behavior.
+  `YAGA_AGENT_APPROVAL_MARKER=agent-review-approval:v1`. Verify plan support and canary behavior.
 - Require the exact current-boundary Actions-owned YAGA request before every accepted eyes reaction
   or outcome, including `opened`, with evidence strictly later than the request. Visible unsolicited
   connector activity fails closed without a duplicate request, and `observe` requires that request.
@@ -202,7 +203,7 @@ operations through `yaga gate` and keep the composite Action as a supported adap
   attacker-controlled strings.
 - Treat 100 comments, reviews, or reactions as incomplete and require a new PR. Require a new commit
   before 100 total visible statuses across all contexts or the per-SHA/context status ceiling.
-- Reserve `Codex Review` and `CI Gate` for classic statuses; workflow/job/check names must differ.
+- Reserve `Agent Review` and `CI Gate` for classic statuses; workflow/job/check names must differ.
   Audit every `statuses: write` and `pull-requests: write` path because the beta uses the shared
   Actions identity for both statuses and PR conversation comments.
 - Preserve both authenticated `CI` and `YAGA Review Policy` completion wakes, deterministic
@@ -218,7 +219,7 @@ operations through `yaga gate` and keep the composite Action as a supported adap
 - Ordinary metadata edits use non-required `Review Policy Metadata`; real lifecycle events use
   required `Review Policy Boundary`. The beta assumes GitHub delivers those configured events.
 - Never promise zero post-close writes: close can race the last live read and a comment/status POST.
-  YAGA cannot stop direct human/app `@codex review` comments from consuming provider quota.
+  YAGA cannot stop direct human/app agent-review requests from consuming provider quota.
 
 ## Make reviewable changes
 

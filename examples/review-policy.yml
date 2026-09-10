@@ -34,10 +34,10 @@ jobs:
       - name: Invalidate Review Policy
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
-          gate: codex-review
+          gate: agent-review
           operation: invalidate
           github-token: ${{ secrets.GITHUB_TOKEN }}
           prerequisite-workflow: .github/workflows/ci.yml
           lifecycle-workflow: .github/workflows/review-policy.yml
-          owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }} # set to the owner's immutable user ID
+          owner-id: ${{ vars.YAGA_AGENT_OWNER_ID }} # set to the owner's immutable user ID
           job-timeout-minutes: 15

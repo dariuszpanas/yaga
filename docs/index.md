@@ -12,7 +12,7 @@ YAGA keeps policy providers separate so a repository can adopt only the checks i
 - committed tree contents, blob sizes, paths, and entry modes
 - GitHub Actions references, security policy, and workflow syntax
 - an explicit aggregate repository plan
-- the retained Codex review gate
+- the Agent review gate
 
 Every provider is explicit about its source. YAGA does not fetch history, infer a working-tree
 state, or silently combine inputs.

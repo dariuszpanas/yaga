@@ -3,7 +3,7 @@
 YAGA is an extensible repository-policy CLI with a security-sensitive GitHub Action surface. Keep
 changes focused, test-backed, and explicit about the public command, configuration, diagnostic, or
 gate boundary they affect. The first local/CI policy is `commit check`; the retained write-capable
-gate is `codex-review`.
+gate is `agent-review`.
 
 ## Development
 
@@ -310,7 +310,7 @@ real `pre-commit try-repo` installation when changing the hook or package metada
 bypassable and cannot determine merge parent count, so they complement rather than replace CI range
 checks.
 
-The write-capable root Action uses the same `gate codex-review <operation>` command path through a fixed
+The write-capable root Action uses the same `gate agent-review <operation>` command path through a fixed
 `YAGA_ACTION_RUNTIME=1` standard-library bootstrap. It installs no package and makes no network
 request for dependencies. Never accept `github-token` as argv, configuration, output, or logs.
 
@@ -337,7 +337,7 @@ inputs. Add a future gate as a separate package with its own closed evidence gra
 ## Consumer trust split
 
 - The `pull_request_target` invalidator's native `Review Policy Boundary` check must be required.
-  It verifies exact live state and status capacity, then writes pending for `Codex Review` and
+  It verifies exact live state and status capacity, then writes pending for `Agent Review` and
   `CI Gate`. It excludes `closed`, executes no PR code, and posts no comment. Ordinary title/body
   edits instead use the non-required native name `Review Policy Metadata`.
 - PR-controlled CI remains unprivileged and ends at `CI Prerequisites`. Its exact bounded run-name
@@ -358,14 +358,14 @@ inputs. Add a future gate as a separate package with its own closed evidence gra
 - Every job invokes the pinned action as its sole step with the narrow permissions in `examples/`.
 
 Consumers provide the immutable owner ID through required repository variable
-`YAGA_CODEX_OWNER_ID`. Precreate `codex-review-approval` with that owner as the sole required
+`YAGA_AGENT_OWNER_ID`. Precreate `agent-review-approval` with that owner as the sole required
 reviewer, prevent self-review, disable administrator bypass, store no secrets, and add environment
-variable `YAGA_CODEX_APPROVAL_MARKER=codex-review-approval:v1`. Required-reviewer protection is
+variable `YAGA_AGENT_APPROVAL_MARKER=agent-review-approval:v1`. Required-reviewer protection is
 plan-limited: verify the public-repository supported plan or private/internal Enterprise scope and
 canary the wait before enabling it. Disable Codex automatic reviews before enabling the v2
 publisher, then prove the owner request and protected-external approval plus request paths before
 admitting normal contributor traffic.
-The environment controls only YAGA: a direct human/app `@codex review` comment can still consume
+The environment controls only YAGA: a direct human/app agent-review request can still consume
 provider quota. Visible unsolicited activity fails closed without a second YAGA request, but a
 direct request can still race the final read/POST interval and create temporal ambiguity.
 
@@ -410,10 +410,10 @@ display names in the publisher trigger synchronized with their authenticated pat
   requires a new commit.
 - Bound request counts, pagination, bodies, event files, descriptions, polling, and all
   attacker-controlled strings. Never log the token or place it in arguments/outputs.
-- Reserve `Codex Review` and `CI Gate` for classic statuses. Audit all `statuses: write` and
+- Reserve `Agent Review` and `CI Gate` for classic statuses. Audit all `statuses: write` and
   `pull-requests: write` workflows because the beta uses the shared Actions identity.
 
-Strict up-to-date `Review Policy Boundary`, `CI Prerequisites`, `Codex Review`, and `CI Gate`
+Strict up-to-date `Review Policy Boundary`, `CI Prerequisites`, `Agent Review`, and `CI Gate`
 requirements plus required conversation resolution are consumer prerequisites. Merge queues are
 unsupported. Merge security also relies on `Maintainer Approval` and audited status/comment writers;
 the protected environment and owner ID secure quota authorization. This beta assumes GitHub
@@ -424,7 +424,7 @@ same-head transition.
 
 Add parser/checker tests for every new commit rule, strict configuration tests for every key,
 shell-free Git integration tests for selection behavior, and Typer runner tests for command/exit
-contracts. Keep a subprocess smoke proving `python -P -S -m yaga gate codex-review ...` reaches the
+contracts. Keep a subprocess smoke proving `python -P -S -m yaga gate agent-review ...` reaches the
 dependency-free Action boundary without importing Typer.
 
 Keep generic transport/models/status primitives in `src/yaga/` and provider policy in

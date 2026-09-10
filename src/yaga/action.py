@@ -5,7 +5,7 @@ from __future__ import annotations
 from yaga.codex.runtime import operation_name, run_action
 from yaga.errors import GateError
 
-SUPPORTED_GATES = frozenset({"codex-review"})
+SUPPORTED_GATES = frozenset({"agent-review"})
 
 
 def gate_name(value: object) -> str:
@@ -19,6 +19,6 @@ def run_gate(gate: object, operation: object) -> int:
     """Run one closed gate operation through the shared dispatcher."""
     selected_gate = gate_name(gate)
     selected_operation = operation_name(operation)
-    if selected_gate == "codex-review":
+    if selected_gate == "agent-review":
         return run_action(selected_operation)
     raise GateError("gate is invalid")  # pragma: no cover - gate_name is closed above

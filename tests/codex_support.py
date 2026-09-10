@@ -11,7 +11,7 @@ from yaga.errors import GateError
 
 REPOSITORY = "dariuszpanas/django-ray"
 SERVER_URL = "https://github.com"
-WORKFLOW_PATH = ".github/workflows/codex-review.yml"
+WORKFLOW_PATH = ".github/workflows/agent-review.yml"
 LIFECYCLE_WORKFLOW_PATH = ".github/workflows/review-policy.yml"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 PULL_REQUEST = 430
@@ -169,7 +169,7 @@ def _status(
 def _clean_body(commit: str = HEAD, suffix: str | None = "Hooray!") -> str:
     flourish = "" if suffix is None else f" {suffix}"
     return (
-        f"Codex Review: Didn't find any major issues.{flourish}\n\n**Reviewed commit:** `{commit}`"
+        f"Agent Review: Didn't find any major issues.{flourish}\n\n**Reviewed commit:** `{commit}`"
     )
 
 
