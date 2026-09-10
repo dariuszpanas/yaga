@@ -1184,4 +1184,5 @@ Before rollout:
    exact canary heads succeed and before normal contributor traffic.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development details and [SECURITY.md](SECURITY.md) for
-private vulnerability reporting and the beta trust boundary.
+private vulnerability reporting and the beta trust boundary. See [CHANGELOG.md](CHANGELOG.md) for
+the user-facing release history.
