@@ -28,7 +28,8 @@ uv run yaga commit check --message "feat(cli): add a policy check"
 Continue with [Get started](getting-started.md) for a first repository policy and the
 [command reference](commands.md) for provider-specific invocations. The detailed
 [commit policy](commit-policy.md), [repository checks](repository-checks.md), and
-[GitHub Actions](github-actions.md) pages document the complete contract.
+[GitHub Actions](github-actions.md) pages document the complete contract. See the
+[changelog](changelog.md) for the user-facing release history.
 
 ## Project status
 

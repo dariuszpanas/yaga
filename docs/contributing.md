@@ -30,3 +30,7 @@ before opening a pull request.
 
 When changing the dependency set, update both `pyproject.toml` and `uv.lock`. Before pushing,
 inspect the working and cached diffs and run the complete gate.
+
+Record user-visible changes in the root [CHANGELOG.md](https://github.com/dariuszpanas/yaga/blob/main/CHANGELOG.md)
+using the project’s [Keep a Changelog](changelog.md) convention. Do not turn the changelog into a
+raw commit log; summarize the outcome and call out migration or security consequences.
