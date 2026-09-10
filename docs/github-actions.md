@@ -59,6 +59,10 @@ The write-capable root runtime uses `YAGA_ACTION_RUNTIME=1` and standard-library
 The separate read-only commit Action uses `YAGA_COMMIT_ACTION_RUNTIME=1`; it may use commit policy
 modules but never Typer, the Codex gate, REST transport, or site packages.
 
+The Action preserves GitHub workflow annotations and writes the same bounded report, including
+operational errors, to `GITHUB_STEP_SUMMARY` inside an escaped `<pre>` block. This makes a failed
+commit-policy check readable from the run summary without changing its `0`/`1`/`2` exit contract.
+
 ## Workflow policy
 
 Pin every third-party action to an audited full commit SHA. Keep permissions least-privilege and

@@ -73,6 +73,11 @@ and emoji-only tokens do not count, and recognized footer content is excluded. A
 does not make an optional body required. Use `body-policy = "required"` when presence matters, and
 keep both minima at zero when `body-policy = "forbidden"`.
 
+YAGA’s own repository policy sets `body-policy = "required"` with a minimum prose length, so normal
+human commits include a durable explanation. The event-aware commit Action still skips policy
+evaluation for the exact Dependabot bot identity when `dependabot-pull-requests = "skip"`, including
+multiline Dependabot commit messages.
+
 ## Git selection and hooks
 
 ```bash
