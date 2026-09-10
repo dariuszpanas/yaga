@@ -18,6 +18,10 @@ uv sync --group dev
 uv run yaga --help
 ```
 
+The full operator and security reference is available in the
+[Zensical documentation](https://dariuszpanas.github.io/yaga/). The source lives in `docs/` and
+can be previewed with `make docs-serve`.
+
 The distribution is named `yaga-cli`; the executable and Python package are both named `yaga`.
 The `yaga` distribution name on PyPI belongs to an unrelated project.
 

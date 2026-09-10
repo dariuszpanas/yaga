@@ -10,7 +10,13 @@ site_dir = "site"
 nav = [
   { "Home" = "index.md" },
   { "Get started" = "getting-started.md" },
-  { "Command reference" = "commands.md" },
+  { "Commands" = "commands.md" },
+  { "Usage modes" = "usage.md" },
+  { "Configuration" = "configuration.md" },
+  { "Commit policy" = "commit-policy.md" },
+  { "Repository checks" = "repository-checks.md" },
+  { "GitHub Actions" = "github-actions.md" },
+  { "Codex review gate" = "codex-gate.md" },
   { "Security model" = "security.md" },
   { "Contributing" = "contributing.md" },
 ]
