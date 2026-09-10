@@ -28,6 +28,11 @@ for operational errors. Use `yaga <group> --help` for the exact current option s
 or range—and defaults to `HEAD` only when no source is supplied. A commit range is evaluated
 oldest first. Git-backed commit checks require complete history and never fetch.
 
+The standalone `branch`, `change`, `mode`, `path`, `size`, and `tree` providers also accept
+`--quiet` (or `-q`) when a caller needs only the exit status. Policy findings are suppressed, while
+operational errors still go to standard error and return exit `2`; `commit check` has the same
+behavior.
+
 The branch provider takes one explicit short branch name and one explicit policy. The change
 provider takes one exact `A..B` or `A...B` range and one explicit policy. The committed-tree
 providers (`mode`, `path`, `size`, and `tree`) take one exact commit-ish and one explicit policy;

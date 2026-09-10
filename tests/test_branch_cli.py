@@ -46,7 +46,8 @@ def test_branch_help_exposes_only_explicit_policy_name_and_format() -> None:
         assert option in help_text
     for output_format in ("text", "json", "github"):
         assert output_format in help_text
-    for unsupported in ("--repo", "--current", "--event-file", "--token", "--quiet"):
+    assert "--quiet" in help_text
+    for unsupported in ("--repo", "--current", "--event-file", "--token"):
         assert unsupported not in help_text
 
 
@@ -65,10 +66,12 @@ def test_branch_check_requires_both_explicit_inputs(missing: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("branch", "expected_exit", "status"),
+    ("branch", "expected_exit", "status", "quiet"),
     [
-        ("feat/installed-layer", 0, "passed"),
-        ("chore/installed-layer", 1, "failed"),
+        ("feat/installed-layer", 0, "passed", False),
+        ("chore/installed-layer", 1, "failed", False),
+        ("feat/installed-layer", 0, "passed", True),
+        ("chore/installed-layer", 1, "failed", True),
     ],
 )
 def test_branch_check_reports_policy_outcomes_on_stdout(
@@ -77,6 +80,7 @@ def test_branch_check_reports_policy_outcomes_on_stdout(
     branch: str,
     expected_exit: int,
     status: str,
+    quiet: bool,
 ) -> None:
     checked = _checked(tmp_path, branch)
     captured: dict[str, object] = {}
@@ -97,12 +101,16 @@ def test_branch_check_reports_policy_outcomes_on_stdout(
             branch,
             "--format",
             "json",
+            *(["--quiet"] if quiet else []),
         ],
     )
 
     assert result.exit_code == expected_exit, result.stderr
     assert result.stderr == ""
-    assert json.loads(result.stdout)["status"] == status
+    if quiet:
+        assert result.stdout == ""
+    else:
+        assert json.loads(result.stdout)["status"] == status
     assert captured == {"policy_path": Path("policy.toml"), "branch": branch}
 
 
@@ -128,6 +136,7 @@ def test_branch_check_renders_operational_errors_on_stderr(
             "feat/topic",
             "--format",
             output_format,
+            "--quiet",
         ],
     )
 

@@ -17,8 +17,10 @@ yaga workflow security .github/workflows/ci.yml
 The command writes human-readable findings to standard output. Invocation, configuration, Git,
 and other operational errors use standard error and exit `2`; policy findings use exit `1`.
 
-Use `--quiet` when a caller needs only the exit status. Use `--format json` when another program
-needs the versioned document, or `--format github` inside a workflow to emit escaped annotations.
+All installed policy providers accept `--quiet` when a caller needs only the exit status. Use
+`--format json` when another program needs the versioned document, or `--format github` inside a
+workflow to emit escaped annotations. Quiet mode suppresses policy findings on standard output;
+operational errors still use standard error and exit `2`.
 
 ## Explicit commit sources
 

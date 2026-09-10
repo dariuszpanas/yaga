@@ -36,6 +36,10 @@ def check_change_policy(
         ChangeOutputFormat,
         typer.Option("--format", case_sensitive=False, help="Report format."),
     ] = ChangeOutputFormat.TEXT,
+    quiet: Annotated[
+        bool,
+        typer.Option("--quiet", "-q", help="Suppress policy reports and use only the exit code."),
+    ] = False,
 ) -> None:
     """Require configured path changes for one explicit Git range."""
     try:
@@ -48,6 +52,7 @@ def check_change_policy(
         typer.echo(render_change_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
 
-    typer.echo(render_change_report(checked, output_format))
+    if not quiet:
+        typer.echo(render_change_report(checked, output_format))
     if not checked.report.valid:
         raise typer.Exit(code=1)
