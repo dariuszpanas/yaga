@@ -32,6 +32,10 @@ def check_branch_policy(
         BranchOutputFormat,
         typer.Option("--format", case_sensitive=False, help="Report format."),
     ] = BranchOutputFormat.TEXT,
+    quiet: Annotated[
+        bool,
+        typer.Option("--quiet", "-q", help="Suppress policy reports and use only the exit code."),
+    ] = False,
 ) -> None:
     """Check one explicit short branch name against one explicit policy."""
     try:
@@ -40,6 +44,7 @@ def check_branch_policy(
         typer.echo(render_branch_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
 
-    typer.echo(render_branch_report(checked, output_format))
+    if not quiet:
+        typer.echo(render_branch_report(checked, output_format))
     if not checked.report.valid:
         raise typer.Exit(code=1)

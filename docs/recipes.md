@@ -21,6 +21,13 @@ uv run yaga commit check --message "docs: explain YAGA" --format json > yaga-rep
 Exit `0` means pass, `1` means a valid input violated policy, and `2` means YAGA could not safely
 complete the invocation.
 
+For a status-only gate, add `--quiet`; policy output is suppressed but operational errors remain
+visible on standard error:
+
+```bash
+yaga branch check --policy .yaga/branch-policy.toml --name feat/topic --quiet
+```
+
 ## Enforce commit messages before creation
 
 YAGA exposes one direct `commit-msg` pre-commit adapter. Pin the repository to an audited immutable

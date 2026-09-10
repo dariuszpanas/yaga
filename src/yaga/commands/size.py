@@ -32,6 +32,10 @@ def check_committed_size_policy(
         SizeOutputFormat,
         typer.Option("--format", case_sensitive=False, help="Report format."),
     ] = SizeOutputFormat.TEXT,
+    quiet: Annotated[
+        bool,
+        typer.Option("--quiet", "-q", help="Suppress policy reports and use only the exit code."),
+    ] = False,
 ) -> None:
     """Check one exact committed Git tree against one explicit size policy."""
     try:
@@ -44,6 +48,7 @@ def check_committed_size_policy(
         typer.echo(render_size_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
 
-    typer.echo(render_size_report(checked, output_format))
+    if not quiet:
+        typer.echo(render_size_report(checked, output_format))
     if not checked.report.valid:
         raise typer.Exit(code=1)

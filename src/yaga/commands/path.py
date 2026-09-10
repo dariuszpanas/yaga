@@ -32,6 +32,10 @@ def check_committed_path_policy(
         PathOutputFormat,
         typer.Option("--format", case_sensitive=False, help="Report format."),
     ] = PathOutputFormat.TEXT,
+    quiet: Annotated[
+        bool,
+        typer.Option("--quiet", "-q", help="Suppress policy reports and use only the exit code."),
+    ] = False,
 ) -> None:
     """Check one exact committed Git tree against one explicit path policy."""
     try:
@@ -44,6 +48,7 @@ def check_committed_path_policy(
         typer.echo(render_path_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
 
-    typer.echo(render_path_report(checked, output_format))
+    if not quiet:
+        typer.echo(render_path_report(checked, output_format))
     if not checked.report.valid:
         raise typer.Exit(code=1)
