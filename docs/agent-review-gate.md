@@ -46,6 +46,17 @@ Required lenses participate in the aggregate gate; advisory lenses can publish f
 blocking it. Every lens must have a unique name, a bounded instruction, and a known adapter preset.
 Credentials, tokens, and provider-specific secrets stay in the trusted workflow environment.
 
+Validate the policy before wiring it into a workflow:
+
+```bash
+yaga gate agent-review policy check --file .yaga.toml
+```
+
+The validator requires schema version `1`, at least one required lens, unique lower-case lens names,
+known outcomes (`review` or `advisory`), bounded instructions, and a bounded preset name. It does
+not contact an agent or read credentials. The trusted publisher will consume this same validated
+model when provider adapters are enabled.
+
 ## Evidence and recovery
 
 An adapter may use a clean comment, inline findings, a native review, a reaction, or a check run.

@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Annotated
+
 import typer
 
 from yaga.action import run_gate
-from yaga.errors import GateError, safe_error_text
+from yaga.agent_review.policy import load_policy
+from yaga.errors import ConfigurationError, GateError, safe_error_text
 
 app = typer.Typer(help="Run a trusted GitHub gate operation.", no_args_is_help=True)
 agent_app = typer.Typer(help="Run the Agent review gate.", no_args_is_help=True)
+policy_app = typer.Typer(help="Validate Agent review policy.", no_args_is_help=True)
 app.add_typer(agent_app, name="agent-review")
+agent_app.add_typer(policy_app, name="policy")
 
 
 def _run(operation: str) -> None:
@@ -56,3 +62,23 @@ def request() -> None:
 def finalize() -> None:
     """Revalidate evidence and publish terminal statuses."""
     _run("finalize")
+
+
+@policy_app.command("check")
+def policy_check(
+    policy_file: Annotated[
+        Path,
+        typer.Option("--file", help="Explicit TOML policy file to validate."),
+    ],
+) -> None:
+    """Validate named review lenses without contacting a provider."""
+    try:
+        policy = load_policy(policy_file)
+    except ConfigurationError as error:
+        typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
+        raise typer.Exit(code=2) from error
+    required = ", ".join(policy.required)
+    typer.echo(
+        f"Agent review policy passed: {len(policy.lenses)} lens(es), "
+        f"{len(policy.required)} required ({required}), aggregation {policy.aggregation}."
+    )
