@@ -25,6 +25,29 @@ variables. For example:
 This workflow is a quota-saving quality heuristic, not a security authority: pull-request code
 controls its own execution.
 
+For an ordinary installed-CLI check, keep the source and checkout boundary explicit:
+
+```yaml
+- uses: actions/checkout@<audited-full-sha>
+  with:
+    fetch-depth: 0
+    persist-credentials: false
+- name: Check changed paths
+  env:
+    YAGA_CHANGE_RANGE: ${{ format('{0}...{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) }}
+  run: >-
+    uv run yaga change check
+    --policy .yaga/change-policy.toml
+    --range "$YAGA_CHANGE_RANGE"
+    --format github
+```
+
+The branch provider receives `github.head_ref` for pull requests and the branch-only
+`github.ref_name` for pushes. Committed-tree providers receive the exact checked-out head through
+`--revision`; they do not use the commit provider's `--commit` option or inspect staged and
+untracked files. Keep these values in quoted environment variables rather than interpolating them
+into shell source.
+
 ## Composite Action boundary
 
 The root Action accepts only the closed inputs `gate`, `operation`, `github-token`,
@@ -45,3 +68,42 @@ privileged checkout inputs and ambiguous permissions fail closed.
 For the retained write-capable review workflow, trusted default-branch `pull_request_target` or
 `workflow_run` jobs are the only writers. They must not consume pull-request code, artifacts, or
 cache.
+
+### Choosing a workflow provider
+
+Use the providers together when the repository needs all three guarantees:
+
+| Provider | Answers | Needs Docker? |
+| --- | --- | --- |
+| `workflow check` | Are external actions and container images immutably referenced? | No |
+| `workflow security` | Does the workflow satisfy the selected trust profile? | No |
+| `workflow lint` | Does bounded actionlint parsing accept the workflow structure? | Yes |
+
+The security profile is cumulative and opt-in by version: `recommended-v1` is the frozen default,
+v2 adds literal `persist-credentials: false` on direct runner-resolved checkout steps, and v3 adds
+the `pull_request` writer restriction for exact `pull-requests: write` and `statuses: write`
+permissions. A custom `--rule` selection replaces the profile and cannot be combined with
+`--profile`. A passing security check does not replace immutable-reference or syntax checks.
+
+### Aggregate and plan modes
+
+For a stable local-and-CI gate, select providers through a versioned plan:
+
+```toml
+plan-version = 2
+checks = ["workflow", "workflow-security", "workflow-lint", "tree"]
+workflow-paths = [".github/workflows", "examples"]
+workflow-security-profile = "recommended-v3"
+tree-policy = ".yaga/tree-policy.toml"
+```
+
+```bash
+yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD --format github
+```
+
+Plans never discover themselves, fetch, run commands, interpolate environment values, or become
+security authority when changed by a pull request. `--plan` replaces provider-selection flags;
+runtime repository, commit, revision, and output options remain on the command line. Selecting a
+committed-tree provider requires one exact `--revision`, while `--commit` or `--range` belongs only
+to the commit provider. Provider reports stay separate, and exit `2` wins over findings when any
+selected provider has an operational error.
