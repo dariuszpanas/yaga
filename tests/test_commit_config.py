@@ -17,6 +17,7 @@ from yaga.commits.models import (
     EndingPolicy,
     MergePolicy,
     PresencePolicy,
+    TyposPolicy,
 )
 from yaga.errors import ConfigurationError
 
@@ -44,6 +45,7 @@ def test_missing_configuration_uses_spec_only_defaults(tmp_path: Path) -> None:
     assert loaded.policy.required_footer_tokens == ()
     assert loaded.policy.forbidden_footer_tokens == ()
     assert loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.CHECK
+    assert loaded.policy.typos is TyposPolicy.SKIP
     assert loaded.policy.merge_commits is MergePolicy.IGNORE
 
 
@@ -95,6 +97,26 @@ def test_nearest_pyproject_is_discovered_from_a_nested_directory(tmp_path: Path)
     assert loaded.policy.allowed_types == ("feat", "fix")
     assert loaded.policy.type_case is CasePolicy.LOWER
     assert loaded.policy.max_commits == 12
+
+
+@pytest.mark.parametrize(
+    "value, expected", [("skip", TyposPolicy.SKIP), ("check", TyposPolicy.CHECK)]
+)
+def test_typos_policy_accepts_its_closed_values(
+    tmp_path: Path, value: str, expected: TyposPolicy
+) -> None:
+    project = write_pyproject(tmp_path, f'typos = "{value}"\n')
+
+    loaded = load_config(project)
+
+    assert loaded.policy.typos is expected
+
+
+def test_typos_policy_rejects_values_outside_its_closed_enum(tmp_path: Path) -> None:
+    project = write_pyproject(tmp_path, 'typos = "auto"\n')
+
+    with pytest.raises(ConfigurationError, match="typos must be one of"):
+        load_config(project)
 
 
 def test_standalone_configuration_wins_in_the_same_directory(tmp_path: Path) -> None:

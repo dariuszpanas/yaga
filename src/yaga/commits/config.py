@@ -19,6 +19,7 @@ from yaga.commits.models import (
     LoadedConfig,
     MergePolicy,
     PresencePolicy,
+    TyposPolicy,
 )
 from yaga.errors import ConfigurationError
 from yaga.files import read_file_prefix
@@ -51,6 +52,7 @@ _COMMIT_KEYS = frozenset(
         "body-max-line-length",
         "breaking-markers",
         "dependabot-pull-requests",
+        "typos",
         "required-footer-tokens",
         "forbidden-footer-tokens",
         "merge-commits",
@@ -334,6 +336,12 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             ),
             DependabotPullRequestPolicy,
             "dependabot-pull-requests",
+            path,
+        ),
+        typos=_enum(
+            raw_commit.get("typos", TyposPolicy.SKIP.value),
+            TyposPolicy,
+            "typos",
             path,
         ),
     )

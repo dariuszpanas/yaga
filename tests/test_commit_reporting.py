@@ -13,6 +13,7 @@ from yaga.commits.models import (
     LoadedConfig,
     OutputFormat,
     PresencePolicy,
+    TyposPolicy,
     ValidationReport,
 )
 from yaga.commits.reporting import render_config, render_error, render_report, safe_text
@@ -121,6 +122,16 @@ def test_config_reports_the_effective_dependabot_pull_request_policy() -> None:
 
     assert "dependabot-pull-requests: skip" in rendered
     assert document["config"]["dependabot_pull_requests"] == "skip"
+
+
+def test_config_reports_the_effective_typos_policy() -> None:
+    loaded = LoadedConfig(policy=CommitPolicy(typos=TyposPolicy.CHECK), path=None)
+
+    rendered = render_config(loaded, OutputFormat.TEXT)
+    document = json.loads(render_config(loaded, OutputFormat.JSON))
+
+    assert "typos: check" in rendered
+    assert document["config"]["typos"] == "check"
 
 
 def test_config_reports_scope_policy_overrides_with_spelling_and_order() -> None:

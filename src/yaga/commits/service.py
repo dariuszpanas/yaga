@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from yaga.commits.checker import check_target
 from yaga.commits.config import load_config
 from yaga.commits.git import read_commit, read_range
-from yaga.commits.models import CommitPolicy, CommitTarget, ValidationReport
+from yaga.commits.models import (
+    CheckResult,
+    CommitPolicy,
+    CommitTarget,
+    TyposPolicy,
+    ValidationReport,
+)
 from yaga.commits.sources import from_file, from_message, from_stdin
+from yaga.commits.typos import check_typos
 from yaga.errors import InputError
 
 
@@ -118,5 +126,15 @@ def _check_targets(
     config_path: Path | None,
     policy: CommitPolicy,
 ) -> ValidationReport:
-    results = tuple(check_target(target, policy) for target in targets)
+    results = tuple(_check_target(target, policy) for target in targets)
     return ValidationReport(results=results, config_path=config_path)
+
+
+def _check_target(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
+    result = check_target(target, policy)
+    if policy.typos is not TyposPolicy.CHECK or result.skipped_reason is not None:
+        return result
+    diagnostics = check_typos(target.message)
+    if not diagnostics:
+        return result
+    return replace(result, diagnostics=(*result.diagnostics, *diagnostics))
