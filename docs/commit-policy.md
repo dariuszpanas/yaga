@@ -30,6 +30,7 @@ body-policy = "optional"
 body-min-words = 8
 body-max-line-length = 100
 dependabot-pull-requests = "skip"
+typos = "skip"
 merge-commits = "reject"
 max-commits = 64
 ```
@@ -77,6 +78,25 @@ YAGA’s own repository policy sets `body-policy = "required"` with a minimum pr
 human commits include a durable explanation. The event-aware commit Action still skips policy
 evaluation for the exact Dependabot bot identity when `dependabot-pull-requests = "skip"`, including
 multiline Dependabot commit messages.
+
+## Optional Typos integration
+
+Set `typos = "check"` to run the installed [Typos CLI](https://github.com/crate-ci/typos) against
+each selected commit message. YAGA sends the message through standard input, requests Typos JSON
+Lines output, and converts each finding into a stable `typos.word` diagnostic. This works with
+`--message`, hooks, individual Git commits, and ranges; the default `typos = "skip"` keeps policy
+results independent of the tools installed on a developer machine.
+
+```toml
+[commit]
+typos = "check"
+```
+
+The check is intentionally explicit: when enabled, a missing `typos` executable, malformed output,
+unexpected exit status, timeout, or excessive output is an operational error (exit `2`) rather than
+an ignored warning. Install Typos separately, for example with `cargo install typos-cli --locked`,
+and keep project-specific words in Typos' `_typos.toml`. Use Typos' repository-wide action or
+pre-commit integration for source files; YAGA's adapter is narrowly scoped to commit messages.
 
 ## Git selection and hooks
 

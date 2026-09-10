@@ -54,6 +54,13 @@ class DependabotPullRequestPolicy(StrEnum):
     SKIP = "skip"
 
 
+class TyposPolicy(StrEnum):
+    """Whether the optional Typos CLI checks each selected message."""
+
+    SKIP = "skip"
+    CHECK = "check"
+
+
 class OutputFormat(StrEnum):
     """Supported stable report formats."""
 
@@ -87,6 +94,7 @@ class CommitPolicy:
     forbidden_footer_tokens: tuple[str, ...] = ()
     scope_policy_by_type: tuple[tuple[str, PresencePolicy], ...] = ()
     dependabot_pull_requests: DependabotPullRequestPolicy = DependabotPullRequestPolicy.CHECK
+    typos: TyposPolicy = TyposPolicy.SKIP
 
 
 @dataclass(frozen=True, slots=True)

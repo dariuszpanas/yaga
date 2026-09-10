@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from yaga.commits import check_commits, check_git_commits
-from yaga.commits.models import ValidationReport
+from yaga.commits.models import Diagnostic, ValidationReport
 from yaga.errors import InputError
 from yaga.repository.checker import check_repository
 
@@ -186,6 +186,25 @@ def test_standalone_service_applies_scope_policy_by_type_from_config(
     assert [diagnostic.code for diagnostic in missing.results[0].diagnostics] == ["scope.required"]
     assert scoped.valid
     assert fallback.valid
+
+
+def test_standalone_service_applies_optional_typos_policy(
+    repository: tuple[Path, list[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo, _, config = repository
+    config.write_text(
+        'config-version = 1\n\n[commit]\ntypos = "check"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "yaga.commits.service.check_typos",
+        lambda _message: (Diagnostic(code="typos.word", message="possible typo 'teh'", line=1),),
+    )
+
+    report = check_commits(repo, message="service: add teh check")
+
+    assert [diagnostic.code for diagnostic in report.results[0].diagnostics] == ["typos.word"]
 
 
 def test_git_only_service_exposes_default_commit_explicit_commit_and_range(

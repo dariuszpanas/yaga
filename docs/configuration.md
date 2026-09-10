@@ -52,6 +52,7 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 | `body-min-words` | Integer from 0 through 100000, counting prose tokens. |
 | `body-max-line-length` | Optional maximum body-line length. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
+| `typos` | `skip` (default) or `check` with an installed Typos CLI. |
 | `merge-commits` | `ignore`, `check`, or `reject`, based on Git parent identity. |
 | `ignored-headers` | Bounded case-sensitive glob patterns for intentional headers. |
 | `max-commits` | Positive bound for a selected commit range. |
