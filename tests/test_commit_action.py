@@ -193,9 +193,12 @@ def test_isolated_commit_action_honors_explicit_dependabot_skip_policy(
 ) -> None:
     repository, event_file, action_environment = _action_fixture(
         tmp_path,
-        head_message="not conventional",
+        head_message="not conventional\n\nDependabot updates are reviewed automatically.",
         pull_request_title="also not conventional",
-        config='config-version = 1\n[commit]\ndependabot-pull-requests = "skip"\n',
+        config=(
+            'config-version = 1\n[commit]\nbody-policy = "required"\n'
+            'dependabot-pull-requests = "skip"\n'
+        ),
         author={"login": "dependabot[bot]", "id": 49_699_333, "type": "Bot"},
     )
     environment = os.environ.copy()

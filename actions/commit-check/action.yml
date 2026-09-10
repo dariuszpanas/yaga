@@ -22,10 +22,28 @@ runs:
         test -f "$YAGA_SOURCE/yaga/commit_action_cli.py"
         export PYTHONPATH="$YAGA_SOURCE"
         export PYTHONSAFEPATH=1
+        YAGA_REPORT="$(mktemp)"
+        YAGA_ERROR="$(mktemp)"
+        trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
+        set +e
         python -P -S -m yaga github pull-request check \
           --event-file "${GITHUB_EVENT_PATH:-}" \
           --repo "${GITHUB_WORKSPACE:-}" \
-          --format github
+          --format github > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+        YAGA_STATUS=$?
+        set -e
+        cat "$YAGA_REPORT"
+        cat "$YAGA_ERROR" >&2
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          {
+            printf '%s\n' '## YAGA commit policy'
+            printf '%s\n' '<pre>'
+            sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
+              "$YAGA_REPORT" "$YAGA_ERROR"
+            printf '%s\n' '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$YAGA_STATUS"
 
 branding:
   icon: check-circle

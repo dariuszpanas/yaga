@@ -370,6 +370,16 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "import yaga.paths" not in source, path
 
 
+def test_commit_action_publishes_a_sanitized_step_summary() -> None:
+    action = (ROOT / "actions" / "commit-check" / "action.yml").read_text(encoding="utf-8")
+
+    assert "GITHUB_STEP_SUMMARY" in action
+    assert "YAGA_REPORT" in action
+    assert "YAGA_ERROR" in action
+    assert "<pre>" in action
+    assert "sed -e 's/&/\\&amp;/g'" in action
+
+
 def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
     paths = [
         ROOT / "src" / "yaga" / "commit_action_cli.py",
