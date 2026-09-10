@@ -135,12 +135,12 @@ def test_rest_client_posts_compact_bounded_json(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(github, "_open_without_redirects", open_request)
     api = github.GitHubRestApi("secret-token")
-    payload: dict[str, object] = {"state": "pending", "context": "Codex Review"}
+    payload: dict[str, object] = {"state": "pending", "context": "Agent Review"}
 
     assert api.post("/repos/owner/repository/statuses/abc", payload) == {}
     request = observed[0]
     assert request.method == "POST"
-    assert request.data == b'{"state":"pending","context":"Codex Review"}'
+    assert request.data == b'{"state":"pending","context":"Agent Review"}'
     assert request.headers["Authorization"] == "Bearer secret-token"
     assert request.headers["User-agent"] == github.USER_AGENT
     assert request.headers["Content-type"] == "application/json"

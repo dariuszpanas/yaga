@@ -19,7 +19,7 @@ Useful reports include:
 - PR-controlled code, actions, artifacts, caches, or text reaching a write-capable trusted job;
 - a request comment posted before exact current successful CI, live PR/head/base/default branch,
   unique ownership, lifecycle provenance, and owner/environment authorization are revalidated;
-- `Codex Review=success` or `CI Gate=success` without exact connector evidence and current status
+- `Agent Review=success` or `CI Gate=success` without exact agent evidence and current status
   lineage;
 - an external-author outcome passing without the protected YAGA authorization marker;
 - inherited success reused after synchronize, reopen, draft/ready, or base change;
@@ -60,7 +60,7 @@ unprivileged PR head, so this result is a reviewable quality signal rather than 
 security. Normal consumers pin the Action code; YAGA's local dogfood workflow deliberately executes
 the PR copy without granting write permissions or secrets.
 
-## Codex review gate boundary
+## Agent review gate boundary
 
 The lifecycle invalidator and `workflow_run` publisher execute only trusted default-branch action
 code. They never check out PR code, consume upstream artifacts/cache, or interpolate untrusted text
@@ -76,11 +76,11 @@ honest. The immutable owner ID and protected environment secure YAGA's quota pat
 approval, required review, and an audit of all write-capable workflows and integrations remain part
 of merge security.
 
-Consumers must set the required repository variable `YAGA_CODEX_OWNER_ID`. The external route uses
-the literal precreated `codex-review-approval` environment with `deployment: false`; configure the
+Consumers must set the required repository variable `YAGA_AGENT_OWNER_ID`. The external route uses
+the literal precreated `agent-review-approval` environment with `deployment: false`; configure the
 quota owner as its sole required reviewer, prevent self-review, disable administrator bypass, store
 no environment secrets, and define the environment variable
-`YAGA_CODEX_APPROVAL_MARKER=codex-review-approval:v1`. Required-reviewer environments are available
+`YAGA_AGENT_APPROVAL_MARKER=agent-review-approval:v1`. Required-reviewer environments are available
 for public repositories on supported GitHub plans and for private/internal repositories on GitHub
 Enterprise, subject to GitHub's current rules. Verify that support and protection in a preflight and
 canary before relying on it. Disable Codex automatic reviews before enabling the v2 publisher, then
@@ -88,12 +88,12 @@ prove the owner request and protected-external approval plus request paths befor
 contributor traffic.
 
 The cancel-stale per-PR `authorize-external` job records only a non-triggering approval marker. A
-separate PR-serialized request worker does not cancel an in-flight run and may post `@codex review`
+separate PR-serialized request worker does not cancel an in-flight run and may post an agent-review request
 only after revalidating that marker. This split keeps a stale approval wait from blocking a newer
 boundary without allowing cancellation to duplicate a request.
 
 The environment protects only YAGA's request token. It cannot stop a person or other integration
-from directly posting `@codex review`; provider-side execution may still consume quota. YAGA does
+from directly posting an agent-review request; provider-side execution may still consume quota. YAGA does
 not accept that unsolicited activity as pending or successful evidence. When it is visible, YAGA
 fails closed without posting a duplicate request. Only the protected route's exact approval marker
 authorizes YAGA to request review for an external-author PR; external approval never reuses

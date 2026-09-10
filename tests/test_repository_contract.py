@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 FULL_SHA = re.compile(r"dariuszpanas/yaga@([0-9a-f]{40})(?:\s|$)")
-RESERVED_STATUS_NAMES = {"codex review", "ci gate"}
+RESERVED_STATUS_NAMES = {"agent review", "ci gate"}
 COMMIT_CHECK_ACTION = (
     "dariuszpanas/yaga/actions/commit-check@cd02385e3216ac544e7783c7dd6929340e230e95"
 )
@@ -401,10 +401,10 @@ def test_recommended_v3_is_explicitly_dogfooded_and_bounded() -> None:
 
 def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> None:
     lifecycle = read("examples/review-policy.yml")
-    publisher = read("examples/codex-review.yml")
+    publisher = read("examples/agent-review.yml")
 
     assert {path.name for path in (ROOT / "examples").glob("*.yml")} == {
-        "codex-review.yml",
+        "agent-review.yml",
         "commit-policy.yml",
         "review-policy.yml",
     }
@@ -432,7 +432,7 @@ def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> Non
     ):
         assert unsupported not in lifecycle
 
-    assert publisher.startswith("name: YAGA Codex Review Publisher\n")
+    assert publisher.startswith("name: YAGA Agent Review Publisher\n")
     assert section_keys(publisher, "jobs") == {
         "prepare",
         "observe",
@@ -464,7 +464,7 @@ def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> Non
 
 
 def test_examples_have_closed_routing_and_literal_external_approval() -> None:
-    publisher = read("examples/codex-review.yml")
+    publisher = read("examples/agent-review.yml")
     prepare = workflow_job(publisher, "prepare")
     observe = workflow_job(publisher, "observe")
     owner = workflow_job(publisher, "request-owner")
@@ -485,11 +485,11 @@ def test_examples_have_closed_routing_and_literal_external_approval() -> None:
     assert "needs.authorize-external.result == 'success'" in external
     assert "environment:" not in owner
     assert (
-        "environment:\n      name: codex-review-approval\n      deployment: false" in authorization
+        "environment:\n      name: agent-review-approval\n      deployment: false" in authorization
     )
     assert "environment:" not in external
     assert "operation: authorize" in authorization
-    assert "approval-marker: ${{ vars.YAGA_CODEX_APPROVAL_MARKER }}" in authorization
+    assert "approval-marker: ${{ vars.YAGA_AGENT_APPROVAL_MARKER }}" in authorization
     assert (
         "needs: [prepare, observe, request-owner, authorize-external, request-external]" in finalize
     )
@@ -500,7 +500,7 @@ def test_examples_have_closed_routing_and_literal_external_approval() -> None:
 
 def test_example_jobs_have_exact_least_privilege_permissions() -> None:
     lifecycle = read("examples/review-policy.yml")
-    publisher = read("examples/codex-review.yml")
+    publisher = read("examples/agent-review.yml")
     invalidate = workflow_job(lifecycle, "invalidate")
     prepare = workflow_job(publisher, "prepare")
     observe = workflow_job(publisher, "observe")
@@ -555,7 +555,7 @@ def test_example_jobs_have_exact_least_privilege_permissions() -> None:
 
 def test_example_jobs_execute_only_pinned_closed_operations() -> None:
     lifecycle = read("examples/review-policy.yml")
-    publisher = read("examples/codex-review.yml")
+    publisher = read("examples/agent-review.yml")
     jobs = {
         "invalidate": (workflow_job(lifecycle, "invalidate"), "invalidate"),
         "prepare": (workflow_job(publisher, "prepare"), "prepare"),
@@ -573,7 +573,7 @@ def test_example_jobs_execute_only_pinned_closed_operations() -> None:
         assert f"operation: {operation}" in job
         assert "prerequisite-workflow: .github/workflows/ci.yml" in job
         assert "lifecycle-workflow: .github/workflows/review-policy.yml" in job
-        assert "owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }}" in job
+        assert "owner-id: ${{ vars.YAGA_AGENT_OWNER_ID }}" in job
         assert "\n        run:" not in job
         assert "actions/checkout" not in job
         assert "upload-artifact" not in job
@@ -587,12 +587,12 @@ def test_example_jobs_execute_only_pinned_closed_operations() -> None:
 
 def test_examples_serialize_exact_boundaries_without_post_close_or_main_push_wakes() -> None:
     lifecycle = read("examples/review-policy.yml")
-    publisher = read("examples/codex-review.yml")
+    publisher = read("examples/agent-review.yml")
 
     assert "yaga-review-policy-${{ github.event.pull_request.number }}-${{" in lifecycle
     assert "github.run_id || 'boundary'" in lifecycle
-    assert "yaga-codex-approval-${{ github.repository_id }}-${{" in publisher
-    assert "yaga-codex-worker-${{ github.repository_id }}-${{" in publisher
+    assert "yaga-agent-review-approval-${{ github.repository_id }}-${{" in publisher
+    assert "yaga-agent-review-worker-${{ github.repository_id }}-${{" in publisher
     assert "cancel-in-progress: true" in lifecycle
     authorization = workflow_job(publisher, "authorize-external")
     assert "cancel-in-progress: true" in authorization
@@ -637,7 +637,7 @@ def test_docs_explain_direct_writer_authority_and_audit_limit() -> None:
     assert re.search(r"both must\s+pass", readme)
     assert "shared GitHub Actions integration" in readme
     assert "statuses: write" in readme
-    assert re.search(r"reserve\s+every\s+case-insensitive `Codex Review` alias", readme)
+    assert re.search(r"reserve\s+every\s+case-insensitive `Agent Review` alias", readme)
     assert "dedicated YAGA GitHub App" in readme
     assert "same-repository workflow remains" in security
     assert "Commit-status publication is not transactional" in security
@@ -648,7 +648,7 @@ def test_docs_define_the_single_quota_guarded_review_request() -> None:
     security = read("SECURITY.md")
 
     assert "posts at most one strictly marked quota-consuming request" in readme
-    assert "codex-review-approval" in readme
+    assert "agent-review-approval" in readme
     assert (
         "Only that protected route's exact YAGA marker authorizes an external-author request"
         in (readme)
@@ -657,8 +657,8 @@ def test_docs_define_the_single_quota_guarded_review_request() -> None:
         r"Only the protected route's exact approval marker\s+authorizes YAGA to request review",
         security,
     )
-    assert "Disable Codex automatic reviews" in readme
-    assert "drain every existing Codex task" in readme
+    assert "Disable automatic agent reviews" in readme
+    assert "drain every existing agent-review task" in readme
     assert re.search(r"An eyes reaction is progress, not\s+success", readme)
     assert re.search(
         r"Every outcome must be strictly later than the exact current-boundary Actions-owned YAGA "
@@ -675,11 +675,11 @@ def test_docs_define_the_single_quota_guarded_review_request() -> None:
     )
     assert "External approval never reuses unsolicited evidence" in readme
     assert "delayed review of an older head" in readme
-    assert "no direct or other\nintegration-triggered Codex review can overlap YAGA" in readme
+    assert "no direct or other\nintegration-triggered Agent review can overlap YAGA" in readme
     assert "trusted successful status\nlineage for every older YAGA request" in readme
     assert "More than eight older YAGA\nrequest boundaries also fail closed" in readme
     assert "must not enable this beta action" in readme
-    assert "directly posting `@codex review`" in readme
+    assert "directly posting an agent-review request" in readme
     assert "temporal correlation, not a native provider binding" in readme
     assert "initial reaction-only success is accepted" not in security.casefold()
 
@@ -697,7 +697,7 @@ def test_docs_explain_the_delayed_invalidator_close_boundary() -> None:
 
 
 def test_workflow_job_and_step_names_do_not_impersonate_the_commit_status() -> None:
-    assert normalized_literal_name('    name: " cOdEx   ReVieW "') == "codex review"
+    assert normalized_literal_name('    name: " aGeNt   ReVieW "') == "agent review"
     workflows = [
         *(ROOT / "examples").glob("*.yml"),
         *(ROOT / ".github" / "workflows").glob("*.yml"),

@@ -36,7 +36,7 @@ from yaga.models import (
 )
 
 OPERATIONS = frozenset({"authorize", "finalize", "invalidate", "observe", "prepare", "request"})
-APPROVAL_ENVIRONMENT_MARKER = "codex-review-approval:v1"
+APPROVAL_ENVIRONMENT_MARKER = "agent-review-approval:v1"
 
 
 def operation_name(value: object) -> str:

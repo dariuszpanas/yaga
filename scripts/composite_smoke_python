@@ -2,12 +2,12 @@
 set -euo pipefail
 
 test "$#" -eq 7
-test "$*" = '-P -S -m yaga gate codex-review invalidate'
+test "$*" = '-P -S -m yaga gate agent-review invalidate'
 test "${GITHUB_TOKEN:-}" = not-used
 test "${YAGA_ACTION_RUNTIME:-}" = 1
 test "${PYTHONSAFEPATH:-}" = 1
 test "$(realpath -- "${PYTHONPATH:-}")" = "$(realpath -- "$GITHUB_WORKSPACE/src")"
-test "${YAGA_GATE:-}" = codex-review
+test "${YAGA_GATE:-}" = agent-review
 test "${YAGA_APPROVAL_MARKER+x}" = x
 test -z "${YAGA_APPROVAL_MARKER:-}"
 test "${YAGA_JOB_TIMEOUT_MINUTES:-}" = 15

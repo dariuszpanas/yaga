@@ -28,7 +28,7 @@ from yaga.codex.constants import (
 from yaga.codex.gate import GateResult
 from yaga.errors import GateError
 
-WORKFLOW_PATH = ".github/workflows/codex-review.yml"
+WORKFLOW_PATH = ".github/workflows/agent-review.yml"
 
 
 def _environment(

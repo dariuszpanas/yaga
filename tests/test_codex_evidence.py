@@ -72,14 +72,14 @@ def test_clean_outcome_accepts_bounded_optional_single_line_flourishes(
     "body",
     [
         "@codex review",
-        f"Codex Review: Didn't find any major issues. {'x' * 81}\n\n**Reviewed commit:** `{HEAD}`",
-        f"Codex Review: Didn't find any major issues. {'✨' * 27}\n\n**Reviewed commit:** `{HEAD}`",
-        f"Codex Review: Didn't find any major issues. Bravo.\nextra\n\n"
+        f"Agent Review: Didn't find any major issues. {'x' * 81}\n\n**Reviewed commit:** `{HEAD}`",
+        f"Agent Review: Didn't find any major issues. {'✨' * 27}\n\n**Reviewed commit:** `{HEAD}`",
+        f"Agent Review: Didn't find any major issues. Bravo.\nextra\n\n"
         f"**Reviewed commit:** `{HEAD}`",
-        f"Codex Review: Didn't find any major issues. Bravo.\t\n\n**Reviewed commit:** `{HEAD}`",
-        f"Codex Review: Didn't find any major issues. Bravo.\u0085Again\n\n"
+        f"Agent Review: Didn't find any major issues. Bravo.\t\n\n**Reviewed commit:** `{HEAD}`",
+        f"Agent Review: Didn't find any major issues. Bravo.\u0085Again\n\n"
         f"**Reviewed commit:** `{HEAD}`",
-        f"Codex Review: Didn't find any major issues. Bravo.\u2028Again\n\n"
+        f"Agent Review: Didn't find any major issues. Bravo.\u2028Again\n\n"
         f"**Reviewed commit:** `{HEAD}`",
         _clean_body() + f"\n**Reviewed commit:** `{HEAD}`",
         _clean_body() + "\nActually found a blocker.",
@@ -112,7 +112,7 @@ def test_formal_outcome_requires_exact_prefix_and_exactly_one_marker() -> None:
     assert evidence._formal_reviewed_commit("note\n" + _formal_body()) is None
     assert evidence._formal_reviewed_commit(_formal_body() + f"\n{_formal_body()}") is None
     assert (
-        evidence._formal_reviewed_commit(_formal_body().replace("Codex Review", "Review")) is None
+        evidence._formal_reviewed_commit(_formal_body().replace("Agent Review", "Review")) is None
     )
 
 
@@ -184,7 +184,7 @@ def test_selected_clean_comment_capability_detects_a_later_edit() -> None:
         outcome=outcome,
     )
 
-    api.comments[0]["body"] = "Codex Review: edited"
+    api.comments[0]["body"] = "Agent Review: edited"
     assert not evidence.validate_codex_outcome(
         api,
         repository=REPOSITORY,

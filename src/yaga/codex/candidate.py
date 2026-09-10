@@ -96,20 +96,20 @@ def _boundary_from_statuses(
         context=CODEX_STATUS_CONTEXT,
     )
     if not statuses:
-        raise GateError("Codex Review has no lifecycle boundary")
+        raise GateError("Agent Review has no lifecycle boundary")
     latest = statuses[0]
     if latest.creator_id != GITHUB_ACTIONS_USER_ID or latest.creator_login != GITHUB_ACTIONS_LOGIN:
-        raise GateError("latest Codex Review status is not Actions-owned")
+        raise GateError("latest Agent Review status is not Actions-owned")
     claim = parse_boundary_description(latest, head_sha=pull_request.head_sha)
     if claim is None or not _phase_matches_state(latest, claim[1]):
-        raise GateError("latest Codex Review status has no valid lifecycle boundary")
+        raise GateError("latest Agent Review status has no valid lifecycle boundary")
     claimed_boundary = claim[0]
     if (
         claimed_boundary.pull_request_number != pull_request.number
         or claimed_boundary.base_sha != pull_request.base_sha
         or claimed_boundary.action in {"closed", "converted_to_draft"}
     ):
-        raise GateError("Codex Review lifecycle boundary is not the live candidate")
+        raise GateError("Agent Review lifecycle boundary is not the live candidate")
 
     provenance: tuple[ReviewBoundary, CommitStatus] | None = None
     for status in statuses:
@@ -121,7 +121,7 @@ def _boundary_from_statuses(
             provenance = boundary, status
             break
     if provenance is None:
-        raise GateError("Codex Review lifecycle provenance is outside the bounded history")
+        raise GateError("Agent Review lifecycle provenance is outside the bounded history")
     boundary, provenance_status = provenance
     lifecycle_updated_at = validate_boundary_source(
         api,

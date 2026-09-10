@@ -24,7 +24,7 @@ from yaga.codex import constants, publication
 from yaga.errors import GateError
 from yaga.github import parse_pull_request
 
-TERMINAL_DESCRIPTION = "Trusted exact-head Codex review is current"
+TERMINAL_DESCRIPTION = "Trusted exact-head Agent review is current"
 
 
 def _expected():
@@ -518,7 +518,7 @@ def test_case_insensitive_alias_between_lease_and_terminal_forces_pending() -> N
                 self.statuses.append(
                     _status(
                         status_id=99_001,
-                        context="codex review",
+                        context="agent review",
                         target_url=alias_target,
                         created_at=BOUNDARY_AT + timedelta(hours=2, seconds=1),
                     )

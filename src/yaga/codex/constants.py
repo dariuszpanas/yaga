@@ -1,4 +1,4 @@
-"""Closed constants for the Codex review gate trust boundary."""
+"""Closed constants for the Agent review gate trust boundary."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ REACTION_CONTENTS = frozenset(
     {"+1", "-1", "confused", "eyes", "heart", "hooray", "laugh", "rocket"}
 )
 
-CODEX_STATUS_CONTEXT = "Codex Review"
+CODEX_STATUS_CONTEXT = "Agent Review"
 CI_STATUS_CONTEXT = "CI Gate"
 EVENT_ACTIONS = frozenset(
     {
@@ -50,10 +50,10 @@ SUCCESS_CLEANUP_MARGIN_SECONDS = 60
 MIN_JOB_TIMEOUT_MINUTES = 15
 MAX_JOB_TIMEOUT_MINUTES = 360
 
-PENDING_DESCRIPTION = "Waiting for an exact-head Codex review outcome"
-TIMEOUT_DESCRIPTION = "Codex review timed out; rerun CI after Codex finishes"
-CI_FAILURE_DESCRIPTION = "CI prerequisites failed; Codex review was not requested"
+PENDING_DESCRIPTION = "Waiting for an exact-head Agent review outcome"
+TIMEOUT_DESCRIPTION = "Agent review timed out; rerun CI after the agent finishes"
+CI_FAILURE_DESCRIPTION = "CI prerequisites failed; Agent review was not requested"
 
 FORMAL_REVIEW_PREFIX = (
-    "### 💡 Codex Review\n\nHere are some automated review suggestions for this pull request."
+    "### 💡 Agent Review\n\nHere are some automated review suggestions for this pull request."
 )

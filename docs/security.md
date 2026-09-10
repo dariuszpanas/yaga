@@ -1,7 +1,7 @@
 # Security model
 
 YAGA has two surfaces: an installed CLI for repository policy and a dependency-free composite
-Action runtime for the retained Codex review gate. The trust boundary is intentionally narrow.
+Action runtime for the Agent review gate. The trust boundary is intentionally narrow.
 
 ## Explicit and bounded inputs
 

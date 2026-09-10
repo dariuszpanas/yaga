@@ -1,1 +1,1 @@
-"""Codex review gate policy."""
+"""Provider adapter for the Agent review gate."""

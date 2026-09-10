@@ -2,9 +2,9 @@
 
 YAGA is an extensible Python CLI for repository policy that runs the same checks locally and in CI.
 Its first general-purpose feature is a configurable
-[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) checker. The original
-Codex review gate remains available as an experimental GitHub Action and as a CLI command; it has
-not been discarded or hidden behind copied scripts.
+[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) checker. The Agent
+review gate is an experimental GitHub Action and CLI command for coordinating one or more
+configured review agents through a shared, bounded lifecycle.
 
 YAGA is pre-release. The CLI and configuration schema may still change. Action consumers must pin
 the exact audited 40-character commit SHA they canaried rather than a branch or mutable tag.
@@ -42,7 +42,7 @@ yaga tree check                    # validate one exact committed tree
 yaga workflow check                # require immutable workflow references
 yaga workflow security             # enforce a bounded Actions trust policy
 yaga workflow lint                 # lint workflow syntax with pinned actionlint
-yaga gate codex-review <operation> # run the retained review gate
+yaga gate agent-review <operation> # run the configured review gate
 ```
 
 ## Conventional Commit checks
@@ -955,12 +955,12 @@ to standard output; aggregate exit `2` reports go to standard error.
 The installed CLI exposes all retained operations:
 
 ```bash
-yaga gate codex-review invalidate
-yaga gate codex-review prepare
-yaga gate codex-review authorize
-yaga gate codex-review observe
-yaga gate codex-review request
-yaga gate codex-review finalize
+yaga gate agent-review invalidate
+yaga gate agent-review prepare
+yaga gate agent-review authorize
+yaga gate agent-review observe
+yaga gate agent-review request
+yaga gate agent-review finalize
 ```
 
 These are not offline simulations: they require the same trusted GitHub environment, event payload,
@@ -970,10 +970,10 @@ as a CLI argument.
 
 The installed CLI uses Typer. The write-capable composite Action intentionally installs nothing and
 runs with Python site packages disabled. A fixed standard-library bootstrap accepts the same
-`gate codex-review <operation>` command path and calls the same dispatcher, keeping the trusted
+`gate agent-review <operation>` command path and calls the same dispatcher, keeping the trusted
 Action import graph dependency-free and network-free.
 
-## Codex review Action: why the workflow is split
+## Agent review Action: why the workflow is split
 
 Write-capable review automation must not execute pull-request-controlled code. YAGA therefore puts
 two trusted, write-capable default-branch workflows around ordinary unprivileged PR CI:
@@ -982,14 +982,14 @@ two trusted, write-capable default-branch workflows around ordinary unprivileged
    invalidator. A real lifecycle boundary uses the native job/check name `Review Policy Boundary`;
    an ordinary title/body edit instead uses `Review Policy Metadata`, which is not a required
    context. YAGA verifies the live PR, unique head ownership, and commit-status capacity before
-   writing `Codex Review=pending` and `CI Gate=pending`. It checks out no code, requests no review,
+   writing `Agent Review=pending` and `CI Gate=pending`. It checks out no code, requests no review,
    and does not trigger on `closed`.
 2. Normal unprivileged PR CI runs the repository's tests and ends at a check named
    `CI Prerequisites`.
-3. [`examples/codex-review.yml`](examples/codex-review.yml) wakes on a completed `CI` or
+3. [`examples/agent-review.yml`](examples/agent-review.yml) wakes on a completed `CI` or
    `YAGA Review Policy` run. It re-fetches and authenticates the wake, resolves the exact current CI
    and lifecycle pair, requires a unique ready PR, and never reads artifacts or cache. Failed CI
-   publishes terminal errors without asking Codex. Successful CI routes one bounded request or
+   publishes terminal errors without asking an agent. Successful CI routes one bounded request or
    observes only a review already started by the exact current-boundary YAGA request. If CI
    completes first, `prepare` waits for the lifecycle run for at most two minutes; a later lifecycle
    completion also provides a second reconcile wake.
@@ -997,7 +997,7 @@ two trusted, write-capable default-branch workflows around ordinary unprivileged
    exact timestamp tie), so either queue order makes progress without two processors churning the
    same boundary.
 4. A final independent operation revalidates CI, the live lifecycle boundary, authorization, and
-   exact-head Codex evidence before publishing classic `CI Gate=success` last.
+   exact-head agent evidence before publishing classic `CI Gate=success` last.
 
 The configured display names `CI` and `YAGA Review Policy` are coupled to the publisher's
 `workflows` trigger, while their authenticated file paths are coupled to `prerequisite-workflow` and
@@ -1013,17 +1013,18 @@ model, not a security authority: PR-controlled code can alter its own CI behavio
 environment and owner identity protect YAGA's quota path; `Maintainer Approval`, required review,
 and audits of write-capable workflows and integrations remain part of merge security.
 
-All workflows have friendly human run titles. The names `Codex Review` and `CI Gate` are reserved
+All workflows have friendly human run titles. The names `Agent Review` and `CI Gate` are reserved
 for classic commit statuses and must not be used as workflow, job, or check names.
 
 ## Quota firewall
 
-Create the required repository Actions variable `YAGA_CODEX_OWNER_ID` with the immutable numeric
-GitHub user ID allowed to request Codex directly. The generic template contains no account-specific
-ID. Every other PR author is routed through a precreated `codex-review-approval` environment.
+Create the required repository Actions variable `YAGA_AGENT_OWNER_ID` with the immutable numeric
+GitHub user ID allowed to request agent review directly. The generic template contains no
+account-specific ID. Every other PR author is routed through a precreated `agent-review-approval`
+environment.
 Configure that environment with the quota owner as its sole required reviewer, enable prevent
 self-review, disable administrator bypass, and store no secrets. Add the environment variable
-`YAGA_CODEX_APPROVAL_MARKER=codex-review-approval:v1`. The template uses `deployment: false`, so the
+`YAGA_AGENT_APPROVAL_MARKER=agent-review-approval:v1`. The template uses `deployment: false`, so the
 protection applies without creating a deployment record.
 
 GitHub required-reviewer environment protection is available for public repositories on supported
@@ -1044,7 +1045,7 @@ exact request plus admissible pending/outcome evidence. GitHub cannot make the l
 POST atomic, so another actor can still start a review in that final interval; disabling automatic
 reviews removes the normal provider-side source of that residual race.
 
-Disable Codex automatic reviews and drain every existing Codex task before enabling YAGA's v2
+Disable automatic agent reviews and drain every existing agent-review task before enabling YAGA's v2
 publisher. YAGA is then the sole legitimate automatic requester and asks only after CI passes.
 Canary both the owner request and protected-external approval plus request paths. Every accepted
 eyes reaction or outcome, including on `opened`, must follow the exact current-boundary
@@ -1053,7 +1054,7 @@ posting a duplicate YAGA request. External approval never reuses unsolicited evi
 authorizes YAGA to create the exact request and nothing else.
 
 The environment protects only YAGA's token. OpenAI's public GitHub documentation does not describe
-a repository control that prevents a person or another app from directly posting `@codex review`.
+a repository control that prevents a person or another app from directly posting an agent-review request.
 Such a comment may still consume provider quota. If its activity is already visible, YAGA fails
 closed rather than spending quota on a second request. A direct request can still race YAGA's final
 read and comment POST, however, and Codex outcomes do not identify the triggering comment. The
@@ -1065,7 +1066,7 @@ permissions and provider-side access controls remain necessary.
 
 | Input | Contract |
 | --- | --- |
-| `gate` | Closed selector; currently only `codex-review`. |
+| `gate` | Closed selector; currently only `agent-review`. |
 | `operation` | One of `invalidate`, `prepare`, `authorize`, `observe`, `request`, or `finalize`. |
 | `github-token` | Token passed only through the environment. |
 | `prerequisite-workflow` | Authenticated PR CI path; default `.github/workflows/ci.yml`. |
@@ -1082,7 +1083,7 @@ any queue or environment wait.
 
 ## Evidence contract
 
-YAGA accepts only exact Codex connector identities and these bounded outcomes:
+YAGA accepts only exact configured agent identities and these bounded outcomes:
 
 - a clean connector issue comment whose reviewed-commit marker resolves to the current head;
 - a formal connector findings review whose native `commit_id` and reviewed-commit marker identify
@@ -1100,7 +1101,7 @@ A PR-body reaction has no commit/base identifier of its own, and even a reviewed
 not identify the triggering request. A delayed review of an older head can finish after a newer
 boundary, so the YAGA marker establishes temporal correlation rather than a native provider
 binding. Automatic reviews must be disabled and drained before activation, and no direct or other
-integration-triggered Codex review can overlap YAGA. YAGA also requires trusted successful status
+integration-triggered Agent review can overlap YAGA. YAGA also requires trusted successful status
 lineage for every older YAGA request before it can post or trust evidence for a newer boundary. If a
 head changes while its request is unresolved or timed out, open a fresh PR. A deployment that cannot
 prevent overlapping non-YAGA reviews must not enable this beta action.
@@ -1130,7 +1131,7 @@ transaction spanning those operations. A marked request or status can therefore 
 and a request may consume quota; YAGA revalidates and compensates where possible, but does not
 guarantee zero post-close writes.
 
-Polling is bounded. A timeout publishes `Codex Review=error`; rerun CI after Codex or GitHub
+Polling is bounded. A timeout publishes `Agent Review=error`; rerun CI after the agent or GitHub
 recovers. There is no scheduled repair. Polling admits another evidence pass only while a fixed
 terminal-error request/time tail remains. Commit-status writes are not transactional, so runner loss
 can leave pending. A newer CI/lifecycle run supersedes older attempts, and every request or
@@ -1146,7 +1147,7 @@ approached; either condition otherwise leaves the gate pending and requires a ne
 ## Required repository policy
 
 Require strict, up-to-date `Commit Messages`, `Maintainer Approval`, `Review Policy Boundary`,
-`CI Prerequisites`, `Codex Review`, and `CI Gate` as applicable. The native lifecycle check makes a
+`CI Prerequisites`, `Agent Review`, and `CI Gate` as applicable. The native lifecycle check makes a
 runner/API failure block before a new boundary can inherit old classic green; the native CI check
 also blocks failed or in-progress reruns. Keep required conversation resolution enabled. Only YAGA
 publishes classic `CI Gate` after review succeeds.
@@ -1154,7 +1155,7 @@ Merge queues are unsupported because YAGA has no `merge_group` trigger or combin
 
 The beta writer is the shared GitHub Actions integration, not a dedicated YAGA GitHub App. Audit
 every default-branch workflow and integration with `statuses: write` or `pull-requests: write`,
-reserve every case-insensitive `Codex Review` alias and every `CI Gate` alias, and keep repository
+reserve every case-insensitive `Agent Review` alias and every `CI Gate` alias, and keep repository
 Actions defaults read-only. The three comment-writing jobs use `pull-requests: write`; live GitHub
 Actions evidence showed that `issues: write` alone received HTTP 403 for the PR conversation route.
 A same-named Actions check cannot replace a classic status: when GitHub requires both, both must
@@ -1180,7 +1181,7 @@ Before rollout:
    task before enabling the publisher. Pin the audited YAGA SHA, then open fresh canaries for failed
    CI, the owner request, protected-external approval plus request, timeout/rerun, metadata and
    lifecycle transitions, close, and merge. Confirm the post-merge publisher run skips every job.
-5. Require `Review Policy Boundary`, `CI Prerequisites`, `Codex Review`, and `CI Gate` only after the
+5. Require `Review Policy Boundary`, `CI Prerequisites`, `Agent Review`, and `CI Gate` only after the
    exact canary heads succeed and before normal contributor traffic.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development details and [SECURITY.md](SECURITY.md) for

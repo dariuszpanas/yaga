@@ -46,7 +46,7 @@ def _status_description(value: str) -> str:
         or len(value) > MAX_STATUS_DESCRIPTION_CHARS
         or any(ord(character) < 32 or ord(character) == 127 for character in value)
     ):
-        raise GateError("Codex review status description is invalid")
+        raise GateError("Agent review status description is invalid")
     return value
 
 
@@ -68,10 +68,10 @@ def _publish_status(
     context: str = CODEX_STATUS_CONTEXT,
 ) -> CommitStatus:
     repository = repository_name(repository)
-    head_sha = commit_sha(head_sha, "Codex review status head")
+    head_sha = commit_sha(head_sha, "Agent review status head")
     description = _status_description(description)
     if state not in {"error", "pending", "success"}:
-        raise GateError("Codex review publication state is invalid")
+        raise GateError("Agent review publication state is invalid")
     payload: dict[str, object] = {
         "context": context,
         "description": description,
@@ -80,7 +80,7 @@ def _publish_status(
     }
     status = _actions_status(
         api.post(f"/repos/{repository}/statuses/{head_sha}", payload),
-        label="published Codex review status",
+        label="published Agent review status",
     )
     if (
         status.state != state
@@ -88,7 +88,7 @@ def _publish_status(
         or status.description != description
         or status.target_url != target_url
     ):
-        raise GateError("GitHub returned a different Codex review status")
+        raise GateError("GitHub returned a different Agent review status")
     return status
 
 
@@ -145,21 +145,21 @@ def _gate_status_history(
     context: str = CODEX_STATUS_CONTEXT,
 ) -> _GateStatusHistory:
     repository = repository_name(repository)
-    head_sha = commit_sha(head_sha, "Codex review status head")
+    head_sha = commit_sha(head_sha, "Agent review status head")
     payload = api.get(
         f"/repos/{repository}/commits/{head_sha}/statuses?per_page={MAX_STATUS_PAGE_RECORDS}&page=1"
     )
     if not isinstance(payload, list) or len(payload) >= MAX_STATUS_PAGE_RECORDS:
-        raise GateError("Codex review status page is incomplete or invalid")
+        raise GateError("Agent review status page is incomplete or invalid")
     statuses: list[CommitStatus] = []
     seen_ids: set[int] = set()
     previous_created_at = None
     for index, item in enumerate(payload):
-        status = parse_commit_status(item, label=f"Codex review status {index}")
+        status = parse_commit_status(item, label=f"Agent review status {index}")
         if status.status_id in seen_ids:
-            raise GateError("Codex review status page repeats a status")
+            raise GateError("Agent review status page repeats a status")
         if previous_created_at is not None and status.created_at > previous_created_at:
-            raise GateError("Codex review status page is not newest-first")
+            raise GateError("Agent review status page is not newest-first")
         seen_ids.add(status.status_id)
         previous_created_at = status.created_at
         if status.context.casefold() == context.casefold():
@@ -177,19 +177,19 @@ def ensure_status_capacity(
 ) -> None:
     """Fail before a lifecycle write when a SHA is too close to GitHub's cap."""
     repository = repository_name(repository)
-    head_sha = commit_sha(head_sha, "Codex review status capacity head")
+    head_sha = commit_sha(head_sha, "Agent review status capacity head")
     if (
         not contexts
         or len(set(contexts)) != len(contexts)
         or any(not isinstance(context, str) or not context for context in contexts)
     ):
-        raise GateError("Codex review status capacity contexts are invalid")
+        raise GateError("Agent review status capacity contexts are invalid")
     if (
         isinstance(reserve_per_context, bool)
         or not isinstance(reserve_per_context, int)
         or not 1 <= reserve_per_context < MAX_STATUSES_PER_CONTEXT
     ):
-        raise GateError("Codex review status capacity reserve is invalid")
+        raise GateError("Agent review status capacity reserve is invalid")
 
     counts = {context.casefold(): 0 for context in contexts}
     seen_ids: set[int] = set()
@@ -200,16 +200,16 @@ def ensure_status_capacity(
             f"?per_page={MAX_STATUS_PAGE_RECORDS}&page={page}"
         )
         if not isinstance(payload, list) or len(payload) > MAX_STATUS_PAGE_RECORDS:
-            raise GateError("Codex review status capacity page is invalid")
+            raise GateError("Agent review status capacity page is invalid")
         for index, item in enumerate(payload):
             status = parse_commit_status(
                 item,
-                label=f"Codex review status capacity page {page} item {index}",
+                label=f"Agent review status capacity page {page} item {index}",
             )
             if status.status_id in seen_ids:
-                raise GateError("Codex review status capacity repeats a status")
+                raise GateError("Agent review status capacity repeats a status")
             if previous_created_at is not None and status.created_at > previous_created_at:
-                raise GateError("Codex review status capacity is not newest-first")
+                raise GateError("Agent review status capacity is not newest-first")
             seen_ids.add(status.status_id)
             previous_created_at = status.created_at
             normalized = status.context.casefold()
@@ -321,7 +321,7 @@ def publish_terminal(
 ) -> CommitStatus | None:
     """Publish only while this attempt still owns the latest pending lease."""
     if state not in {"error", "success"}:
-        raise GateError("Codex review terminal state is invalid")
+        raise GateError("Agent review terminal state is invalid")
     try:
         history = _gate_status_history(
             api,
@@ -518,25 +518,25 @@ def uniquely_owned(
 ) -> bool:
     """Require one exact open PR owner without unbounded pagination."""
     repository = repository_name(repository)
-    head_sha = commit_sha(head_sha, "Codex review head ownership")
-    pull_request_number = positive_int(pull_request_number, "Codex review pull request")
+    head_sha = commit_sha(head_sha, "Agent review head ownership")
+    pull_request_number = positive_int(pull_request_number, "Agent review pull request")
     payload = api.get(
         f"/repos/{repository}/commits/{head_sha}/pulls?per_page={MAX_HEAD_ASSOCIATIONS}&page=1"
     )
     if not isinstance(payload, list) or len(payload) > MAX_HEAD_ASSOCIATIONS:
-        raise GateError("Codex review head associations are invalid")
+        raise GateError("Agent review head associations are invalid")
     if len(payload) == MAX_HEAD_ASSOCIATIONS:
         return False
     open_numbers: list[int] = []
     seen_numbers: set[int] = set()
     for index, item in enumerate(payload):
-        association = record(item, f"Codex review head association {index}")
+        association = record(item, f"Agent review head association {index}")
         state = association.get("state")
         if state not in {"closed", "open"}:
-            raise GateError("Codex review head association state is invalid")
+            raise GateError("Agent review head association state is invalid")
         number = positive_int(association.get("number"), "associated pull request number")
         if number in seen_numbers:
-            raise GateError("Codex review head association is repeated")
+            raise GateError("Agent review head association is repeated")
         seen_numbers.add(number)
         head = record(association.get("head"), "associated pull request head")
         associated_sha = commit_sha(head.get("sha"), "associated pull request head SHA")

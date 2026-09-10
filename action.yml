@@ -4,9 +4,9 @@ author: Dariusz Panas
 
 inputs:
   gate:
-    description: Gate implementation to run; currently only codex-review
+    description: Gate implementation to run; currently only agent-review
     required: true
-    default: codex-review
+    default: agent-review
   github-token:
     description: >-
       GitHub token with the documented per-operation Actions, contents,
@@ -29,7 +29,7 @@ inputs:
   approval-marker:
     description: >-
       Environment-only marker required by authorize; set it to
-      codex-review-approval:v1 in the protected approval environment
+      agent-review-approval:v1 in the protected approval environment
     required: false
     default: ""
   request-timeout:

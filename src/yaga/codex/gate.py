@@ -988,7 +988,7 @@ def prepare(
 
     if not reaction_history_is_settled:
         return fail_closed(
-            "Codex Review blocked because an earlier YAGA request has no trusted success; "
+            "Agent Review blocked because an earlier YAGA request has no trusted success; "
             "open a fresh PR"
         )
     if reaction_request is None and _unsolicited_activity_is_visible(
@@ -997,14 +997,14 @@ def prepare(
         candidate=candidate,
     ):
         return fail_closed(
-            "Codex Review blocked because connector activity has no exact YAGA request"
+            "Agent Review blocked because connector activity has no exact YAGA request"
         )
     if reaction_request is not None and not _request_follows_authorization(
         reaction_request,
         authorization,
     ):
         return fail_closed(
-            "Codex Review blocked because its request does not follow protected approval"
+            "Agent Review blocked because its request does not follow protected approval"
         )
     outcome = _current_outcome(
         api,
@@ -1031,11 +1031,11 @@ def prepare(
         return GateResult("skipped: candidate changed while publishing success", 0)
 
     if owner_authored and reaction_request is not None:
-        return GateResult("pending: Codex review is already in flight", 0, "observe")
+        return GateResult("pending: Agent review is already in flight", 0, "observe")
     if not owner_authored and authorizations.approval is None:
         if reaction_request is not None:
             return fail_closed(
-                "Codex Review blocked because the exact YAGA request lacks protected approval"
+                "Agent Review blocked because the exact YAGA request lacks protected approval"
             )
         return GateResult(
             "pending: maintainer approval is required before requesting Codex",
@@ -1043,9 +1043,9 @@ def prepare(
             "external",
         )
     if not owner_authored and reaction_request is not None:
-        return GateResult("pending: Codex review is already in flight", 0, "observe")
+        return GateResult("pending: Agent review is already in flight", 0, "observe")
     route = "owner" if owner_authored else "approved"
-    return GateResult("pending: a bounded Codex review request is needed", 0, route)
+    return GateResult("pending: a bounded Agent review request is needed", 0, route)
 
 
 def authorize(
@@ -1153,7 +1153,7 @@ def review(
         requests=authorizations.prior_requests,
     )
     if not owner_authored and authorization is None:
-        raise GateError("external Codex review request lacks protected approval")
+        raise GateError("external Agent review request lacks protected approval")
     if not reaction_history_is_settled:
         _settle_codex(
             api,
@@ -1166,7 +1166,7 @@ def review(
             success=False,
         )
         return GateResult(
-            "Codex Review blocked because an earlier YAGA request has no trusted success; "
+            "Agent Review blocked because an earlier YAGA request has no trusted success; "
             "open a fresh PR",
             1,
         )
@@ -1186,7 +1186,7 @@ def review(
             success=False,
         )
         return GateResult(
-            "Codex Review blocked because connector activity has no exact YAGA request",
+            "Agent Review blocked because connector activity has no exact YAGA request",
             1,
         )
     if not allow_request and reaction_request is None:
@@ -1200,7 +1200,7 @@ def review(
             lease=lease,
             success=False,
         )
-        return GateResult("Codex Review blocked because its exact YAGA request is missing", 1)
+        return GateResult("Agent Review blocked because its exact YAGA request is missing", 1)
     if allow_request and reaction_request is None:
         if not _revalidate(
             api,
@@ -1270,7 +1270,7 @@ def review(
                 success=False,
             )
             return GateResult(
-                "Codex Review blocked because connector activity appeared before its request",
+                "Agent Review blocked because connector activity appeared before its request",
                 1,
             )
 
@@ -1285,7 +1285,7 @@ def review(
             lease=lease,
             success=False,
         )
-        return GateResult("Codex Review blocked because its exact YAGA request disappeared", 1)
+        return GateResult("Agent Review blocked because its exact YAGA request disappeared", 1)
     if not _request_follows_authorization(reaction_request, authorization):
         _settle_codex(
             api,
@@ -1298,7 +1298,7 @@ def review(
             success=False,
         )
         return GateResult(
-            "Codex Review blocked because its request does not follow protected approval",
+            "Agent Review blocked because its request does not follow protected approval",
             1,
         )
 
@@ -1358,7 +1358,7 @@ def review(
                 reaction_request=reaction_request,
                 request_key=key,
             ):
-                return GateResult("success: trusted exact-head Codex review is current", 0, "done")
+                return GateResult("success: trusted exact-head Agent review is current", 0, "done")
             return GateResult("skipped: candidate changed while publishing success", 0)
         remaining = poll_deadline - clock()
         if remaining <= 0:
@@ -1482,5 +1482,5 @@ def finalize(
     if not settled:
         return GateResult("skipped: candidate changed during CI Gate publication", 0)
     if review_passed:
-        return GateResult("success: CI prerequisites and Codex review passed", 0, "done")
-    return GateResult("CI Gate failed because Codex Review is not successful", 1)
+        return GateResult("success: CI prerequisites and Agent review passed", 0, "done")
+    return GateResult("CI Gate failed because Agent Review is not successful", 1)

@@ -1,4 +1,4 @@
-name: YAGA Codex Review Publisher
+name: YAGA Agent Review Publisher
 run-name: >-
   ${{ format('YAGA review wake from {0} run #{1}',
   github.event.workflow_run.name, github.event.workflow_run.run_number) }}
@@ -17,7 +17,7 @@ jobs:
       github.event.workflow_run.event == 'pull_request') ||
       (github.event.workflow_run.path == '.github/workflows/review-policy.yml' &&
       github.event.workflow_run.event == 'pull_request_target')
-    name: Prepare Codex Review
+    name: Prepare Agent Review
     permissions:
       actions: read
       contents: read
@@ -30,25 +30,25 @@ jobs:
       route: ${{ steps.prepare.outputs.route }}
       pull_request_number: ${{ steps.prepare.outputs.pull_request_number }}
     steps:
-      - name: Prepare Codex Review
+      - name: Prepare Agent Review
         id: prepare
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
-          gate: codex-review
+          gate: agent-review
           operation: prepare
           github-token: ${{ secrets.GITHUB_TOKEN }}
           prerequisite-workflow: .github/workflows/ci.yml
           lifecycle-workflow: .github/workflows/review-policy.yml
-          owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }} # set to the owner's immutable user ID
+          owner-id: ${{ vars.YAGA_AGENT_OWNER_ID }} # set to the owner's immutable user ID
           job-timeout-minutes: 15
 
   observe:
     needs: prepare
     if: needs.prepare.outputs.route == 'observe'
-    name: Observe Codex Review
+    name: Observe Agent Review
     concurrency:
       group: >-
-        yaga-codex-worker-${{ github.repository_id }}-${{
+        yaga-agent-review-worker-${{ github.repository_id }}-${{
         needs.prepare.outputs.pull_request_number }}
       cancel-in-progress: false
     permissions:
@@ -60,24 +60,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Observe Codex Review
+      - name: Observe Agent Review
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
-          gate: codex-review
+          gate: agent-review
           operation: observe
           github-token: ${{ secrets.GITHUB_TOKEN }}
           prerequisite-workflow: .github/workflows/ci.yml
           lifecycle-workflow: .github/workflows/review-policy.yml
-          owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }} # set to the owner's immutable user ID
+          owner-id: ${{ vars.YAGA_AGENT_OWNER_ID }} # set to the owner's immutable user ID
           job-timeout-minutes: 15
 
   request-owner:
     needs: prepare
     if: needs.prepare.outputs.route == 'owner'
-    name: Request Owner Codex Review
+    name: Request Owner Agent Review
     concurrency:
       group: >-
-        yaga-codex-worker-${{ github.repository_id }}-${{
+        yaga-agent-review-worker-${{ github.repository_id }}-${{
         needs.prepare.outputs.pull_request_number }}
       cancel-in-progress: false
     permissions:
@@ -88,28 +88,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Request Owner Codex Review
+      - name: Request Owner Agent Review
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
-          gate: codex-review
+          gate: agent-review
           operation: request
           github-token: ${{ secrets.GITHUB_TOKEN }}
           prerequisite-workflow: .github/workflows/ci.yml
           lifecycle-workflow: .github/workflows/review-policy.yml
-          owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }} # set to the owner's immutable user ID
+          owner-id: ${{ vars.YAGA_AGENT_OWNER_ID }} # set to the owner's immutable user ID
           job-timeout-minutes: 15
 
   authorize-external:
     needs: prepare
     if: needs.prepare.outputs.route == 'external'
-    name: Approve External Codex Review
+    name: Approve External Agent Review
     concurrency:
       group: >-
-        yaga-codex-approval-${{ github.repository_id }}-${{
+        yaga-agent-review-approval-${{ github.repository_id }}-${{
         needs.prepare.outputs.pull_request_number }}
       cancel-in-progress: true
     environment:
-      name: codex-review-approval
+      name: agent-review-approval
       deployment: false
     permissions:
       actions: read
@@ -122,13 +122,13 @@ jobs:
       - name: Record Protected Approval
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
-          gate: codex-review
+          gate: agent-review
           operation: authorize
           github-token: ${{ secrets.GITHUB_TOKEN }}
           prerequisite-workflow: .github/workflows/ci.yml
           lifecycle-workflow: .github/workflows/review-policy.yml
-          owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }} # set to the owner's immutable user ID
-          approval-marker: ${{ vars.YAGA_CODEX_APPROVAL_MARKER }}
+          owner-id: ${{ vars.YAGA_AGENT_OWNER_ID }} # set to the owner's immutable user ID
+          approval-marker: ${{ vars.YAGA_AGENT_APPROVAL_MARKER }}
           job-timeout-minutes: 15
 
   request-external:
@@ -139,10 +139,10 @@ jobs:
       (needs.prepare.outputs.route == 'approved' ||
       (needs.prepare.outputs.route == 'external' &&
       needs.authorize-external.result == 'success'))
-    name: Request Approved Codex Review
+    name: Request Approved Agent Review
     concurrency:
       group: >-
-        yaga-codex-worker-${{ github.repository_id }}-${{
+        yaga-agent-review-worker-${{ github.repository_id }}-${{
         needs.prepare.outputs.pull_request_number }}
       cancel-in-progress: false
     permissions:
@@ -153,15 +153,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Request Approved Codex Review
+      - name: Request Approved Agent Review
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
-          gate: codex-review
+          gate: agent-review
           operation: request
           github-token: ${{ secrets.GITHUB_TOKEN }}
           prerequisite-workflow: .github/workflows/ci.yml
           lifecycle-workflow: .github/workflows/review-policy.yml
-          owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }} # set to the owner's immutable user ID
+          owner-id: ${{ vars.YAGA_AGENT_OWNER_ID }} # set to the owner's immutable user ID
           job-timeout-minutes: 15
 
   finalize:
@@ -183,10 +183,10 @@ jobs:
       - name: Finalize Review Policy
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
-          gate: codex-review
+          gate: agent-review
           operation: finalize
           github-token: ${{ secrets.GITHUB_TOKEN }}
           prerequisite-workflow: .github/workflows/ci.yml
           lifecycle-workflow: .github/workflows/review-policy.yml
-          owner-id: ${{ vars.YAGA_CODEX_OWNER_ID }} # set to the owner's immutable user ID
+          owner-id: ${{ vars.YAGA_AGENT_OWNER_ID }} # set to the owner's immutable user ID
           job-timeout-minutes: 15

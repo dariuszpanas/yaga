@@ -73,7 +73,7 @@ def parse_event_boundary(
     """Extract bounded local event fields before live-state API validation."""
     repository = repository_name(repository)
     if event_name != "pull_request_target":
-        raise GateError("Codex review requires a pull_request_target event")
+        raise GateError("Agent review requires a pull_request_target event")
     event_repository = record(event.get("repository"), "GitHub event repository")
     if event_repository.get("full_name") != repository:
         raise GateError("GitHub event belongs to another repository")

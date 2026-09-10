@@ -22,7 +22,7 @@ from yaga.github import RestApi
 from yaga.models import PullRequest, actor_is, commit_sha, positive_int, record, timestamp
 
 CLEAN_OUTCOME_RE = re.compile(
-    r"\ACodex Review: Didn't find any major issues\."
+    r"\AAgent Review: Didn't find any major issues\."
     r"(?: (?P<flourish>[^\r\n]{1,80}))?\n\n"
     r"\*\*Reviewed commit:\*\* `(?P<commit>[0-9a-f]{10,40})`(?P<footer>[\s\S]*)\Z"
 )
@@ -142,9 +142,9 @@ def _prefix_resolves_to_head(
         return cache[prefix]
     payload = record(
         api.get(f"/repos/{repository}/commits/{prefix}"),
-        "Codex reviewed commit",
+        "Agent reviewed commit",
     )
-    resolved = commit_sha(payload.get("sha"), "Codex reviewed commit") == head_sha
+    resolved = commit_sha(payload.get("sha"), "Agent reviewed commit") == head_sha
     cache[prefix] = resolved
     return resolved
 
@@ -163,17 +163,17 @@ def _exact_head_outcomes(
     comment_ids: set[int] = set()
     comments = api.paginate(f"/repos/{repository}/issues/{pull_request.number}/comments")
     for index, item in enumerate(comments):
-        comment = record(item, f"Codex review outcome comment {index}")
+        comment = record(item, f"Agent review outcome comment {index}")
         if not _is_connector_issue_comment(comment):
             continue
         comment_id = positive_int(comment.get("id"), "Codex outcome comment ID")
         if comment_id in comment_ids:
             raise GateError("Codex outcome comment ID is repeated")
         comment_ids.add(comment_id)
-        created_at = timestamp(comment.get("created_at"), "Codex review outcome comment creation")
-        updated_at = timestamp(comment.get("updated_at"), "Codex review outcome comment update")
+        created_at = timestamp(comment.get("created_at"), "Agent review outcome comment creation")
+        updated_at = timestamp(comment.get("updated_at"), "Agent review outcome comment update")
         if updated_at < created_at:
-            raise GateError("Codex review outcome comment update predates its creation")
+            raise GateError("Agent review outcome comment update predates its creation")
         reviewed_commit = _clean_reviewed_commit(comment.get("body"))
         if (
             reviewed_commit is None
@@ -192,22 +192,22 @@ def _exact_head_outcomes(
     review_ids: set[int] = set()
     reviews = api.paginate(f"/repos/{repository}/pulls/{pull_request.number}/reviews")
     for index, item in enumerate(reviews):
-        review = record(item, f"Codex review outcome {index}")
+        review = record(item, f"Agent review outcome {index}")
         if not actor_is(
             review,
             user_id=CODEX_CONNECTOR_USER_ID,
             user_login=CODEX_CONNECTOR_LOGIN,
         ):
             continue
-        review_id = positive_int(review.get("id"), "Codex review outcome ID")
+        review_id = positive_int(review.get("id"), "Agent review outcome ID")
         if review_id in review_ids:
-            raise GateError("Codex review outcome ID is repeated")
+            raise GateError("Agent review outcome ID is repeated")
         review_ids.add(review_id)
         state = review.get("state")
         if state not in REVIEW_STATES:
-            raise GateError("Codex review outcome state is invalid")
-        submitted_at = timestamp(review.get("submitted_at"), "Codex review outcome submission")
-        commit_id = commit_sha(review.get("commit_id"), "Codex review outcome commit")
+            raise GateError("Agent review outcome state is invalid")
+        submitted_at = timestamp(review.get("submitted_at"), "Agent review outcome submission")
+        commit_id = commit_sha(review.get("commit_id"), "Agent review outcome commit")
         reviewed_commit = _formal_reviewed_commit(review.get("body"))
         if (
             state != "COMMENTED"
@@ -232,23 +232,23 @@ def _exact_head_outcomes(
         reaction_ids: set[int] = set()
         reactions = api.paginate(f"/repos/{repository}/issues/{pull_request.number}/reactions")
         for index, item in enumerate(reactions):
-            reaction = record(item, f"Codex review reaction {index}")
+            reaction = record(item, f"Agent review reaction {index}")
             if not actor_is(
                 reaction,
                 user_id=CODEX_CONNECTOR_USER_ID,
                 user_login=CODEX_CONNECTOR_LOGIN,
             ):
                 continue
-            reaction_id = positive_int(reaction.get("id"), "Codex review reaction ID")
+            reaction_id = positive_int(reaction.get("id"), "Agent review reaction ID")
             if reaction_id in reaction_ids:
-                raise GateError("Codex review reaction ID is repeated")
+                raise GateError("Agent review reaction ID is repeated")
             reaction_ids.add(reaction_id)
             content = reaction.get("content")
             if content not in REACTION_CONTENTS:
-                raise GateError("Codex review reaction content is invalid")
+                raise GateError("Agent review reaction content is invalid")
             if content != "+1":
                 continue
-            created_at = timestamp(reaction.get("created_at"), "Codex review reaction creation")
+            created_at = timestamp(reaction.get("created_at"), "Agent review reaction creation")
             # The YAGA gate advances the request threshold by one second so
             # same-second ordering ambiguity fails closed.
             if created_at >= reaction_not_before:
@@ -279,7 +279,7 @@ def select_codex_outcome(
         clean_reaction_not_before=clean_reaction_not_before,
     )
     if not outcomes:
-        raise CodexReviewRequiredError("current head and base need a trusted Codex review outcome")
+        raise CodexReviewRequiredError("current head and base need a trusted Agent review outcome")
     return max(outcomes, key=lambda item: (item.occurred_at, item.database_id, item.kind))
 
 

@@ -70,7 +70,7 @@ def test_literal_connector_issue_comment_requires_the_official_app() -> None:
     comment = {
         "id": 9_100_001,
         "body": (
-            f"Codex Review: Didn't find any major issues. Hooray!\n\n**Reviewed commit:** `{HEAD}`"
+            f"Agent Review: Didn't find any major issues. Hooray!\n\n**Reviewed commit:** `{HEAD}`"
         ),
         "created_at": _stamp(OUTCOME),
         "updated_at": _stamp(OUTCOME),
