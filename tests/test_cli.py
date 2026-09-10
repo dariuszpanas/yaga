@@ -759,6 +759,24 @@ def test_gate_help_lists_every_preserved_operation() -> None:
         assert operation in result.stdout
 
 
+def test_agent_review_policy_check_validates_named_lenses(tmp_path: Path) -> None:
+    policy = tmp_path / ".yaga.toml"
+    policy.write_text(
+        """
+[agent-review]
+version = 1
+required = ["correctness"]
+[agent-review.agents.correctness]
+preset = "codex"
+instruction = "Review behavior."
+""",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["gate", "agent-review", "policy", "check", "--file", str(policy)])
+    assert result.exit_code == 0
+    assert "1 lens(es), 1 required (correctness)" in result.stdout
+
+
 @pytest.mark.parametrize(
     "operation",
     ["authorize", "finalize", "invalidate", "observe", "prepare", "request"],
