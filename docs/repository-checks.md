@@ -39,10 +39,10 @@ Each provider below requires a versioned policy and exact commit-ish:
 Example:
 
 ```bash
-yaga tree check --policy .yaga/tree-policy.toml --commit HEAD
-yaga path check --policy .yaga/path-policy.toml --commit HEAD
-yaga mode check --policy .yaga/mode-policy.toml --commit HEAD
-yaga size check --policy .yaga/size-policy.toml --commit HEAD
+yaga tree check --policy .yaga/tree-policy.toml --revision HEAD
+yaga path check --policy .yaga/path-policy.toml --revision HEAD
+yaga mode check --policy .yaga/mode-policy.toml --revision HEAD
+yaga size check --policy .yaga/size-policy.toml --revision HEAD
 ```
 
 These providers resolve one commit and tree through the shared bounded Git runtime, enumerate the
