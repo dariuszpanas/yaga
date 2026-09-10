@@ -35,9 +35,11 @@ jobs:
       - run: uv run --frozen --python 3.12 ty check
       - run: uv run --frozen --python 3.12 yaga --help
       - run: uv run --frozen --python 3.12 python -m yaga --help
-      - run: >-
-          uv run --frozen --python 3.12 yaga commit check
-          --message "feat(ci): exercise the installed CLI"
+      - run: |
+          yaga_message="$(printf '%s\n\n%s' \
+            'feat(ci): exercise the installed CLI' \
+            'Keep the installed command path covered by this CI smoke test.')"
+          uv run --frozen --python 3.12 yaga commit check --message "$yaga_message"
       - name: Check pull-request branch name
         if: github.event_name == 'pull_request'
         env:

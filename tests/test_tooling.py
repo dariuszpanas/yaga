@@ -158,7 +158,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert ci.count('version: "0.9.18"') == 2
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
-    assert 'yaga commit check\n          --message "feat(ci): exercise the installed CLI"' in ci
+    assert "yaga_message=\"$(printf '%s\\n\\n%s'" in ci
+    assert "feat(ci): exercise the installed CLI" in ci
     assert "Check pull-request branch name" in ci
     assert "Check pushed branch name" in ci
     assert ci.count("yaga branch check") == 2
