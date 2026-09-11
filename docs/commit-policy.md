@@ -123,7 +123,8 @@ multiline Dependabot commit messages.
 
 Set `typos = "check"` to run the installed [Typos CLI](https://github.com/crate-ci/typos) against
 each selected commit message. YAGA sends the message through standard input, requests Typos JSON
-Lines output, and converts each finding into a stable `typos.word` diagnostic. This works with
+Lines output, validates bounded finding fields, and converts each finding into a stable
+`typos.word` diagnostic. This works with
 `--message`, hooks, individual Git commits, and ranges; the default `typos = "skip"` keeps policy
 results independent of the tools installed on a developer machine.
 

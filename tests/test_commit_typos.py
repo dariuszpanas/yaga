@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from yaga.commits.typos import check_typos
+from yaga.commits.typos import MAX_CORRECTION_BYTES, MAX_CORRECTIONS, check_typos
 from yaga.errors import InputError
 
 
@@ -64,6 +65,37 @@ def test_typos_rejects_malformed_findings(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(
         "yaga.commits.typos.subprocess.run",
         lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, b"not-json\n", b""),
+    )
+
+    with pytest.raises(InputError, match="malformed JSON"):
+        check_typos("feat: add a description")
+
+
+@pytest.mark.parametrize(
+    "finding",
+    [
+        {
+            "type": "typo",
+            "line_num": 1,
+            "typo": "teh",
+            "corrections": ["the"] * (MAX_CORRECTIONS + 1),
+        },
+        {
+            "type": "typo",
+            "line_num": 1,
+            "typo": "teh",
+            "corrections": ["x" * (MAX_CORRECTION_BYTES + 1)],
+        },
+    ],
+)
+def test_typos_rejects_oversized_finding_fields(
+    monkeypatch: pytest.MonkeyPatch, finding: dict[str, object]
+) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    output = (json.dumps(finding) + "\n").encode()
+    monkeypatch.setattr(
+        "yaga.commits.typos.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, output, b""),
     )
 
     with pytest.raises(InputError, match="malformed JSON"):

@@ -13,6 +13,9 @@ from yaga.errors import InputError, safe_error_text
 
 MAX_OUTPUT_BYTES = 64 * 1024
 TIMEOUT_SECONDS = 5
+MAX_CORRECTIONS = 16
+MAX_CORRECTION_BYTES = 128
+MAX_SUGGESTION_BYTES = 256
 
 
 def check_typos(message: str, *, repository: Path | None = None) -> tuple[Diagnostic, ...]:
@@ -67,12 +70,14 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
             or line_value > 100_000
             or not isinstance(typo, str)
             or not typo
-            or len(typo) > 128
+            or len(typo.encode("utf-8")) > MAX_CORRECTION_BYTES
             or not isinstance(corrections, list)
+            or len(corrections) > MAX_CORRECTIONS
             or any(not isinstance(item, str) or not item for item in corrections)
+            or any(len(item.encode("utf-8")) > MAX_CORRECTION_BYTES for item in corrections)
         ):
             raise InputError("typos returned a malformed JSON diagnostic")
-        suggestion = ", ".join(corrections[:8])
+        suggestion = _bounded_text(", ".join(corrections[:8]), MAX_SUGGESTION_BYTES)
         message = f"possible typo {typo!r}"
         if suggestion:
             message += f"; suggestions: {suggestion}"
@@ -82,3 +87,11 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
     if not diagnostics:
         raise InputError("typos reported findings without JSON diagnostics")
     return tuple(diagnostics)
+
+
+def _bounded_text(value: str, maximum_bytes: int) -> str:
+    """Keep a diagnostic field within a UTF-8 byte bound without splitting text."""
+    encoded = value.encode("utf-8")
+    if len(encoded) <= maximum_bytes:
+        return value
+    return encoded[:maximum_bytes].decode("utf-8", errors="ignore")
