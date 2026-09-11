@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Literal
+from typing import Any, Literal, Protocol, cast
 
 from yaga.commits.models import CommitTarget
 from yaga.errors import InputError
@@ -23,6 +23,14 @@ MAX_RESULTS = 256
 MAX_REASON_LENGTH = 500
 
 Decision = Literal["pass", "flag"]
+
+
+class _QualityTokenizer(Protocol):
+    """Small tokenizer surface required by the bounded seq2seq adapter."""
+
+    def __call__(self, text: str, **kwargs: object) -> Any: ...
+
+    def decode(self, token_ids: Any, **kwargs: object) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,8 +174,11 @@ def _load_huggingface(
 
             return _guarded_predict(predict)
 
-        tokenizer = transformers.AutoTokenizer.from_pretrained(
-            model_id, revision=revision, local_files_only=offline
+        tokenizer = cast(
+            _QualityTokenizer,
+            transformers.AutoTokenizer.from_pretrained(
+                model_id, revision=revision, local_files_only=offline
+            ),
         )
         model = transformers.AutoModelForSeq2SeqLM.from_pretrained(
             model_id, revision=revision, local_files_only=offline
