@@ -103,16 +103,28 @@ def quality_check(
         Path | None, typer.Option("--config", help="Explicit YAGA configuration file.")
     ] = None,
     provider: Annotated[
-        str | None, typer.Option("--provider", help="Override configured backend.")
+        str | None,
+        typer.Option(
+            "--provider",
+            help="Override the configured quality provider (huggingface or bedrock).",
+        ),
     ] = None,
     task: Annotated[
-        str | None, typer.Option("--task", help="Override configured Hugging Face task.")
+        str | None,
+        typer.Option(
+            "--task",
+            help="Override the provider task (classification or Hugging Face seq2seq).",
+        ),
     ] = None,
     model_id: Annotated[
         str | None, typer.Option("--model", help="Override configured model identifier.")
     ] = None,
     revision: Annotated[
-        str | None, typer.Option("--revision", help="Override configured model revision SHA.")
+        str | None,
+        typer.Option(
+            "--revision",
+            help="Pin a Hugging Face model revision SHA; unsupported by Bedrock.",
+        ),
     ] = None,
     threshold: Annotated[
         float | None,
@@ -121,7 +133,11 @@ def quality_check(
         ),
     ] = None,
     offline: Annotated[
-        bool, typer.Option("--offline", help="Use only the local Hugging Face cache.")
+        bool,
+        typer.Option(
+            "--offline",
+            help="Use only the local Hugging Face cache; rejected for Bedrock.",
+        ),
     ] = False,
     region: Annotated[
         str | None, typer.Option("--region", help="AWS region for the Bedrock provider.")
@@ -136,7 +152,7 @@ def quality_check(
             "--max-input-tokens",
             min=1,
             max=4096,
-            help="Bound Hugging Face model input tokens.",
+            help="Bound Hugging Face model input tokens; ignored by Bedrock.",
         ),
     ] = None,
     output_format: Annotated[

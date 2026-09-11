@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -71,6 +72,20 @@ def test_root_help_exposes_local_policy_and_preserved_gate_commands() -> None:
     assert "size" in result.stdout
     assert "tree" in result.stdout
     assert "workflow" in result.stdout
+
+
+def test_commit_quality_help_explains_provider_specific_options() -> None:
+    result = runner.invoke(app, ["commit", "quality", "--help"])
+
+    assert result.exit_code == 0
+    help_text = re.sub(r"\s+", " ", result.stdout)
+    assert "huggingface" in help_text
+    assert "bedrock" in help_text
+    assert "classification" in help_text
+    assert "seq2seq" in help_text
+    assert "unsupported" in help_text
+    assert "rejected" in help_text
+    assert "ignored" in help_text
 
 
 def test_version_is_available_from_the_installed_command() -> None:
