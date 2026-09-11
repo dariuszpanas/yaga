@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Allow a quality classification threshold of `0`, matching the CLI's inclusive `0`-through-`1`
+  option range for intentionally flagging every nonnegative score.
 - Preserve diagnostic line and column locations in standalone and pull-request text reports,
   matching the detail already available in JSON and GitHub output.
 - Add readable `GITHUB_STEP_SUMMARY` sections to both repository commit-quality workflow passes
