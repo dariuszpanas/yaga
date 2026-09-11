@@ -85,6 +85,8 @@ def evaluate_results(
     if results.plan_digest != expected_digest:
         raise ConfigurationError("Agent review results do not match the current policy plan")
     names = tuple(result.lens for result in results.results)
+    if any(not isinstance(name, str) or _LENS_NAME.fullmatch(name) is None for name in names):
+        raise ConfigurationError("Agent review results contain an invalid lens name")
     repeated = next((name for index, name in enumerate(names) if name in names[:index]), None)
     if repeated is not None:
         raise ConfigurationError(f"Agent review results repeat lens {repeated}")
