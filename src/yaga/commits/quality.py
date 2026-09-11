@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -85,6 +86,7 @@ class QualityResult:
     input_tokens: int | None = None
     input_characters: int | None = None
     input_character_truncated: bool | None = None
+    selected_input_sha256: str | None = None
 
     @property
     def flagged(self) -> bool:
@@ -163,6 +165,7 @@ def check_quality(
     results = []
     for target in targets:
         selected_input = _selected_model_input(target.message, input_mode)
+        model_input = selected_input[:MAX_MODEL_INPUT_CHARS]
         prediction = predictor(target.message)
         if isinstance(prediction, QualityPrediction):
             assessment = prediction.assessment
@@ -179,8 +182,9 @@ def check_quality(
                 threshold if task == "classification" else None,
                 input_truncated,
                 input_tokens,
-                len(selected_input[:MAX_MODEL_INPUT_CHARS]),
+                len(model_input),
                 len(selected_input) > MAX_MODEL_INPUT_CHARS,
+                hashlib.sha256(model_input.encode("utf-8")).hexdigest(),
             )
         )
     return QualityReport(

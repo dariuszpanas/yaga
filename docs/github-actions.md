@@ -46,6 +46,8 @@ includes the runner OS, Python family, task, model identifier, and exact revisio
 passes those same variables to both inference commands so cache identity cannot drift from the selected
 model. Do not cache executable files from an untrusted pull request. Keeping the input mode explicit
 also prevents a future policy-default change from silently narrowing the workflow's coverage.
+Each per-message quality result includes a SHA-256 fingerprint of the exact bounded model input,
+which helps compare the online and offline reports without exposing commit text in the job summary.
 
 For an ordinary installed-CLI check, keep the source and checkout boundary explicit:
 

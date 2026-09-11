@@ -114,10 +114,12 @@ preserving exit `0` for no flags, `1` for flagged messages, and `2` for provider
 errors.
 
 Text and JSON identify provider, task, model, revision, input mode, character limit, and per-message
-coverage. Hugging Face results also expose measured token count and token truncation; unsupported
-measurements are `null`. GitHub output emits warning annotations for flagged messages and one
-bounded notice with counts, model revision, input limits, threshold, and provider metadata;
-provider failures emit an error annotation and exit `2`.
+coverage. Each message also exposes a SHA-256 fingerprint of the exact bounded title or full-message
+text selected for inference. This makes it possible to compare online and offline runs or prove that
+a body was included without printing commit text. Hugging Face results also expose measured token
+count and token truncation; unsupported measurements are `null`. GitHub output emits warning
+annotations for flagged messages and one bounded notice with counts, model revision, input limits,
+threshold, and provider metadata; provider failures emit an error annotation and exit `2`.
 
 Use `commit check` for exact body, footer, paragraph, scope, and Typos enforcement. Keep quality
 advisory checks separate from the dependency-free Agent review runtime and required security gates.
