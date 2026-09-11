@@ -88,6 +88,18 @@ def test_standalone_commit_github_report_emits_annotations_and_summary() -> None
     assert all(not line.startswith("::warning::") for line in rendered.splitlines())
 
 
+def test_github_commit_reports_preserve_diagnostic_columns() -> None:
+    diagnostic = Diagnostic(code="typos.word", message="possible typo 'teh'", line=3, column=7)
+
+    standalone = render_commit_report(_commit_report(diagnostic), CommitOutputFormat.GITHUB)
+    pull_request = render_pull_request_report(
+        _report(diagnostics=(diagnostic,)), PullRequestOutputFormat.GITHUB
+    )
+
+    assert "line 3, column 7: possible typo 'teh'" in standalone
+    assert "line 3, column 7: possible typo 'teh'" in pull_request
+
+
 def test_standalone_commit_github_error_is_one_annotation() -> None:
     rendered = render_commit_error(InputError("bad % path\n::warning::"), CommitOutputFormat.GITHUB)
 
