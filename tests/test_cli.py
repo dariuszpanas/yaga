@@ -232,7 +232,7 @@ def test_github_pull_request_cli_reports_body_word_findings_as_annotations(
 
     assert result.exit_code == 1
     assert "::error title=YAGA commit policy::" in result.stdout
-    assert "[body.word-count] line 3: body has 2 words; minimum is 3" in result.stdout
+    assert "[body.word-count] line 3, column 1: body has 2 words; minimum is 3" in result.stdout
 
 
 def test_commit_check_accepts_a_message_and_uses_exit_one_for_violations(

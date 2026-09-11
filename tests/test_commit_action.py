@@ -276,7 +276,7 @@ def test_isolated_commit_action_reports_body_word_policy(tmp_path: Path) -> None
 
     assert completed.returncode == 1
     assert completed.stderr == ""
-    assert "[body.word-count] line 3: body has 1 word; minimum is 2" in completed.stdout
+    assert "[body.word-count] line 3, column 1: body has 1 word; minimum is 2" in completed.stdout
 
 
 @pytest.mark.parametrize(
@@ -402,7 +402,7 @@ def test_isolated_commit_action_enforces_footer_policy_only_for_commits(
     assert completed.returncode == 1
     assert completed.stderr == ""
     assert completed.stdout.count(f"[{diagnostic}]") == 1
-    assert f"{head_identity}: [{diagnostic}] line {line}:" in completed.stdout
+    assert f"{head_identity}: [{diagnostic}] line {line}, column 1:" in completed.stdout
     assert f"pull request #17 title: [{diagnostic}]" not in completed.stdout
 
 
