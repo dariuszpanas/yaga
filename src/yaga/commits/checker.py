@@ -16,6 +16,7 @@ from yaga.commits.models import (
     Diagnostic,
     EndingPolicy,
     MergePolicy,
+    ParagraphSplittingPolicy,
     PresencePolicy,
 )
 from yaga.commits.parser import (
@@ -239,21 +240,13 @@ def _check_target(
                         )
                     )
                     break
-        if (
-            policy.body_max_consecutive_single_line_paragraphs is not None
-            and policy.body_max_consecutive_single_line_paragraphs > 0
-        ):
-            count, first_line = _consecutive_single_line_prose_paragraphs(parsed.body_lines)
-            if count > policy.body_max_consecutive_single_line_paragraphs:
-                noun = "paragraph" if count == 1 else "paragraphs"
+        if policy.body_paragraph_splitting is ParagraphSplittingPolicy.CHECK:
+            first_line = _sentence_split_line(parsed.body_lines)
+            if first_line is not None:
                 diagnostics.append(
                     Diagnostic(
                         code="body.paragraph-format",
-                        message=(
-                            f"body has {count} consecutive single-line prose {noun}; maximum is "
-                            f"{policy.body_max_consecutive_single_line_paragraphs}; likely a sentence "
-                            "split across blank lines"
-                        ),
+                        message="blank line likely splits one sentence; keep the sentence in one paragraph",
                         line=parsed.body_start_line + first_line,
                     )
                 )
@@ -271,12 +264,8 @@ def _check_target(
     return CheckResult(target=target, header=header, diagnostics=tuple(diagnostics))
 
 
-def _consecutive_single_line_prose_paragraphs(body_lines: tuple[str, ...]) -> tuple[int, int]:
-    """Find the longest run that looks like prose was split at a paragraph break."""
-    longest = 0
-    longest_start = 0
-    run = 0
-    run_start = 0
+def _sentence_split_line(body_lines: tuple[str, ...]) -> int | None:
+    """Find the first blank-line boundary that likely splits one sentence."""
     previous_line: str | None = None
     paragraph_start = 0
     paragraph: list[str] = []
@@ -288,20 +277,13 @@ def _consecutive_single_line_prose_paragraphs(body_lines: tuple[str, ...]) -> tu
             continue
         if len(paragraph) == 1 and _is_prose_paragraph_line(paragraph[0]):
             line = paragraph[0]
-            if run and _looks_like_sentence_continuation(previous_line, line):
-                run += 1
-            else:
-                run = 1
-                run_start = paragraph_start
+            if _looks_like_sentence_continuation(previous_line, line):
+                return paragraph_start
             previous_line = line
-            if run > longest:
-                longest = run
-                longest_start = run_start
         else:
-            run = 0
             previous_line = None
         paragraph.clear()
-    return longest, longest_start
+    return None
 
 
 def _looks_like_sentence_continuation(previous: str | None, current: str) -> bool:

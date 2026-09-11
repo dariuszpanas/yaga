@@ -18,6 +18,7 @@ from yaga.commits.models import (
     EndingPolicy,
     LoadedConfig,
     MergePolicy,
+    ParagraphSplittingPolicy,
     PresencePolicy,
     QualityPolicy,
     QualityProvider,
@@ -53,7 +54,7 @@ _COMMIT_KEYS = frozenset(
         "body-min-length",
         "body-min-words",
         "body-max-line-length",
-        "body-max-consecutive-single-line-paragraphs",
+        "body-paragraph-splitting",
         "breaking-markers",
         "dependabot-pull-requests",
         "typos",
@@ -352,12 +353,11 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             path,
         ),
         quality=quality,
-        body_max_consecutive_single_line_paragraphs=_optional_integer(
-            raw_commit,
-            "body-max-consecutive-single-line-paragraphs",
-            minimum=0,
-            maximum=100_000,
-            path=path,
+        body_paragraph_splitting=_enum(
+            raw_commit.get("body-paragraph-splitting", ParagraphSplittingPolicy.SKIP.value),
+            ParagraphSplittingPolicy,
+            "body-paragraph-splitting",
+            path,
         ),
     )
 

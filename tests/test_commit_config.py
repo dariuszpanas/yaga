@@ -489,28 +489,26 @@ def test_body_min_words_rejects_invalid_values(tmp_path: Path, value: str) -> No
         load_config(project)
 
 
-@pytest.mark.parametrize("maximum", [0, 1, 100_000])
-def test_body_single_line_paragraph_limit_accepts_its_closed_integer_range(
-    tmp_path: Path,
-    maximum: int,
-) -> None:
-    project = write_pyproject(
-        tmp_path, f"body-max-consecutive-single-line-paragraphs = {maximum}\n"
-    )
-
-    assert load_config(project).policy.body_max_consecutive_single_line_paragraphs == maximum
-
-
-@pytest.mark.parametrize("value", ["-1", "100001", "true", '"2"', "2.0"])
-def test_body_single_line_paragraph_limit_rejects_invalid_values(
+@pytest.mark.parametrize("value", ["skip", "check"])
+def test_body_paragraph_splitting_accepts_its_closed_values(
     tmp_path: Path,
     value: str,
 ) -> None:
-    project = write_pyproject(tmp_path, f"body-max-consecutive-single-line-paragraphs = {value}\n")
+    project = write_pyproject(tmp_path, f'body-paragraph-splitting = "{value}"\n')
+
+    assert load_config(project).policy.body_paragraph_splitting.value == value
+
+
+@pytest.mark.parametrize("value", ["0", "true", '"warn"', "1.0"])
+def test_body_paragraph_splitting_rejects_invalid_values(
+    tmp_path: Path,
+    value: str,
+) -> None:
+    project = write_pyproject(tmp_path, f"body-paragraph-splitting = {value}\n")
 
     with pytest.raises(
         ConfigurationError,
-        match="body-max-consecutive-single-line-paragraphs must be an integer",
+        match="body-paragraph-splitting must be (?:a string in|one of)",
     ):
         load_config(project)
 

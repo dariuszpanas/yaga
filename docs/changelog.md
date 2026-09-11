@@ -11,9 +11,8 @@
   input.
 - Added configurable Hugging Face quality input windows through `max-input-tokens` and
   `--max-input-tokens`, with the effective bound included in text and JSON reports.
-- Added concrete passing and failing examples for the configurable consecutive single-line
-  paragraph check, including its continuation-aware punctuation heuristic and explicit unlimited
-  setting.
+- Added concrete passing and failing examples for the explicit paragraph-splitting check, including
+  its continuation-aware punctuation heuristic and valid one-line notes.
 
 - Added JSON output for `agent-review policy check`, including the validated lens counts, required
   lens order, aggregation mode, and matching plan digest.
@@ -25,21 +24,20 @@
   optional Amazon Bedrock Converse adapter using Nova Micro by default.
 - Added strict `[commit.quality]` configuration defaults with per-invocation CLI overrides; secrets
   remain outside YAGA policy files.
-- Added configurable paragraph enforcement that detects consecutive one-line prose paragraphs,
-  leaving standalone short paragraphs and list items valid.
+- Added configurable paragraph-splitting enforcement that detects likely sentence breaks across
+  blank lines, leaving standalone short paragraphs and list items valid.
 
 ### Changed
 
 - Documented the distinction between complete selected-message line counts and the 512-token
   Hugging Face model input window, so quality reports are not mistaken for full semantic coverage.
 - Clarified `body.paragraph-format` diagnostics so failures identify the likely sentence split
-  across blank lines instead of reporting only the configured count.
+  across blank lines instead of reporting an arbitrary paragraph count.
 
 - Expanded Agent review documentation with the digest-bound adapter handoff, receipt lifecycle,
   generic preset-label semantics, and GitHub-format publishing example.
-- The consecutive single-line paragraph policy now accepts `0` as an explicit unlimited setting;
-  one-line validation notes and justifications remain valid when the split-sentence heuristic is
-  enabled.
+- Replaced the confusing numeric consecutive-single-line paragraph setting with explicit
+  `body-paragraph-splitting = "skip" | "check"` configuration.
 - Agent review plan digests are now visible in text plans and evaluation summaries as well as JSON.
 - Quality reports now state how many body lines were included in each model invocation, making
   title-only and multiline checks distinguishable without printing the full commit message.

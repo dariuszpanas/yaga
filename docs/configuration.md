@@ -51,7 +51,7 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 | `body-min-length` | Nonnegative prose-body character lower bound. |
 | `body-min-words` | Integer from 0 through 100000, counting prose tokens. |
 | `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
-| `body-max-consecutive-single-line-paragraphs` | Optional maximum run length of one-line prose paragraphs; omitted means unlimited. |
+| `body-paragraph-splitting` | `skip` (default) or `check` for likely sentence splits across blank lines. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
 | `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, max-tokens, and max-input-tokens. |
@@ -66,17 +66,15 @@ unique, non-overlapping, and cannot use `BREAKING CHANGE` or `BREAKING-CHANGE`.
 ### Body layout settings
 
 `body-max-line-length` is an optional wrapping limit; omitting it leaves body line length
-unlimited. `body-max-consecutive-single-line-paragraphs` is a separate optional layout limit. It
-finds the longest run of prose paragraphs made of exactly one non-empty line after parsing the
-header and final footer block. List items beginning with `-`, `*`, `+`, or a numbered marker such as
-`1.` are not counted, and a wrapped paragraph breaks the run. Omit the setting to allow any layout,
-set it to `0` for the same unlimited behavior, or set it to `1` to permit standalone one-line
-paragraphs while flagging a likely sentence split by blank lines. A one-line paragraph is not an
-error by itself.
+unlimited. `body-paragraph-splitting` is an explicit layout heuristic. `skip` (the default) allows
+any paragraph layout. `check` identifies the first blank-line boundary where a one-line prose
+paragraph appears to continue into the next one-line prose paragraph. List items beginning with
+`-`, `*`, `+`, or a numbered marker such as `1.` are ignored. A one-line paragraph is not an error
+by itself: this setting does not require every prose paragraph to wrap onto two physical lines.
 
 The check is continuation-aware: it only extends a run when the previous line does not end in `.`,
 `!`, or `?`, or when the next paragraph starts with a lowercase letter. For example, this is valid
-with a limit of `1` because the paragraphs are complete notes:
+with `body-paragraph-splitting = "check"` because the paragraphs are complete notes:
 
 ```text
 The parser accepts the legacy form.
