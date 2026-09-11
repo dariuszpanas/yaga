@@ -165,9 +165,12 @@ def _render_github_evaluation(results: AgentReviewResults, aggregate: ReviewAggr
 def _github_annotation(result: LensResult | None, lens: str, level: str) -> str:
     """Render one escaped failure or pending lens annotation."""
     outcome = "pending" if result is None else result.outcome.value
-    detail = (
-        "no result was returned" if result is None or result.summary is None else result.summary
-    )
+    if result is None:
+        detail = "no result was returned"
+    elif result.summary is None:
+        detail = "provider returned no summary"
+    else:
+        detail = result.summary
     message = f"{outcome}: {detail}"
     title = _github_property(f"YAGA Agent review: {lens}", maximum=MAX_GITHUB_TITLE)
     return f"::{level} title={title}::{_github_data(message, maximum=MAX_GITHUB_MESSAGE)}"
