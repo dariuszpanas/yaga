@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added a dedicated commit-quality guide covering input sources and modes, provider/task choices,
+  configuration, model pinning, cache replay, and report interpretation.
 - Added per-message quality input character counts and character-bound truncation metadata so
   provider coverage is auditable alongside token coverage.
 - Made YAGA's own online and offline quality workflow explicitly select complete-message input.

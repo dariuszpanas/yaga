@@ -15,6 +15,7 @@ nav = [
   { "Adoption recipes" = "recipes.md" },
   { "Configuration" = "configuration.md" },
   { "Commit policy" = "commit-policy.md" },
+  { "Commit quality" = "commit-quality.md" },
   { "Repository checks" = "repository-checks.md" },
   { "GitHub Actions" = "github-actions.md" },
   { "Agent review gate" = "agent-review-gate.md" },
