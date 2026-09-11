@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Preserve diagnostic line and column locations in standalone and pull-request text reports,
+  matching the detail already available in JSON and GitHub output.
 - Add readable `GITHUB_STEP_SUMMARY` sections to both repository commit-quality workflow passes
   while preserving the quality command's original exit status.
 - Add provider, task, model, mode, and aggregate counts to the bounded GitHub notice emitted by

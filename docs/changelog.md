@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added diagnostic line and column locations to standalone and pull-request text reports so local
+  failures provide the same actionable position detail as JSON and GitHub output.
 - Added a dedicated commit-quality guide covering input sources and modes, provider/task choices,
   configuration, model pinning, cache replay, and report interpretation.
 - Added per-message quality input character counts and character-bound truncation metadata so
