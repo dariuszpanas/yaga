@@ -86,7 +86,8 @@ message. The model can therefore notice a vague body, but exact rules such as pa
 footer presence, or configured scopes remain the responsibility of `commit check`.
 The default Hugging Face input window is 512 tokens; configure it with `--max-input-tokens` or
 `max-input-tokens` when the selected model supports a different context size. The effective value
-is included in text and JSON reports.
+is included in text and JSON reports. Hugging Face results also report whether each message was
+actually truncated at that window; `null` is used when the provider cannot expose that fact.
 
 ### Hugging Face cache and offline replay
 

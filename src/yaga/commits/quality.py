@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
 from typing import Any, Literal, Protocol, cast
@@ -49,12 +49,34 @@ class QualityAssessment:
 
 
 @dataclass(frozen=True, slots=True)
+class QualityPrediction:
+    """One assessment plus provider input-coverage metadata."""
+
+    assessment: QualityAssessment
+    input_truncated: bool | None = None
+
+    @property
+    def flagged(self) -> bool:
+        """Expose the underlying decision for provider tests and adapters."""
+        return self.assessment.flagged
+
+    @property
+    def decision(self) -> Decision:
+        """Expose the underlying decision for provider tests and adapters."""
+        return self.assessment.decision
+
+
+Prediction = QualityAssessment | QualityPrediction
+
+
+@dataclass(frozen=True, slots=True)
 class QualityResult:
     """Advisory result for one selected commit message."""
 
     target: CommitTarget
     assessment: QualityAssessment
     threshold: float | None
+    input_truncated: bool | None = None
 
     @property
     def flagged(self) -> bool:
@@ -122,16 +144,25 @@ def check_quality(
         max_tokens=max_tokens,
         max_input_tokens=max_input_tokens,
     )
-    results = tuple(
-        QualityResult(
-            target,
-            predictor(target.message),
-            threshold if task == "classification" else None,
+    results = []
+    for target in targets:
+        prediction = predictor(target.message)
+        if isinstance(prediction, QualityPrediction):
+            assessment = prediction.assessment
+            input_truncated = prediction.input_truncated
+        else:
+            assessment = prediction
+            input_truncated = None
+        results.append(
+            QualityResult(
+                target,
+                assessment,
+                threshold if task == "classification" else None,
+                input_truncated,
+            )
         )
-        for target in targets
-    )
     return QualityReport(
-        results,
+        tuple(results),
         provider,
         task,
         model_id,
@@ -153,7 +184,7 @@ def _load_predictor(
     region: str | None,
     max_tokens: int,
     max_input_tokens: int,
-) -> Callable[[str], QualityAssessment]:
+) -> Callable[[str], Prediction]:
     if provider == "huggingface":
         return _load_huggingface(
             task,
@@ -177,7 +208,7 @@ def _load_huggingface(
     offline: bool,
     max_tokens: int,
     max_input_tokens: int = DEFAULT_MAX_INPUT_TOKENS,
-) -> Callable[[str], QualityAssessment]:
+) -> Callable[[str], Prediction]:
     try:
         transformers = import_module("transformers")
     except ImportError as error:
@@ -187,13 +218,18 @@ def _load_huggingface(
         ) from error
     try:
         if task == "classification":
-            tokenizer = transformers.AutoTokenizer.from_pretrained(
-                model_id, revision=revision, local_files_only=offline
+            tokenizer = cast(
+                _QualityTokenizer,
+                transformers.AutoTokenizer.from_pretrained(
+                    model_id, revision=revision, local_files_only=offline
+                ),
             )
             model = transformers.AutoModelForSequenceClassification.from_pretrained(
                 model_id, revision=revision, local_files_only=offline
             )
-            classifier = transformers.pipeline(
+            pipeline_name = "pipeline"
+            pipeline_factory = getattr(transformers, pipeline_name)
+            classifier = pipeline_factory(
                 "text-classification",
                 model=model,
                 tokenizer=tokenizer,
@@ -202,8 +238,11 @@ def _load_huggingface(
                 top_k=None,
             )
 
-            def predict(message: str) -> QualityAssessment:
-                return _classification_assessment(classifier(message), threshold)
+            def predict(message: str) -> QualityPrediction:
+                return QualityPrediction(
+                    _classification_assessment(classifier(message), threshold),
+                    _input_would_truncate(tokenizer, message, max_input_tokens),
+                )
 
             return _guarded_predict(predict)
 
@@ -217,16 +256,20 @@ def _load_huggingface(
             model_id, revision=revision, local_files_only=offline
         )
 
-        def predict(message: str) -> QualityAssessment:
+        def predict(message: str) -> QualityPrediction:
+            prompt = _prompt(message)
             encoded = tokenizer(
-                _prompt(message),
+                prompt,
                 return_tensors="pt",
                 truncation=True,
                 max_length=max_input_tokens,
             )
             generated = model.generate(**encoded, max_new_tokens=max_tokens, do_sample=False)
             text = tokenizer.decode(generated[0], skip_special_tokens=True)
-            return _parse_decision(text)
+            return QualityPrediction(
+                _parse_decision(text),
+                _input_would_truncate(tokenizer, prompt, max_input_tokens),
+            )
 
         return _guarded_predict(predict)
     except InputError:
@@ -237,7 +280,7 @@ def _load_huggingface(
 
 def _load_bedrock(
     model_id: str, region: str | None, max_tokens: int
-) -> Callable[[str], QualityAssessment]:
+) -> Callable[[str], Prediction]:
     try:
         boto3 = import_module("boto3")
         client = boto3.client("bedrock-runtime", region_name=region)
@@ -265,9 +308,9 @@ def _load_bedrock(
 
 
 def _guarded_predict(
-    predict: Callable[[str], QualityAssessment],
-) -> Callable[[str], QualityAssessment]:
-    def guarded(message: str) -> QualityAssessment:
+    predict: Callable[[str], Prediction],
+) -> Callable[[str], Prediction]:
+    def guarded(message: str) -> Prediction:
         try:
             return predict(message)
         except InputError:
@@ -332,6 +375,25 @@ def _parse_decision(text: object) -> QualityAssessment:
     if decision not in {"pass", "flag"} or (reason is not None and not isinstance(reason, str)):
         raise ValueError("decision output must contain pass or flag and optional reason")
     return QualityAssessment(decision, reason=reason[:MAX_REASON_LENGTH] if reason else None)
+
+
+def _input_would_truncate(tokenizer: _QualityTokenizer, text: str, maximum: int) -> bool | None:
+    """Return whether a tokenizer's unbounded input exceeds the configured window."""
+    try:
+        encoded = tokenizer(text, add_special_tokens=True, truncation=False)
+        if not isinstance(encoded, Mapping):
+            return None
+        input_ids = encoded.get("input_ids")
+        if isinstance(input_ids, list):
+            if input_ids and isinstance(input_ids[0], list):
+                return len(input_ids[0]) > maximum
+            return len(input_ids) > maximum
+        shape = getattr(input_ids, "shape", None)
+        if shape is not None and len(shape):
+            return int(shape[-1]) > maximum
+    except Exception:  # noqa: BLE001 - coverage metadata must not hide provider results.
+        return None
+    return None
 
 
 def _safe_detail(error: Exception) -> str:
