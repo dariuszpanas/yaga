@@ -10,6 +10,7 @@ import typer
 from yaga.action import run_gate
 from yaga.agent_review.plan import build_plan, render_plan
 from yaga.agent_review.policy import load_policy
+from yaga.agent_review.results import evaluate_results, load_results, render_evaluation
 from yaga.errors import ConfigurationError, GateError, safe_error_text
 
 app = typer.Typer(help="Run a trusted GitHub gate operation.", no_args_is_help=True)
@@ -103,3 +104,31 @@ def policy_plan(
     except (ConfigurationError, TypeError, ValueError) as error:
         typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
         raise typer.Exit(code=2) from error
+
+
+@policy_app.command("evaluate")
+def policy_evaluate(
+    policy_file: Annotated[
+        Path,
+        typer.Option("--file", help="Explicit TOML policy file to apply."),
+    ],
+    results_file: Annotated[
+        Path,
+        typer.Option("--results", help="Explicit JSON adapter result file."),
+    ],
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Result format: text or json."),
+    ] = "text",
+) -> None:
+    """Validate and aggregate named-lens results without contacting a provider."""
+    try:
+        policy = load_policy(policy_file)
+        results = load_results(results_file)
+        aggregate = evaluate_results(policy, results)
+        typer.echo(render_evaluation(results, aggregate, output_format.lower()))
+    except (ConfigurationError, TypeError, ValueError) as error:
+        typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
+        raise typer.Exit(code=2) from error
+    if aggregate.state.value != "passed":
+        raise typer.Exit(code=1)

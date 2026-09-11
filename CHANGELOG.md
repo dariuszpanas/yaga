@@ -17,6 +17,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 - Add `agent-review policy plan` to expose deterministic named-lens adapter work in text or JSON.
 - Add closed per-lens publication modes for comments, inline reviews, reactions, native reviews,
   and check-style provider output.
+- Add a bounded JSON adapter-result contract and `agent-review policy evaluate` for local
+  provider-neutral aggregation with meaningful exit codes.
 - Add a provider-neutral named-lens evaluator with deterministic `all-required` and `any-required`
   aggregation and non-blocking advisory outcomes.
 - An explicit `commit.typos = "check"` mode for bounded commit-message spelling checks through an
