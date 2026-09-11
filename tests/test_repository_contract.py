@@ -173,7 +173,10 @@ def test_commit_quality_action_publishes_advisory_annotations() -> None:
     assert "Model cache hit: ${{ steps.model-cache.outputs.cache-hit }}" in workflow
     assert "permissions:\n  contents: read" in workflow
     assert workflow.count("GITHUB_STEP_SUMMARY") == 2
-    assert workflow.count("status=$?") == 2
+    assert "online_status=$?" in workflow
+    assert "offline_status=$?" in workflow
+    assert 'if [[ "$online_status" -eq 2 || "$offline_status" -eq 2 ]]' in workflow
+    assert 'if [[ "$online_status" -eq 1 || "$offline_status" -eq 1 ]]' in workflow
     assert workflow.count("sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g'") == 2
 
 

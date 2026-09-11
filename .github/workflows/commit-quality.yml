@@ -53,11 +53,11 @@ jobs:
           else
             printf 'YAGA_QUALITY_RANGE=HEAD\n' >> "$GITHUB_ENV"
           fi
-      - name: Populate or use the model cache
+      - name: Populate cache and prove offline reuse
         shell: bash
         run: |
           set +e
-          report="$(uv run --frozen --python 3.12 yaga commit quality \
+          online_report="$(uv run --frozen --python 3.12 yaga commit quality \
             --range "$YAGA_QUALITY_RANGE" \
             --provider huggingface \
             --task "$YAGA_QUALITY_TASK" \
@@ -65,21 +65,16 @@ jobs:
             --input-mode message \
             --revision "$YAGA_QUALITY_MODEL_REVISION" \
             --format github 2>&1)"
-          status=$?
-          printf '%s\n' "$report"
+          online_status=$?
+          printf '%s\n' "$online_report"
           {
             printf '%s\n' '### YAGA commit quality (online)'
             printf '%s\n' 'Model cache hit: ${{ steps.model-cache.outputs.cache-hit }}'
             printf '%s\n' '<pre>'
-            printf '%s\n' "$report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+            printf '%s\n' "$online_report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
             printf '%s\n' '</pre>'
           } >> "$GITHUB_STEP_SUMMARY"
-          exit "$status"
-      - name: Prove offline cache reuse
-        shell: bash
-        run: |
-          set +e
-          report="$(uv run --frozen --python 3.12 yaga commit quality \
+          offline_report="$(uv run --frozen --python 3.12 yaga commit quality \
             --range "$YAGA_QUALITY_RANGE" \
             --provider huggingface \
             --task "$YAGA_QUALITY_TASK" \
@@ -88,12 +83,18 @@ jobs:
             --revision "$YAGA_QUALITY_MODEL_REVISION" \
             --offline \
             --format github 2>&1)"
-          status=$?
-          printf '%s\n' "$report"
+          offline_status=$?
+          printf '%s\n' "$offline_report"
           {
             printf '%s\n' '### YAGA commit quality (offline replay)'
             printf '%s\n' '<pre>'
-            printf '%s\n' "$report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+            printf '%s\n' "$offline_report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
             printf '%s\n' '</pre>'
           } >> "$GITHUB_STEP_SUMMARY"
-          exit "$status"
+          if [[ "$online_status" -eq 2 || "$offline_status" -eq 2 ]]; then
+            exit 2
+          fi
+          if [[ "$online_status" -eq 1 || "$offline_status" -eq 1 ]]; then
+            exit 1
+          fi
+          exit 0

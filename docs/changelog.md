@@ -4,6 +4,8 @@
 
 ### Added
 
+- Always run the quality workflow's offline cache proof even when online advisory findings occur,
+  while preserving operational-error precedence.
 - Use the quality workflow's task and model variables for both online and offline inference, keeping
   cache identity aligned with the actual provider selection.
 - Include quality task and model identity in the Hugging Face cache key and show cache-hit state in
