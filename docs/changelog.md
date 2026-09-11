@@ -4,6 +4,9 @@
 
 ### Added
 
+- Clarified the root README and command index so `commit quality` is described as a provider-neutral
+  advisory with Hugging Face and Bedrock modes, and linked the detailed source, configuration, and
+  reporting guidance.
 - Added quality-provider troubleshooting guidance for CPU-only dependencies, Hugging Face cache
   reuse and offline replay, Bedrock credentials, and model coverage fields.
 - Added a source-mode matrix and copyable examples for direct, file, stdin, single-commit, range,

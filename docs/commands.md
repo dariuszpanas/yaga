@@ -11,7 +11,7 @@ text/JSON. Use `yaga <group> --help` for the exact current option surface.
 | `yaga branch check` | Validate one short branch name. | `--policy ... --name ...` |
 | `yaga change check` | Enforce changed-path coupling. | `--policy ... --range A...B` |
 | `yaga commit check` | Check one message, commit, or range. | `--message ...` or `--range ...` |
-| `yaga commit quality` | Advisory-check message quality with an optional local model. | `--message ...` or `--range ...` |
+| `yaga commit quality` | Advisory-check message quality with an optional Hugging Face or Bedrock provider. | `--message ...` or `--range ...` |
 | `yaga config init` | Create a starter commit policy. | `--repo .` |
 | `yaga config show` | Show effective policy and source. | `--repo .` |
 | `yaga github pull-request check` | Check one exact GitHub PR event. | event and checkout context |
@@ -43,6 +43,13 @@ identity contract also need to be validated.
 `commit quality` accepts the same source selection and defaults to `HEAD`. It is deliberately
 separate from `commit check`: the deterministic Conventional Commit policy remains authoritative,
 while a model is an optional advisory signal. The provider is explicit and bounded:
+
+Use `--provider huggingface` for local classification or seq2seq inference, or
+`--provider bedrock` for AWS-hosted classification. The default provider is Hugging Face; the
+Bedrock adapter does not use `--offline`, `--revision`, or Hugging Face input-token settings.
+These modes inspect the complete selected message subject to the provider's bounded input window;
+the report exposes the selected message shape and any measured truncation. For exact structure,
+scope, body, footer, paragraph, or Typos enforcement, run `commit check` as well.
 
 ### Quality input modes
 
