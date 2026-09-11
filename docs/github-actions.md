@@ -38,9 +38,10 @@ controls its own execution.
 
 The repository's optional `commit-quality` workflow uses `--format github` for both its online
 cache-population run and its offline replay. Flagged model results appear as warning annotations,
-while provider or cache failures appear as error annotations and retain exit `2`. Keep the model
-cache key pinned to the exact revision and do not cache executable files from an untrusted pull
-request.
+while provider or cache failures appear as error annotations and retain exit `2`. Each step also
+copies its escaped output into `GITHUB_STEP_SUMMARY`, preserving the command's original exit code
+so a failed run remains readable from the Actions summary. Keep the model cache key pinned to the
+exact revision and do not cache executable files from an untrusted pull request.
 
 For an ordinary installed-CLI check, keep the source and checkout boundary explicit:
 

@@ -51,19 +51,41 @@ jobs:
             printf 'YAGA_QUALITY_RANGE=HEAD\n' >> "$GITHUB_ENV"
           fi
       - name: Populate or use the model cache
-        run: >-
-          uv run --frozen --python 3.12 yaga commit quality
-          --range "$YAGA_QUALITY_RANGE"
-          --provider huggingface
-          --task classification
-          --revision "$YAGA_QUALITY_MODEL_REVISION"
-          --format github
+        shell: bash
+        run: |
+          set +e
+          report="$(uv run --frozen --python 3.12 yaga commit quality \
+            --range "$YAGA_QUALITY_RANGE" \
+            --provider huggingface \
+            --task classification \
+            --revision "$YAGA_QUALITY_MODEL_REVISION" \
+            --format github 2>&1)"
+          status=$?
+          printf '%s\n' "$report"
+          {
+            printf '%s\n' '### YAGA commit quality (online)'
+            printf '%s\n' '<pre>'
+            printf '%s\n' "$report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+            printf '%s\n' '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - name: Prove offline cache reuse
-        run: >-
-          uv run --frozen --python 3.12 yaga commit quality
-          --range "$YAGA_QUALITY_RANGE"
-          --provider huggingface
-          --task classification
-          --revision "$YAGA_QUALITY_MODEL_REVISION"
-          --offline
-          --format github
+        shell: bash
+        run: |
+          set +e
+          report="$(uv run --frozen --python 3.12 yaga commit quality \
+            --range "$YAGA_QUALITY_RANGE" \
+            --provider huggingface \
+            --task classification \
+            --revision "$YAGA_QUALITY_MODEL_REVISION" \
+            --offline \
+            --format github 2>&1)"
+          status=$?
+          printf '%s\n' "$report"
+          {
+            printf '%s\n' '### YAGA commit quality (offline replay)'
+            printf '%s\n' '<pre>'
+            printf '%s\n' "$report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+            printf '%s\n' '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
