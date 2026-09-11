@@ -4,6 +4,8 @@
 
 ### Added
 
+- Allow `commit quality` classification thresholds from `0` through `1` inclusively, including
+  `0` for intentionally flagging every nonnegative classifier score.
 - Added diagnostic line and column locations to standalone and pull-request text reports so local
   failures provide the same actionable position detail as JSON and GitHub output.
 - Added a dedicated commit-quality guide covering input sources and modes, provider/task choices,

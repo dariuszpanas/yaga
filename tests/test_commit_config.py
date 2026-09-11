@@ -81,6 +81,14 @@ input-mode = "title"
     assert loaded.policy.quality.input_mode is QualityInputMode.TITLE
 
 
+def test_quality_policy_accepts_zero_threshold(tmp_path: Path) -> None:
+    project = write_pyproject(tmp_path, "[tool.yaga.commit.quality]\nthreshold = 0\n")
+
+    loaded = load_config(project, start=tmp_path)
+
+    assert loaded.policy.quality.threshold == 0.0
+
+
 @pytest.mark.parametrize(
     "quality",
     [
@@ -90,7 +98,6 @@ input-mode = "title"
         '[tool.yaga.commit.quality]\nprovider = "bedrock"\nrevision = "0123456789abcdef"\n',
         '[tool.yaga.commit.quality]\nmodel = "bad\nmodel"\n',
         '[tool.yaga.commit.quality]\nrevision = "main"\n',
-        "[tool.yaga.commit.quality]\nthreshold = 0\n",
         "[tool.yaga.commit.quality]\nmax-tokens = 0\n",
         "[tool.yaga.commit.quality]\nmax-input-tokens = 0\n",
         '[tool.yaga.commit.quality]\ninput-mode = "body"\n',

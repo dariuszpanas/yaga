@@ -56,6 +56,7 @@ Git-backed selection never fetches, and range results preserve oldest-first orde
 
 The default is the pinned Hugging Face classifier. It treats `LABEL_0` as the low-quality
 probability and flags scores at or above `0.70`; classification does not explain its score.
+Thresholds are inclusive from `0` through `1`, so `0` deliberately flags every classifier result.
 Classifier output is bounded and duplicate labels are rejected, so malformed or ambiguous model
 responses fail as operational errors rather than silently changing the decision.
 Seq2seq responses must begin with `PASS` or `FLAG`, are bounded to 4,096 bytes, and are still

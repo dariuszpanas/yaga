@@ -91,6 +91,23 @@ def test_quality_uses_injected_predictor_boundary(monkeypatch: pytest.MonkeyPatc
     assert report.max_input_tokens == DEFAULT_MAX_INPUT_TOKENS
 
 
+def test_quality_accepts_zero_classification_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("flag", 0.01),
+    )
+
+    report = check_quality(
+        [CommitTarget(label="message", message="feat: explain the change")],
+        revision=DEFAULT_MODEL_REVISION,
+        threshold=0.0,
+    )
+
+    assert report.flagged == 1
+
+
 @pytest.mark.parametrize(
     ("text", "decision", "reason"),
     [("PASS clear change", "pass", "clear change"), ("FLAG vague", "flag", "vague")],

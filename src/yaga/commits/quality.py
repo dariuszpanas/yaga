@@ -505,8 +505,8 @@ def _validate_options(
         raise InputError("Hugging Face quality requires a pinned model revision")
     if provider == "bedrock" and revision is not None:
         raise InputError("Bedrock quality does not use model revisions")
-    if type(threshold) is not float or not 0.0 < threshold <= 1.0:
-        raise InputError("quality threshold must be a number greater than 0 and at most 1")
+    if type(threshold) is not float or not 0.0 <= threshold <= 1.0:
+        raise InputError("quality threshold must be a number from 0 through 1")
     if region is not None and (
         not region
         or len(region) > 64

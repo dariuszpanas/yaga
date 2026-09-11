@@ -419,10 +419,8 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
     ):
         raise ConfigurationError(f"quality.revision must be a lowercase hexadecimal SHA in {path}")
     threshold = value.get("threshold", defaults.threshold)
-    if type(threshold) not in {float, int} or not 0 < threshold <= 1:
-        raise ConfigurationError(
-            f"quality.threshold must be greater than 0 and at most 1 in {path}"
-        )
+    if type(threshold) not in {float, int} or not 0 <= threshold <= 1:
+        raise ConfigurationError(f"quality.threshold must be at least 0 and at most 1 in {path}")
     region = value.get("region")
     if region is not None and (
         not isinstance(region, str)
