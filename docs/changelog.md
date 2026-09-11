@@ -23,6 +23,8 @@
 
 ### Changed
 
+- Documented the distinction between complete selected-message line counts and the 512-token
+  Hugging Face model input window, so quality reports are not mistaken for full semantic coverage.
 - Clarified `body.paragraph-format` diagnostics so failures identify the likely sentence split
   across blank lines instead of reporting only the configured count.
 
