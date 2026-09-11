@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add regression coverage proving event-aware Dependabot skips remain valid for multiline commits.
 - Clarify that `config init` requires lowercase commit types while keeping scopes optional and
   lowercased when present.
 - Include aggregate character and token coverage counts in the GitHub quality notice, including
