@@ -36,6 +36,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Changed
 
+- Cache the verified Cargo registry used to install the pinned Typos CLI, reducing repeated network
+  downloads without caching an executable supplied by pull-request code.
 - Clarify the command synopsis so `commit quality` is identified as a provider-backed advisory,
   including the Hugging Face and Bedrock modes documented below.
 - Enable the bounded Typos commit-message check in YAGA's own policy and install the pinned CLI in
