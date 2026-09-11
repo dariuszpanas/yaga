@@ -45,8 +45,8 @@ publication = "comment"
 ```
 
 Required lenses participate in the aggregate gate; advisory lenses can publish findings without
-blocking it. Every lens must have a unique name, a bounded instruction, a known adapter preset, and
-one publication mode: `comment`, `inline`, `reaction`, `review`, or `check`. The mode describes
+blocking it. Every lens must have a unique name, a bounded instruction, a bounded adapter preset
+label, and one publication mode: `comment`, `inline`, `reaction`, `review`, or `check`. The mode describes
 the intended provider output; it does not grant credentials or bypass provider capabilities.
 Credentials, tokens, and provider-specific secrets stay in the trusted workflow environment.
 
@@ -78,6 +78,12 @@ the result receipt while returning one closed outcome for each named lens.
 Text plan output prints the same digest on a separate `Plan digest:` line; JSON plan output carries
 it as `plan_digest`. Evaluation text, JSON, and GitHub notice output repeat the digest so CI logs
 can be correlated with the exact configuration used.
+
+Treat the plan and receipt as one versioned handoff. A trusted adapter should generate the plan from
+the policy, pass each ordered lens to its selected provider, preserve the lens name and requested
+publication mode in its own provider work, and write one result for every plan item. If the policy
+file, lens order, aggregation, instruction, preset label, outcome role, or publication mode changes,
+the digest changes and the adapter must generate a new receipt before evaluation.
 The result contract is deliberately small:
 
 ```json
@@ -143,7 +149,9 @@ authorization token or security authority by itself.
 
 The validator requires schema version `1`, at least one required lens, unique lower-case lens names,
 known outcomes (`review` or `advisory`), publication modes, bounded instructions, and a bounded
-preset name. It does not contact an agent or read credentials. The trusted publisher will consume this same validated
+preset label. The label is intentionally not a YAGA provider registry: an external adapter decides
+which service, model, or human workflow it represents. The validator does not contact an agent or
+read credentials. The trusted publisher will consume this same validated
 model when provider adapters are enabled. The composite Action can validate the same file before
 its first GitHub API request:
 

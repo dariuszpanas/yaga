@@ -17,6 +17,8 @@
 
 ### Changed
 
+- Expanded Agent review documentation with the digest-bound adapter handoff, receipt lifecycle,
+  generic preset-label semantics, and GitHub-format publishing example.
 - The consecutive single-line paragraph policy now accepts `0` as an explicit unlimited setting;
   one-line validation notes and justifications remain valid when the split-sentence heuristic is
   enabled.
