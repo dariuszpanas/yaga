@@ -43,29 +43,24 @@ jobs:
           path: ${{ github.workspace }}/.yaga-huggingface
           key: yaga-quality-${{ runner.os }}-python3.12-${{ env.YAGA_QUALITY_TASK }}-${{ env.YAGA_QUALITY_MODEL_ID }}-${{ env.YAGA_QUALITY_MODEL_REVISION }}
       - run: uv sync --frozen --group dev --extra quality --python 3.12
-      - name: Select the checked commit range
+      - name: Populate cache and prove offline reuse
         shell: bash
         run: |
           set -euo pipefail
           if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
-            printf 'YAGA_QUALITY_RANGE=%s...%s\n' \
-              "$YAGA_QUALITY_BASE_SHA" "$YAGA_QUALITY_HEAD_SHA" >> "$GITHUB_ENV"
+            source_arguments=(--range "$YAGA_QUALITY_BASE_SHA..$YAGA_QUALITY_HEAD_SHA")
           else
-            printf 'YAGA_QUALITY_RANGE=HEAD\n' >> "$GITHUB_ENV"
+            source_arguments=(--commit "$YAGA_QUALITY_HEAD_SHA")
           fi
-      - name: Populate cache and prove offline reuse
-        shell: bash
-        run: |
-          set +e
+          online_status=0
           online_report="$(uv run --frozen --python 3.12 yaga commit quality \
-            --range "$YAGA_QUALITY_RANGE" \
+            "${source_arguments[@]}" \
             --provider huggingface \
             --task "$YAGA_QUALITY_TASK" \
             --model "$YAGA_QUALITY_MODEL_ID" \
             --input-mode message \
             --revision "$YAGA_QUALITY_MODEL_REVISION" \
-            --format github 2>&1)"
-          online_status=$?
+            --format github 2>&1)" || online_status=$?
           printf '%s\n' "$online_report"
           {
             printf '%s\n' '### YAGA commit quality (online)'
@@ -74,16 +69,16 @@ jobs:
             printf '%s\n' "$online_report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
             printf '%s\n' '</pre>'
           } >> "$GITHUB_STEP_SUMMARY"
+          offline_status=0
           offline_report="$(uv run --frozen --python 3.12 yaga commit quality \
-            --range "$YAGA_QUALITY_RANGE" \
+            "${source_arguments[@]}" \
             --provider huggingface \
             --task "$YAGA_QUALITY_TASK" \
             --model "$YAGA_QUALITY_MODEL_ID" \
             --input-mode message \
             --revision "$YAGA_QUALITY_MODEL_REVISION" \
             --offline \
-            --format github 2>&1)"
-          offline_status=$?
+            --format github 2>&1)" || offline_status=$?
           printf '%s\n' "$offline_report"
           {
             printf '%s\n' '### YAGA commit quality (offline replay)'
@@ -91,9 +86,12 @@ jobs:
             printf '%s\n' "$offline_report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
             printf '%s\n' '</pre>'
           } >> "$GITHUB_STEP_SUMMARY"
-          if [[ "$online_status" -eq 2 || "$offline_status" -eq 2 ]]; then
-            exit 2
-          fi
+          for status in "$online_status" "$offline_status"; do
+            case "$status" in
+              0|1) ;;
+              *) exit 2 ;;
+            esac
+          done
           if [[ "$online_status" -eq 1 || "$offline_status" -eq 1 ]]; then
             exit 1
           fi

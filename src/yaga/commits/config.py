@@ -384,6 +384,7 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
     provider = _enum(
         value.get("provider", defaults.provider.value), QualityProvider, "quality.provider", path
     )
+    defaults = QualityPolicy.for_provider(provider)
     task = _enum(value.get("task", defaults.task.value), QualityTask, "quality.task", path)
     input_mode = _enum(
         value.get("input-mode", defaults.input_mode.value),
@@ -413,11 +414,12 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
         )
     if revision is not None and (
         not isinstance(revision, str)
-        or not revision
-        or len(revision) > 64
+        or len(revision) != 40
         or any(char not in "0123456789abcdef" for char in revision)
     ):
-        raise ConfigurationError(f"quality.revision must be a lowercase hexadecimal SHA in {path}")
+        raise ConfigurationError(
+            f"quality.revision must be a 40-character lowercase hexadecimal SHA in {path}"
+        )
     threshold = value.get("threshold", defaults.threshold)
     if type(threshold) not in {float, int} or not 0 <= threshold <= 1:
         raise ConfigurationError(f"quality.threshold must be at least 0 and at most 1 in {path}")

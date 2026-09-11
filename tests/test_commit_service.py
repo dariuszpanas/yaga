@@ -12,6 +12,8 @@ import pytest
 
 from yaga.commits import check_commits, check_git_commits
 from yaga.commits.models import Diagnostic, ValidationReport
+from yaga.commits.quality import DEFAULT_MODEL_ID, DEFAULT_MODEL_REVISION, QualityAssessment
+from yaga.commits.service import check_commit_quality
 from yaga.errors import InputError
 from yaga.repository.checker import check_repository
 
@@ -306,3 +308,83 @@ def test_explicit_config_is_preserved_for_non_git_sources(tmp_path: Path) -> Non
 
     assert report.valid
     assert report.config_path == config.resolve()
+
+
+@pytest.mark.parametrize("model", [None, "custom.bedrock-model"])
+def test_quality_service_switches_to_bedrock_without_huggingface_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str | None
+) -> None:
+    config = tmp_path / ".yaga.toml"
+    config.write_text(
+        'config-version = 1\n[commit.quality]\ntask = "seq2seq"\n'
+        'model = "local/huggingface-model"\ninput-mode = "title"\nthreshold = 0.3\n',
+        encoding="utf-8",
+    )
+    calls: list[tuple[object, ...]] = []
+
+    def load(*args: object, **kwargs: object):
+        calls.append(args)
+        assert kwargs["input_mode"] == "title"
+        assert kwargs["threshold"] == 0.3
+        return lambda _message: QualityAssessment("pass")
+
+    monkeypatch.setattr("yaga.commits.quality._load_predictor", load)
+
+    report = check_commit_quality(
+        tmp_path, message="fix: correct provider defaults", provider="bedrock", model_id=model
+    )
+
+    assert calls == [("bedrock", "classification", model or "amazon.nova-micro-v1:0", None)]
+    assert report.revision is None
+
+
+def test_quality_service_switches_from_bedrock_to_huggingface(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / ".yaga.toml"
+    config.write_text(
+        'config-version = 1\n[commit.quality]\nprovider = "bedrock"\nregion = "us-east-1"\n',
+        encoding="utf-8",
+    )
+    calls: list[tuple[object, ...]] = []
+
+    def load(*args: object, **kwargs: object):
+        calls.append(args)
+        assert kwargs["region"] is None
+        return lambda _message: QualityAssessment("pass")
+
+    monkeypatch.setattr("yaga.commits.quality._load_predictor", load)
+
+    report = check_commit_quality(
+        tmp_path, message="fix: correct provider defaults", provider="huggingface"
+    )
+
+    assert calls == [("huggingface", "classification", DEFAULT_MODEL_ID, DEFAULT_MODEL_REVISION)]
+    assert report.model_id == DEFAULT_MODEL_ID
+
+
+def test_quality_service_preserves_same_provider_model_and_explicit_invalid_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / ".yaga.toml"
+    config.write_text(
+        'config-version = 1\n[commit.quality]\nprovider = "bedrock"\n'
+        'model = "custom.bedrock-model"\nregion = "us-east-1"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("pass"),
+    )
+
+    report = check_commit_quality(tmp_path, message="fix: preserve defaults", provider="bedrock")
+
+    assert report.model_id == "custom.bedrock-model"
+    assert report.region == "us-east-1"
+    with pytest.raises(InputError, match="does not use model revisions"):
+        check_commit_quality(
+            tmp_path,
+            message="fix: preserve explicit invalid input",
+            provider="bedrock",
+            revision=DEFAULT_MODEL_REVISION,
+        )
