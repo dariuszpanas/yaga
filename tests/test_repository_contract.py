@@ -161,6 +161,9 @@ def test_commit_quality_action_publishes_advisory_annotations() -> None:
     assert "--offline" in workflow
     assert "actions/cache@5a3ec84eff668545956fd18022155c47e93e2684" in workflow
     assert "permissions:\n  contents: read" in workflow
+    assert workflow.count("GITHUB_STEP_SUMMARY") == 2
+    assert workflow.count("status=$?") == 2
+    assert workflow.count("sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g'") == 2
 
 
 def test_ci_changed_path_policy_uses_explicit_unprivileged_event_boundaries() -> None:

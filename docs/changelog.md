@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added escaped commit-quality output to the GitHub Actions step summary for both online and offline
+  workflow passes without masking command failures.
 - Added a bounded GitHub notice summarizing quality counts and provider metadata alongside warning
   annotations.
 - Updated the repository commit-quality workflow to use GitHub annotations for online and offline
