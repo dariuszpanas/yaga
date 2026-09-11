@@ -111,7 +111,8 @@ yaga commit quality --range origin/main..HEAD --format github
 Text and JSON identify provider, task, model, revision, input mode, character limit, and per-message
 coverage. Hugging Face results also expose measured token count and token truncation; unsupported
 measurements are `null`. GitHub output emits warning annotations for flagged messages and one
-bounded notice with counts and metadata; provider failures emit an error annotation and exit `2`.
+bounded notice with counts, model revision, input limits, threshold, and provider metadata;
+provider failures emit an error annotation and exit `2`.
 
 Use `commit check` for exact body, footer, paragraph, scope, and Typos enforcement. Keep quality
 advisory checks separate from the dependency-free Agent review runtime and required security gates.
