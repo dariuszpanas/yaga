@@ -23,6 +23,9 @@
 
 ### Changed
 
+- Clarified `body.paragraph-format` diagnostics so failures identify the likely sentence split
+  across blank lines instead of reporting only the configured count.
+
 - Expanded Agent review documentation with the digest-bound adapter handoff, receipt lifecycle,
   generic preset-label semantics, and GitHub-format publishing example.
 - The consecutive single-line paragraph policy now accepts `0` as an explicit unlimited setting;

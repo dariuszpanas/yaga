@@ -332,7 +332,8 @@ def test_body_paragraph_policy_catches_consecutive_single_line_prose_paragraphs(
 
     assert [diagnostic.code for diagnostic in checked.diagnostics] == ["body.paragraph-format"]
     assert checked.diagnostics[0].message == (
-        "body has 3 consecutive single-line prose paragraphs; maximum is 1"
+        "body has 3 consecutive single-line prose paragraphs; maximum is 1; likely a sentence "
+        "split across blank lines"
     )
     assert checked.diagnostics[0].line == 3
 

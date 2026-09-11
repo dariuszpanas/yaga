@@ -251,7 +251,8 @@ def _check_target(
                         code="body.paragraph-format",
                         message=(
                             f"body has {count} consecutive single-line prose {noun}; maximum is "
-                            f"{policy.body_max_consecutive_single_line_paragraphs}"
+                            f"{policy.body_max_consecutive_single_line_paragraphs}; likely a sentence "
+                            "split across blank lines"
                         ),
                         line=parsed.body_start_line + first_line,
                     )
