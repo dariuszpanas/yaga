@@ -84,10 +84,18 @@ def render_quality_report(
             message_shape += "; model input truncated"
         elif result.input_truncated is False:
             message_shape += "; model input complete"
+        character_coverage = ""
+        if result.input_characters is not None:
+            character_coverage = (
+                f"; model input {result.input_characters}/{report.max_input_characters} chars"
+            )
+            if result.input_character_truncated:
+                character_coverage += ", character-truncated"
         lines.append(
             f"{status:7} {safe_text(identity, maximum=80)}  "
             f"({message_lines} {line_label} checked; {message_shape}) "
             f"[model input: {model_input_label}] "
+            f"{character_coverage.lstrip('; ')} "
             f"{safe_text(result.target.message.splitlines()[0])}"
         )
         details = []
@@ -117,6 +125,7 @@ def render_quality_report(
     if report.max_input_tokens is not None:
         lines.append(f"Max input tokens: {report.max_input_tokens}")
     lines.append(f"Input mode: {safe_text(report.input_mode, maximum=32)}")
+    lines.append(f"Max input characters: {report.max_input_characters}")
     return "\n".join(lines)
 
 
@@ -183,6 +192,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
         "offline": report.offline,
         "max_input_tokens": report.max_input_tokens,
         "input_mode": report.input_mode,
+        "max_input_characters": report.max_input_characters,
         "commits": [
             {
                 "source": json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
@@ -192,6 +202,8 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
                 "message_body_lines": _message_body_lines(result.target.message),
                 "model_input_truncated": result.input_truncated,
                 "model_input_tokens": result.input_tokens,
+                "model_input_characters": result.input_characters,
+                "model_input_character_truncated": result.input_character_truncated,
                 "status": "flagged" if result.flagged else "passed",
                 "score": result.assessment.score,
                 "reason": json_text(result.assessment.reason, maximum=MAX_REASON_LENGTH)

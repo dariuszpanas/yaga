@@ -132,10 +132,10 @@ The CLI `--max-input-tokens` option overrides it for one invocation. Use `--conf
 settings should come from one explicit file rather than normal nearest-file discovery.
 
 `input-mode` controls the text sent to the provider. It accepts `message` (the default, sending the
-complete commit message including its body) or `title` (sending only the first line). Reports
-always retain the full selected commit message and identify the mode so a title-only result is not
-mistaken for a full-message check. The CLI `--input-mode` option overrides this default for one
-invocation.
+complete commit message including its body) or `title` (sending only the first line). Reports keep
+the selected message bounded for display, identify the mode, and include exact model-input
+character coverage so a title-only result is not mistaken for a full-message check. The CLI
+`--input-mode` option overrides this default for one invocation.
 
 The development quality extra uses PyTorch's CPU wheel index on Linux because YAGA's quality
 adapters run CPU inference; this avoids installing CUDA libraries in the hosted quality workflow.
