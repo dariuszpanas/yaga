@@ -46,6 +46,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "required-footer-tokens" not in commit_policy
 
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "DOCS_ADDR ?= localhost:9000" in makefile
+    assert 'uv run zensical serve --dev-addr "$(DOCS_ADDR)"' in makefile
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
     assert "uv run yaga workflow lint .github/workflows examples" in makefile
     assert (
