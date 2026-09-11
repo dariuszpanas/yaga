@@ -223,8 +223,8 @@ effective values:
 yaga config init --repo .
 ```
 
-The starter permits the common Conventional Commit types, requires lowercase type and scope,
-allows an optional project-defined scope, bounds headers, rejects merge commits, and
+The starter permits the common Conventional Commit types, requires a lowercase type, keeps the
+scope optional (and lowercase when present), bounds headers, rejects merge commits, and
 checks at most 64 commits per range. Initialization creates only `.yaga.toml`: it never edits
 `pyproject.toml`, overwrites a path, or shadows a configuration already discovered for the target
 directory. Use `--format json` when another tool needs the created path and effective policy.
