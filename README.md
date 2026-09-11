@@ -4,8 +4,8 @@ YAGA is an extensible Python CLI for repository policy that runs the same checks
 Its first general-purpose feature is a configurable
 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) checker. The Agent
 review policy can describe one or more configured review lenses. Its experimental GitHub Action is
-currently a single-lens Codex adapter; multi-lens execution uses the provider-neutral plan and
-receipt commands through an external adapter.
+a fixed Codex request/completion adapter; configured lens execution uses the provider-neutral plan
+and receipt commands through an external adapter.
 
 YAGA is pre-release. The CLI and configuration schema may still change. Action consumers must pin
 the exact audited 40-character commit SHA they canaried rather than a branch or mutable tag.

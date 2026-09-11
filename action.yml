@@ -43,8 +43,9 @@ inputs:
     required: true
   agent-review-policy-file:
     description: >-
-      Optional path, relative to the trusted default-branch workspace, to the
-      Agent review TOML policy
+      Unsupported by the fixed GitHub Codex completion adapter; any nonempty
+      value fails before GitHub API access. Use an external adapter with the
+      installed policy plan/evaluate commands for configured lenses
     required: false
     default: ""
 
