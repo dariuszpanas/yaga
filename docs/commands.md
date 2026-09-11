@@ -59,6 +59,65 @@ with a bounded reason. The Bedrock adapter uses the Converse API and defaults to
 Micro; `--model` can select another compatible model. YAGA never accepts provider credentials in
 policy files or command output. `--offline` is available only for local Hugging Face models.
 
+### Choosing a quality mode
+
+Use classification when the repository wants a stable numeric signal and a cheap pass/fail
+threshold. The default model is pinned by its immutable revision, and `--threshold` controls the
+low-quality probability at which a message is flagged. Classification does not explain its score.
+
+Use Hugging Face `seq2seq` when a locally cached instruction model should return a short reason. The
+model must follow the bounded `PASS` or `FLAG` response contract; `--max-tokens` limits the generated
+response. `--model` and `--revision` are independent, so pin both together when selecting a model
+other than the default. A seq2seq result is still advisory and is not treated as a replacement for
+the deterministic commit policy.
+
+Use Bedrock when model execution should stay outside the runner. YAGA calls the Bedrock Converse
+API for each selected message, obtains credentials from the normal AWS SDK credential chain, and
+uses `--region` or the SDK's configured region. No Hugging Face files are downloaded in this mode;
+`--offline` is therefore rejected. Keep AWS credentials in the workflow environment or its identity
+provider, never in `.yaga.toml`.
+
+All modes receive the complete selected message, including its body and final footer block. The
+model tokenizer or provider may apply its own input limit; YAGA bounds the submitted prompt and
+reports the selected line count in text and JSON output. The model can therefore notice a vague
+body, but exact rules such as paragraph layout, footer presence, or configured scopes remain the
+responsibility of `commit check`.
+
+### Hugging Face cache and offline replay
+
+The first online Hugging Face invocation downloads the tokenizer and model for the exact revision.
+The files are stored in the normal Hugging Face cache, or in `HF_HOME` when that variable is set.
+An offline invocation sets the provider's local-files-only loading mode and never contacts the Hub:
+
+```bash
+export HF_HOME="$PWD/.yaga-huggingface"
+yaga commit quality --range origin/main..HEAD --revision <model-sha>
+yaga commit quality --range origin/main..HEAD --revision <model-sha> --offline
+```
+
+The second command succeeds only when the first command populated the same cache with the same
+model revision and task. Cache the directory between CI runs, using a key that includes the runner
+OS, Python/runtime family, task, and model revision. Do not cache credential directories or put
+provider tokens in the cache. A cache miss should be handled by one intentional online warm-up
+step followed by the offline proof step; this makes accidental network access visible in CI.
+
+For a repository configuration, put non-secret defaults in the policy and keep runtime mode
+selection explicit:
+
+```toml
+[tool.yaga.commit.quality]
+provider = "huggingface"
+task = "classification"
+model = "saridormi/commit-message-quality-codebert"
+revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553d"
+threshold = 0.70
+max-tokens = 32
+```
+
+The precedence is CLI option, then the selected configuration file, then the provider default.
+`--config` changes which policy file supplies defaults; it does not merge files. In particular,
+`--offline` is a per-invocation runtime choice and is not a policy-file credential or side effect.
+
 A model finding returns exit `1`, while missing dependencies, unavailable credentials/models, or
 invalid provider output returns exit `2`. Use `--format json` when another tool needs the stable
 provider, task, model, decision, score, and reason fields.
