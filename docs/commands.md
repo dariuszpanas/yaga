@@ -36,6 +36,36 @@ oldest first. Git-backed commit checks require complete history and never fetch.
 separate from `commit check`: the deterministic Conventional Commit policy remains authoritative,
 while a model is an optional advisory signal. The provider is explicit and bounded:
 
+### Quality input modes
+
+Select exactly one source, or let the command use `HEAD` when no source option is present. The
+source determines which complete commit message reaches the provider; it does not change the
+quality policy or model settings:
+
+| Source | Example | Use it when |
+| --- | --- | --- |
+| Direct message | `--message "fix: reject invalid values"` | Checking text before creating a commit. |
+| UTF-8 file | `--file .git/COMMIT_EDITMSG` | Integrating with a commit editor or hook. |
+| Standard input | `--stdin` | Passing generated text without creating a temporary file. |
+| One commit | `--commit HEAD~1` | Rechecking one committed message. |
+| Commit range | `--range origin/main..HEAD` | Reviewing several commits oldest first. |
+| Default | no source option | Checking `HEAD` in a repository. |
+
+For example, these invocations all select one message source and use the same configured provider:
+
+```bash
+yaga commit quality --message "fix(parser): reject malformed trailers"
+yaga commit quality --file .git/COMMIT_EDITMSG --offline
+printf 'docs: explain the cache boundary\n' | yaga commit quality --stdin --offline
+yaga commit quality --commit HEAD~1 --format json
+yaga commit quality --range origin/main..HEAD --format json
+```
+
+The source options are mutually exclusive. `--message`, `--file`, and `--stdin` do not read Git;
+`--commit`, `--range`, and the default `HEAD` source use the bounded Git runtime and do not fetch.
+Range results preserve oldest-first order, and a missing ref, empty range, shallow boundary, or
+selection above the configured commit limit is an operational error with exit `2`.
+
 The command also reads non-secret defaults from `[tool.yaga.commit.quality]` or `[commit.quality]`
 in the discovered configuration. Use `--config` to select one explicit file; CLI options override
 the configured provider, task, model, revision, threshold, region, generation bound, and Hugging
