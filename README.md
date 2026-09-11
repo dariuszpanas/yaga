@@ -63,11 +63,19 @@ yaga commit quality --commit HEAD --offline
 `pyproject.toml` (or `[commit.quality]` in `.yaga.toml`); use `--config` for an explicit file and
 override individual settings with CLI flags. Provider credentials are always supplied through the
 provider's normal environment/SDK credential chain, never through YAGA configuration.
+The default Hugging Face classifier is an optional advisory for message quality; use
+`uv sync --extra quality-bedrock` and `--provider bedrock` when inference should run through AWS
+Bedrock instead. Quality findings do not replace deterministic `commit check` rules, which remain
+responsible for structure, scope, body, footer, paragraph, and spelling policy.
 Use `--max-input-tokens` or `max-input-tokens` in the quality table to tune the Hugging Face
 tokenizer window; it defaults to 512 and accepts values through 4096. Reports identify the
 effective bound alongside the selected message and body-line counts. Hugging Face reports also show
 the measured input-token count and state whether each message was actually truncated at the model
 window.
+
+See the [commit policy guide](docs/commit-policy.md#optional-model-quality-advisory) for source
+modes, provider/task compatibility, cache and offline replay, configuration precedence, and report
+interpretation.
 
 Git commit and range sources read complete messages without fetching or invoking a shell. Exact
 commit checks select one commit; range checks preserve oldest-first order. Both require complete,
