@@ -29,10 +29,17 @@ def init_config(
         OutputFormat,
         typer.Option("--format", case_sensitive=False, help="Report format."),
     ] = OutputFormat.TEXT,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Validate and report the starter policy without creating .yaga.toml.",
+        ),
+    ] = False,
 ) -> None:
-    """Create a recommended standalone .yaga.toml without overwriting."""
+    """Create or preview a recommended standalone .yaga.toml without overwriting."""
     try:
-        loaded = initialize_config(repository)
+        loaded = initialize_config(repository, dry_run=dry_run)
     except YagaError as error:
         typer.echo(render_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error

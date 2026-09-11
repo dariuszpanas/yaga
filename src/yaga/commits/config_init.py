@@ -43,8 +43,8 @@ max-commits = 64
 _RECOMMENDED_CONFIG_BYTES = _RECOMMENDED_CONFIG.encode("utf-8")
 
 
-def initialize_config(repository: Path) -> LoadedConfig:
-    """Create and load one recommended standalone configuration without overwriting."""
+def initialize_config(repository: Path, *, dry_run: bool = False) -> LoadedConfig:
+    """Create or preview one recommended standalone configuration without overwriting."""
     try:
         resolved_repository = repository.expanduser().resolve()
     except (OSError, RuntimeError) as error:
@@ -78,13 +78,15 @@ def initialize_config(repository: Path) -> LoadedConfig:
         raise ConfigurationError(f"cannot prepare configuration {target}: {error}") from error
 
     try:
-        load_config(temporary, start=resolved_repository)
+        loaded = load_config(temporary, start=resolved_repository)
         concurrently_loaded = load_config(start=resolved_repository)
         if concurrently_loaded.path is not None:
             raise ConfigurationError(
                 f"configuration already applies to {resolved_repository}: "
                 f"{concurrently_loaded.path}"
             )
+        if dry_run:
+            return LoadedConfig(policy=loaded.policy, path=target)
         _publish_without_replacement(temporary, target)
     finally:
         _remove_temporary_config(temporary)

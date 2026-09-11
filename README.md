@@ -223,6 +223,9 @@ effective values:
 yaga config init --repo .
 ```
 
+Use `yaga config init --repo . --dry-run` to validate and inspect the same starter policy without
+creating `.yaga.toml`; the report names the path that would be published.
+
 The starter permits the common Conventional Commit types, requires a lowercase type, keeps the
 scope optional (and lowercase when present), bounds headers, rejects merge commits, and
 checks at most 64 commits per range. Initialization creates only `.yaga.toml`: it never edits

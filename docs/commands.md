@@ -12,7 +12,7 @@ support text/JSON/GitHub reporting where documented. Configuration reports remai
 | `yaga change check` | Enforce changed-path coupling. | `--policy ... --range A...B` |
 | `yaga commit check` | Check one message, commit, or range. | `--message ...` or `--range ...` |
 | `yaga commit quality` | Advisory-check message quality with an optional Hugging Face or Bedrock provider. | `--message ...` or `--range ...` |
-| `yaga config init` | Create a starter commit policy. | `--repo .` |
+| `yaga config init` | Create or preview a starter commit policy. | `--repo . [--dry-run]` |
 | `yaga config show` | Show effective policy and source. | `--repo .` |
 | `yaga github pull-request check` | Check one exact GitHub PR event. | event and checkout context |
 | `yaga mode check` | Enforce committed entry modes. | `--policy ... --revision ...` |
