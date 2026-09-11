@@ -12,6 +12,7 @@ from yaga.commits.quality import (
     DEFAULT_MODEL_REVISION,
     QualityAssessment,
     QualityPrediction,
+    _input_truncation,
     _load_huggingface,
     _low_quality_probability,
     _parse_decision,
@@ -72,6 +73,12 @@ def test_quality_parses_bounded_provider_decisions(text: str, decision: str, rea
 def test_quality_rejects_untrusted_provider_decision() -> None:
     with pytest.raises(ValueError, match="expected PASS"):
         _parse_decision("maybe")
+
+
+def test_unknown_model_input_coverage_is_not_reported_as_complete() -> None:
+    assert _input_truncation(None, 512) is None
+    assert _input_truncation(512, 512) is False
+    assert _input_truncation(513, 512) is True
 
 
 def test_classifier_applies_offline_only_during_model_loading(

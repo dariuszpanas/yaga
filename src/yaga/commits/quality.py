@@ -247,7 +247,7 @@ def _load_huggingface(
                 input_tokens = _input_token_count(tokenizer, message)
                 return QualityPrediction(
                     _classification_assessment(classifier(message), threshold),
-                    input_tokens is not None and input_tokens > max_input_tokens,
+                    _input_truncation(input_tokens, max_input_tokens),
                     input_tokens,
                 )
 
@@ -276,7 +276,7 @@ def _load_huggingface(
             text = tokenizer.decode(generated[0], skip_special_tokens=True)
             return QualityPrediction(
                 _parse_decision(text),
-                input_tokens is not None and input_tokens > max_input_tokens,
+                _input_truncation(input_tokens, max_input_tokens),
                 input_tokens,
             )
 
@@ -403,6 +403,13 @@ def _input_token_count(tokenizer: _QualityTokenizer, text: str) -> int | None:
     except Exception:  # noqa: BLE001 - coverage metadata must not hide provider results.
         return None
     return None
+
+
+def _input_truncation(input_tokens: int | None, maximum: int) -> bool | None:
+    """Compare a measured token count without turning unknown into complete."""
+    if input_tokens is None:
+        return None
+    return input_tokens > maximum
 
 
 def _safe_detail(error: Exception) -> str:
