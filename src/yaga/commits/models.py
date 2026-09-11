@@ -61,6 +61,13 @@ class TyposPolicy(StrEnum):
     CHECK = "check"
 
 
+class ParagraphSplittingPolicy(StrEnum):
+    """Whether to detect likely sentence splits across blank lines."""
+
+    SKIP = "skip"
+    CHECK = "check"
+
+
 class QualityProvider(StrEnum):
     """Optional provider used for advisory commit quality checks."""
 
@@ -124,7 +131,7 @@ class CommitPolicy:
     dependabot_pull_requests: DependabotPullRequestPolicy = DependabotPullRequestPolicy.CHECK
     typos: TyposPolicy = TyposPolicy.SKIP
     quality: QualityPolicy = QualityPolicy()
-    body_max_consecutive_single_line_paragraphs: int | None = None
+    body_paragraph_splitting: ParagraphSplittingPolicy = ParagraphSplittingPolicy.SKIP
 
 
 @dataclass(frozen=True, slots=True)

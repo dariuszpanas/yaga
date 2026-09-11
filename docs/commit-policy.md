@@ -29,8 +29,7 @@ forbidden-footer-tokens = ["WIP"]
 body-policy = "optional"
 body-min-words = 8
 # Omit body-max-line-length unless this repository wants a wrapping limit.
-# Omit body-max-consecutive-single-line-paragraphs unless this repository wants
-# to catch sentence-like prose split by blank lines.
+# Set body-paragraph-splitting = "check" to catch sentence-like prose split by blank lines.
 dependabot-pull-requests = "skip"
 typos = "skip"
 merge-commits = "reject"
@@ -80,13 +79,12 @@ keep both minima at zero when `body-policy = "forbidden"`.
 longer prose lines, or set a repository-specific positive limit when commit wrapping is part of the
 project’s style. YAGA does not require 72- or 100-column body wrapping.
 
-`body-max-consecutive-single-line-paragraphs` is an optional upper bound for consecutive prose
-paragraphs containing one non-empty line. It catches bodies that put a blank line between sentences
-without rejecting an intentional one-line paragraph. Wrapped paragraphs and list items break the
-run. Omitted or `0` means unlimited; `1` permits standalone short paragraphs while flagging
-paragraph-splitting. A one-line validation note or justification is valid.
+`body-paragraph-splitting` accepts `skip` (the default) or `check`. The check catches a likely
+sentence split where a blank line separates one-line prose paragraphs, without rejecting an
+intentional one-line paragraph. Wrapped paragraphs and list items are ignored. This is not a rule
+that requires every paragraph to contain two physical lines.
 
-For example, with `body-max-consecutive-single-line-paragraphs = 1`, this passes because the two
+For example, with `body-paragraph-splitting = "check"`, this passes because the two
 short paragraphs are separate notes and the first ends a sentence:
 
 ```text
@@ -111,8 +109,9 @@ when compatibility mode is enabled.
 
 The heuristic looks for a continuation: the previous paragraph does not end in `.`, `!`, or `?`,
 or the next paragraph begins with a lowercase letter. It is deliberately not a general prose
-formatter. Use `0` (or omit the key) when the repository does not want this layout check at all;
-use `body-max-line-length` separately if it also wants to constrain physical line width.
+formatter. Use `body-paragraph-splitting = "skip"` (or omit the key) when the repository does not
+want this layout check; use `body-max-line-length` separately if it also wants to constrain
+physical line width.
 
 YAGA’s own repository policy sets `body-policy = "required"` with a minimum prose length, so normal
 human commits include a durable explanation. The event-aware commit Action still skips policy

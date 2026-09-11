@@ -17,6 +17,7 @@ from yaga.commits.models import (
     CommitTarget,
     EndingPolicy,
     MergePolicy,
+    ParagraphSplittingPolicy,
     PresencePolicy,
 )
 from yaga.commits.parser import MAX_MESSAGE_BYTES
@@ -324,22 +325,21 @@ def test_body_min_words_is_not_applied_when_no_body_exists() -> None:
     assert result("feat: allow footers\n\nRefs: issue 123", policy).valid
 
 
-def test_body_paragraph_policy_catches_consecutive_single_line_prose_paragraphs() -> None:
-    policy = CommitPolicy(body_max_consecutive_single_line_paragraphs=1)
+def test_body_paragraph_policy_catches_sentence_split_across_single_line_paragraphs() -> None:
+    policy = CommitPolicy(body_paragraph_splitting=ParagraphSplittingPolicy.CHECK)
     message = "fix: explain parser behavior\n\nFirst sentence continues,\n\nwith more detail\n\nand still more detail."
 
     checked = result(message, policy)
 
     assert [diagnostic.code for diagnostic in checked.diagnostics] == ["body.paragraph-format"]
     assert checked.diagnostics[0].message == (
-        "body has 3 consecutive single-line prose paragraphs; maximum is 1; likely a sentence "
-        "split across blank lines"
+        "blank line likely splits one sentence; keep the sentence in one paragraph"
     )
-    assert checked.diagnostics[0].line == 3
+    assert checked.diagnostics[0].line == 5
 
 
 def test_body_paragraph_policy_allows_standalone_short_paragraphs_and_list_items() -> None:
-    policy = CommitPolicy(body_max_consecutive_single_line_paragraphs=1)
+    policy = CommitPolicy(body_paragraph_splitting=ParagraphSplittingPolicy.CHECK)
     one_short_paragraph = "fix: document parser behavior\n\nA short justification."
     assert result(one_short_paragraph, policy).valid
 
@@ -359,8 +359,8 @@ def test_body_paragraph_policy_allows_standalone_short_paragraphs_and_list_items
     assert result(message, policy).valid
 
 
-def test_body_paragraph_policy_zero_disables_the_heuristic() -> None:
-    policy = CommitPolicy(body_max_consecutive_single_line_paragraphs=0)
+def test_body_paragraph_policy_skip_disables_the_heuristic() -> None:
+    policy = CommitPolicy(body_paragraph_splitting=ParagraphSplittingPolicy.SKIP)
     message = "fix: keep short paragraphs valid\n\nFirst sentence continues,\n\nwith more detail."
 
     assert result(message, policy).valid
