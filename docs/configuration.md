@@ -51,7 +51,7 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 | `body-min-length` | Nonnegative prose-body character lower bound. |
 | `body-min-words` | Integer from 0 through 100000, counting prose tokens. |
 | `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
-| `body-max-single-line-paragraphs` | Optional maximum number of one-line prose paragraphs; omitted means unlimited. |
+| `body-max-consecutive-single-line-paragraphs` | Optional maximum run length of one-line prose paragraphs; omitted means unlimited. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
 | `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, and max-tokens. |
@@ -66,11 +66,12 @@ unique, non-overlapping, and cannot use `BREAKING CHANGE` or `BREAKING-CHANGE`.
 ### Body layout settings
 
 `body-max-line-length` is an optional wrapping limit; omitting it leaves body line length
-unlimited. `body-max-single-line-paragraphs` is a separate optional layout limit. It counts prose
-paragraphs made of exactly one non-empty line after parsing the header and final footer block. List
-items beginning with `-`, `*`, `+`, or a numbered marker such as `1.` are not counted. Omit the
-setting to allow any layout, or set it to `1` to permit one intentional one-line paragraph while
-flagging repeated paragraph splitting.
+unlimited. `body-max-consecutive-single-line-paragraphs` is a separate optional layout limit. It
+finds the longest run of prose paragraphs made of exactly one non-empty line after parsing the
+header and final footer block. List items beginning with `-`, `*`, `+`, or a numbered marker such as
+`1.` are not counted, and a wrapped paragraph breaks the run. Omit the setting to allow any layout,
+or set it to `1` to permit standalone one-line paragraphs while flagging a likely sentence split by
+blank lines.
 
 The check reports `body.paragraph-format` at the first offending paragraph and is deterministic;
 it does not depend on the optional quality model. This makes it suitable for enforcing repository

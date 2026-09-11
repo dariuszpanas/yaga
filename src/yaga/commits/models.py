@@ -123,7 +123,7 @@ class CommitPolicy:
     dependabot_pull_requests: DependabotPullRequestPolicy = DependabotPullRequestPolicy.CHECK
     typos: TyposPolicy = TyposPolicy.SKIP
     quality: QualityPolicy = QualityPolicy()
-    body_max_single_line_paragraphs: int | None = None
+    body_max_consecutive_single_line_paragraphs: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

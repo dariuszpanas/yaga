@@ -10,8 +10,8 @@
   optional Amazon Bedrock Converse adapter using Nova Micro by default.
 - Added strict `[commit.quality]` configuration defaults with per-invocation CLI overrides; secrets
   remain outside YAGA policy files.
-- Added configurable `body-max-single-line-paragraphs` enforcement for deterministic detection of
-  bodies split into excessive one-line prose paragraphs; list items remain exempt.
+- Added configurable paragraph enforcement that detects consecutive one-line prose paragraphs,
+  leaving standalone short paragraphs and list items valid.
 
 ### Changed
 
@@ -23,8 +23,8 @@
 
 ### Fixed
 
-- Allow one intentional one-line prose paragraph while still flagging repeated blank-line sentence
-  splitting; YAGA's own policy now uses that bound.
+- Refined paragraph enforcement to catch likely blank-line sentence splitting without treating every
+  one-line prose paragraph as a failure; YAGA's own policy uses the consecutive-run bound.
 - Added a bounded findings-by-rule summary to GitHub commit-policy output so failed rule codes are
   visible in workflow logs and step summaries.
 

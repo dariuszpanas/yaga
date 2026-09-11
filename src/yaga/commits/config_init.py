@@ -34,7 +34,7 @@ header-max-length = 100
 description-min-length = 3
 description-ending = "forbid"
 body-policy = "optional"
-# Omit body-max-single-line-paragraphs to allow any intentional paragraph layout.
+# Omit body-max-consecutive-single-line-paragraphs to allow any intentional paragraph layout.
 dependabot-pull-requests = "check"
 merge-commits = "reject"
 ignored-headers = []

@@ -53,7 +53,7 @@ _COMMIT_KEYS = frozenset(
         "body-min-length",
         "body-min-words",
         "body-max-line-length",
-        "body-max-single-line-paragraphs",
+        "body-max-consecutive-single-line-paragraphs",
         "breaking-markers",
         "dependabot-pull-requests",
         "typos",
@@ -352,9 +352,9 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             path,
         ),
         quality=quality,
-        body_max_single_line_paragraphs=_optional_integer(
+        body_max_consecutive_single_line_paragraphs=_optional_integer(
             raw_commit,
-            "body-max-single-line-paragraphs",
+            "body-max-consecutive-single-line-paragraphs",
             minimum=1,
             maximum=100_000,
             path=path,

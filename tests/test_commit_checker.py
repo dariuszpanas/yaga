@@ -324,25 +324,28 @@ def test_body_min_words_is_not_applied_when_no_body_exists() -> None:
     assert result("feat: allow footers\n\nRefs: issue 123", policy).valid
 
 
-def test_body_paragraph_policy_catches_repeated_single_line_prose_paragraphs() -> None:
-    policy = CommitPolicy(body_max_single_line_paragraphs=1)
-    message = (
-        "fix: explain parser behavior\n\nFirst sentence.\n\nSecond sentence.\n\nThird sentence."
-    )
+def test_body_paragraph_policy_catches_consecutive_single_line_prose_paragraphs() -> None:
+    policy = CommitPolicy(body_max_consecutive_single_line_paragraphs=1)
+    message = "fix: explain parser behavior\n\nFirst sentence continues,\n\nwith more detail\n\nand still more detail."
 
     checked = result(message, policy)
 
     assert [diagnostic.code for diagnostic in checked.diagnostics] == ["body.paragraph-format"]
     assert checked.diagnostics[0].message == (
-        "body has 3 single-line prose paragraphs; maximum is 1"
+        "body has 3 consecutive single-line prose paragraphs; maximum is 1"
     )
     assert checked.diagnostics[0].line == 3
 
 
-def test_body_paragraph_policy_allows_wrapped_prose_and_list_items() -> None:
-    policy = CommitPolicy(body_max_single_line_paragraphs=1)
+def test_body_paragraph_policy_allows_standalone_short_paragraphs_and_list_items() -> None:
+    policy = CommitPolicy(body_max_consecutive_single_line_paragraphs=1)
     one_short_paragraph = "fix: document parser behavior\n\nA short justification."
     assert result(one_short_paragraph, policy).valid
+
+    separated_short_paragraphs = (
+        "fix: document parser behavior\n\nA short justification.\n\nA separate validation note."
+    )
+    assert result(separated_short_paragraphs, policy).valid
 
     message = (
         "fix: document parser behavior\n\n"
