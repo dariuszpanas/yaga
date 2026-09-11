@@ -131,8 +131,9 @@ settings should come from one explicit file rather than normal nearest-file disc
 
 The development quality extra uses PyTorch's CPU wheel index on Linux because YAGA's quality
 adapters run CPU inference; this avoids installing CUDA libraries in the hosted quality workflow.
-Windows and macOS retain their platform-specific PyTorch wheels. The model cache is separate from
-the Python package cache, so changing or clearing one does not silently make the other complete.
+Windows and macOS retain their platform-specific PyTorch wheels. The build smoke test honors this
+declared, locked source while installing only the base runtime; the model cache is separate from the
+Python package cache, so changing or clearing one does not silently make the other complete.
 
 ## Generate and inspect policy
 
