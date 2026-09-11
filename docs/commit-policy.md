@@ -136,6 +136,8 @@ unexpected exit status, timeout, or excessive output is an operational error (ex
 an ignored warning. Install Typos separately, for example with `cargo install typos-cli --locked`,
 and keep project-specific words in Typos' `_typos.toml`. Use Typos' repository-wide action or
 pre-commit integration for source files; YAGA's adapter is narrowly scoped to commit messages.
+When `--repo` points at a different checkout, YAGA runs Typos from that repository so its local
+Typos configuration is used; direct message and Git-backed sources follow the same rule.
 
 ## Optional model quality advisory
 

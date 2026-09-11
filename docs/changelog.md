@@ -4,6 +4,8 @@
 
 ### Added
 
+- Run the optional Typos commit-message adapter from the selected repository so `--repo` checks
+  honor that checkout's `_typos.toml` configuration.
 - Clarified the root README and command index so `commit quality` is described as a provider-neutral
   advisory with Hugging Face and Bedrock modes, and linked the detailed source, configuration, and
   reporting guidance.

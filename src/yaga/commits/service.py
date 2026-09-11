@@ -56,7 +56,12 @@ def check_commits(
         repository=repo,
         max_commits=loaded.policy.max_commits,
     )
-    return _check_targets(targets, config_path=loaded.path, policy=loaded.policy)
+    return _check_targets(
+        targets,
+        config_path=loaded.path,
+        policy=loaded.policy,
+        repository=repo,
+    )
 
 
 def check_git_commits(
@@ -78,7 +83,12 @@ def check_git_commits(
         revision_range=revision_range,
         max_commits=loaded.policy.max_commits,
     )
-    return _check_targets(targets, config_path=loaded.path, policy=loaded.policy)
+    return _check_targets(
+        targets,
+        config_path=loaded.path,
+        policy=loaded.policy,
+        repository=repo,
+    )
 
 
 def check_commit_quality(
@@ -185,16 +195,17 @@ def _check_targets(
     *,
     config_path: Path | None,
     policy: CommitPolicy,
+    repository: Path,
 ) -> ValidationReport:
-    results = tuple(_check_target(target, policy) for target in targets)
+    results = tuple(_check_target(target, policy, repository=repository) for target in targets)
     return ValidationReport(results=results, config_path=config_path)
 
 
-def _check_target(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
+def _check_target(target: CommitTarget, policy: CommitPolicy, *, repository: Path) -> CheckResult:
     result = check_target(target, policy)
     if policy.typos is not TyposPolicy.CHECK or result.skipped_reason is not None:
         return result
-    diagnostics = check_typos(target.message)
+    diagnostics = check_typos(target.message, repository=repository)
     if not diagnostics:
         return result
     return replace(result, diagnostics=(*result.diagnostics, *diagnostics))

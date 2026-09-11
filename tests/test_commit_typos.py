@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -18,6 +19,21 @@ def test_typos_pass_has_no_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert check_typos("feat: add a clear description") == ()
+
+
+def test_typos_runs_from_the_selected_repository(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    calls: list[dict[str, object]] = []
+
+    def run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        calls.append(kwargs)
+        return subprocess.CompletedProcess(["typos"], 0, b"", b"")
+
+    monkeypatch.setattr("yaga.commits.typos.subprocess.run", run)
+    repository = Path("C:/checked-out/repository")
+
+    assert check_typos("feat: add a clear description", repository=repository) == ()
+    assert calls[0]["cwd"] == str(repository)
 
 
 def test_typos_json_findings_become_stable_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
