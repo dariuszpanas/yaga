@@ -158,6 +158,7 @@ def test_commit_quality_action_publishes_advisory_annotations() -> None:
     workflow = read(".github/workflows/commit-quality.yml")
 
     assert workflow.count("--format github") == 2
+    assert workflow.count("--input-mode message") == 2
     assert "--offline" in workflow
     assert "actions/cache@5a3ec84eff668545956fd18022155c47e93e2684" in workflow
     assert "permissions:\n  contents: read" in workflow
