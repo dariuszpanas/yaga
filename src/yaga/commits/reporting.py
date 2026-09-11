@@ -159,6 +159,7 @@ def _render_quality_github_report(report: QualityReport) -> str:
     )
     if report.offline:
         metadata += "; Mode: offline"
+    metadata += "; Input: " + ("title" if report.input_mode == "title" else "message")
     lines.append(f"::notice title=YAGA commit quality::{_workflow_data(f'{summary} {metadata}')}")
     return "\n".join(lines)
 
