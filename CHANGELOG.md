@@ -31,6 +31,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
   providers.
 - Detailed documentation for usage modes, configuration, repository checks, GitHub Actions, and
   adoption recipes.
+- Quality troubleshooting guidance for CPU-only installation, cache/offline replay, Bedrock
+  credentials, and model input coverage.
 
 ### Changed
 
