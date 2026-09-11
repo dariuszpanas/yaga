@@ -54,7 +54,7 @@
 ### Fixed
 
 - Refined paragraph enforcement to catch likely blank-line sentence splitting without treating every
-  one-line prose paragraph as a failure; YAGA's own policy uses the consecutive-run bound.
+  one-line prose paragraph as a failure; the check uses punctuation and paragraph-shape clues.
 - Added a bounded findings-by-rule summary to GitHub commit-policy output so failed rule codes are
   visible in workflow logs and step summaries.
 

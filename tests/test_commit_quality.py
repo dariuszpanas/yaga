@@ -206,6 +206,17 @@ def test_quality_rejects_unpinned_revision() -> None:
         check_quality([], revision="main")
 
 
+def test_bedrock_rejects_the_unsupported_seq2seq_task() -> None:
+    with pytest.raises(InputError, match="Bedrock quality supports only the classification task"):
+        check_quality(
+            [],
+            provider="bedrock",
+            task="seq2seq",
+            model_id="amazon.nova-micro-v1:0",
+            revision=None,
+        )
+
+
 def test_quality_reports_that_the_complete_multiline_message_was_checked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

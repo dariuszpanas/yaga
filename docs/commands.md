@@ -95,8 +95,10 @@ yaga commit quality --provider bedrock --region us-east-1
 The Hugging Face provider supports `classification` and `seq2seq`. Classification uses the
 low-quality probability and `--threshold`; seq2seq produces a strict `PASS` or `FLAG` decision
 with a bounded reason. The Bedrock adapter uses the Converse API and defaults to Amazon Nova
-Micro; `--model` can select another compatible model. YAGA never accepts provider credentials in
-policy files or command output. `--offline` is available only for local Hugging Face models.
+Micro; `--model` can select another compatible model. Bedrock currently supports the
+`classification` task only; `seq2seq` is a local Hugging Face mode. YAGA never accepts provider
+credentials in policy files or command output. `--offline` is available only for local Hugging
+Face models.
 
 ### Choosing a quality mode
 
