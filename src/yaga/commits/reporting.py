@@ -13,7 +13,7 @@ from yaga.commits.models import (
     OutputFormat,
     ValidationReport,
 )
-from yaga.commits.quality import QualityReport
+from yaga.commits.quality import MAX_REASON_LENGTH, QualityReport
 from yaga.errors import YagaError, safe_error_text
 
 SCHEMA_VERSION = 1
@@ -52,20 +52,32 @@ def render_quality_report(report: QualityReport, output_format: OutputFormat) ->
     lines: list[str] = []
     for result in report.results:
         status = "FLAGGED" if result.flagged else "PASSED"
-        probability = f"{result.prediction.low_quality_probability:.3f}"
         identity = result.target.sha[:12] if result.target.sha else result.target.label
         lines.append(
             f"{status:7} {safe_text(identity, maximum=80)}  {safe_text(result.target.message.splitlines()[0])}"
         )
-        lines.append(
-            f"         low-quality probability: {probability}; threshold: {result.threshold:.3f}"
-        )
+        details = []
+        if result.assessment.score is not None:
+            details.append(f"score: {result.assessment.score:.3f}")
+        if result.threshold is not None:
+            details.append(f"threshold: {result.threshold:.3f}")
+        if result.assessment.reason:
+            details.append(
+                f"reason: {safe_text(result.assessment.reason, maximum=MAX_DIAGNOSTIC_MESSAGE)}"
+            )
+        if details:
+            lines.append(f"         {'; '.join(details)}")
     lines.append(
         f"Checked {len(report.results)} commit(s): {len(report.results) - report.flagged} passed, "
         f"{report.flagged} flagged."
     )
+    lines.append(f"Provider: {safe_text(report.provider, maximum=MAX_DISPLAY_PATH)}")
+    lines.append(f"Task: {safe_text(report.task, maximum=MAX_DISPLAY_PATH)}")
     lines.append(f"Model: {safe_text(report.model_id, maximum=MAX_DISPLAY_PATH)}")
-    lines.append(f"Revision: {safe_text(report.revision, maximum=MAX_DISPLAY_PATH)}")
+    if report.revision is not None:
+        lines.append(f"Revision: {safe_text(report.revision, maximum=MAX_DISPLAY_PATH)}")
+    if report.region is not None:
+        lines.append(f"Region: {safe_text(report.region, maximum=MAX_DISPLAY_PATH)}")
     if report.offline:
         lines.append("Mode: offline")
     return "\n".join(lines)
@@ -78,7 +90,10 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
         "valid": report.valid,
         "checked": len(report.results),
         "flagged": report.flagged,
+        "provider": report.provider,
+        "task": report.task,
         "model": {"id": json_text(report.model_id, maximum=256), "revision": report.revision},
+        "region": report.region,
         "offline": report.offline,
         "commits": [
             {
@@ -86,7 +101,10 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
                 "sha": json_text(result.target.sha, maximum=64) if result.target.sha else None,
                 "message": json_text(result.target.message, maximum=MAX_DISPLAY_HEADER),
                 "status": "flagged" if result.flagged else "passed",
-                "low_quality_probability": result.prediction.low_quality_probability,
+                "score": result.assessment.score,
+                "reason": json_text(result.assessment.reason, maximum=MAX_REASON_LENGTH)
+                if result.assessment.reason is not None
+                else None,
                 "threshold": result.threshold,
             }
             for result in report.results

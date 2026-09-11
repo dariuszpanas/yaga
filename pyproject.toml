@@ -41,6 +41,9 @@ quality = [
     "torch>=2.6,<3",
     "transformers>=4.49,<5",
 ]
+quality-bedrock = [
+    "boto3>=1.37,<2",
+]
 
 [tool.uv]
 required-version = "==0.9.18"

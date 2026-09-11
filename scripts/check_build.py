@@ -20,6 +20,7 @@ MAX_SMOKE_OUTPUT_BYTES = 65_536
 SMOKE_MESSAGE = "feat(build): execute the built wheel"
 EXPECTED_REQUIRES_DIST = ["pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]
 EXPECTED_OPTIONAL_REQUIRES_DIST = [
+    "boto3<2,>=1.37; extra == 'quality-bedrock'",
     "torch<3,>=2.6; extra == 'quality'",
     "transformers<5,>=4.49; extra == 'quality'",
 ]

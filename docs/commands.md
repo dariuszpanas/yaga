@@ -34,11 +34,30 @@ oldest first. Git-backed commit checks require complete history and never fetch.
 
 `commit quality` accepts the same source selection and defaults to `HEAD`. It is deliberately
 separate from `commit check`: the deterministic Conventional Commit policy remains authoritative,
-while the model is an optional advisory signal. Install the optional dependencies with
-`uv sync --extra quality`; the first run downloads the pinned model to the Hugging Face cache.
-Use `--offline` to prevent network access after that cache is populated. A model finding returns
-exit `1`, while missing dependencies, an unavailable model, or invalid model output returns exit
-`2`.
+while a model is an optional advisory signal. The provider is explicit and bounded:
+
+```bash
+# Pinned local classifier (default)
+uv sync --extra quality
+yaga commit quality --message "fix: update parser behavior" --offline
+
+# Configurable local instruction model; use a pinned commit of the model
+yaga commit quality --task seq2seq --model google/flan-t5-small --revision <sha>
+
+# AWS credentials and region come from the normal AWS SDK chain
+uv sync --extra quality-bedrock
+yaga commit quality --provider bedrock --region us-east-1
+```
+
+The Hugging Face provider supports `classification` and `seq2seq`. Classification uses the
+low-quality probability and `--threshold`; seq2seq produces a strict `PASS` or `FLAG` decision
+with a bounded reason. The Bedrock adapter uses the Converse API and defaults to Amazon Nova
+Micro; `--model` can select another compatible model. YAGA never accepts provider credentials in
+policy files or command output. `--offline` is available only for local Hugging Face models.
+
+A model finding returns exit `1`, while missing dependencies, unavailable credentials/models, or
+invalid provider output returns exit `2`. Use `--format json` when another tool needs the stable
+provider, task, model, decision, score, and reason fields.
 
 The standalone `branch`, `change`, `mode`, `path`, `size`, and `tree` providers also accept
 `--quiet` (or `-q`) when a caller needs only the exit status. Policy findings are suppressed, while
