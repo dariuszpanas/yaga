@@ -80,6 +80,8 @@ class QualityResult:
     threshold: float | None
     input_truncated: bool | None = None
     input_tokens: int | None = None
+    input_characters: int | None = None
+    input_character_truncated: bool | None = None
 
     @property
     def flagged(self) -> bool:
@@ -99,6 +101,7 @@ class QualityReport:
     region: str | None
     max_input_tokens: int | None
     input_mode: str = "message"
+    max_input_characters: int = MAX_MODEL_INPUT_CHARS
 
     @property
     def flagged(self) -> int:
@@ -156,6 +159,7 @@ def check_quality(
     )
     results = []
     for target in targets:
+        selected_input = _selected_model_input(target.message, input_mode)
         prediction = predictor(target.message)
         if isinstance(prediction, QualityPrediction):
             assessment = prediction.assessment
@@ -172,6 +176,8 @@ def check_quality(
                 threshold if task == "classification" else None,
                 input_truncated,
                 input_tokens,
+                len(selected_input[:MAX_MODEL_INPUT_CHARS]),
+                len(selected_input) > MAX_MODEL_INPUT_CHARS,
             )
         )
     return QualityReport(
@@ -184,6 +190,7 @@ def check_quality(
         region,
         max_input_tokens if provider == "huggingface" else None,
         input_mode,
+        MAX_MODEL_INPUT_CHARS,
     )
 
 
@@ -388,9 +395,14 @@ def _prompt(message: str) -> str:
 
 def _model_input(message: str, input_mode: str) -> str:
     """Select the model input while retaining the complete message for reporting."""
+    return _selected_model_input(message, input_mode)[:MAX_MODEL_INPUT_CHARS]
+
+
+def _selected_model_input(message: str, input_mode: str) -> str:
+    """Select the unbounded input before applying YAGA's provider character limit."""
     if input_mode == "title":
-        return (message.splitlines()[0] if message else "")[:MAX_MODEL_INPUT_CHARS]
-    return message[:MAX_MODEL_INPUT_CHARS]
+        return message.splitlines()[0] if message else ""
+    return message
 
 
 def _parse_decision(text: object) -> QualityAssessment:

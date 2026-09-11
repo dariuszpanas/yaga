@@ -135,7 +135,8 @@ provider, never in `.yaga.toml`.
 
 All modes receive the complete selected message, including its body and final footer block. The
 model tokenizer or provider may apply its own input limit; YAGA bounds the submitted prompt and
-reports both the selected line count and the number of body lines included in text and JSON output.
+reports the selected line count, body-line count, exact model-input character count, and token
+coverage in text and JSON output. Character and token truncation are reported independently.
 This makes title-only versus multiline model runs visible in CI logs without printing the full
 message. The model can therefore notice a vague body, but exact rules such as paragraph layout,
 footer presence, or configured scopes remain the responsibility of `commit check`.

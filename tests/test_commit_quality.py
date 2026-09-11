@@ -10,6 +10,7 @@ from yaga.commits.models import CommitTarget, OutputFormat
 from yaga.commits.quality import (
     DEFAULT_MAX_INPUT_TOKENS,
     DEFAULT_MODEL_REVISION,
+    MAX_MODEL_INPUT_CHARS,
     QualityAssessment,
     QualityPrediction,
     QualityReport,
@@ -97,8 +98,6 @@ def test_quality_input_mode_selects_title_or_complete_message() -> None:
 
 
 def test_quality_model_input_is_bounded_for_both_modes() -> None:
-    from yaga.commits.quality import MAX_MODEL_INPUT_CHARS
-
     message = "fix: parser\n\n" + ("x" * (MAX_MODEL_INPUT_CHARS + 100))
 
     assert len(_model_input(message, "message")) == MAX_MODEL_INPUT_CHARS
@@ -327,6 +326,10 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
     assert document["commits"][0]["model_input_tokens"] is None
     assert document["commits"][0]["message_lines"] == 3
     assert document["commits"][0]["message_body_lines"] == 1
+    assert document["commits"][0]["model_input_characters"] == len(
+        "fix: parser\n\nExplain the parser behavior."
+    )
+    assert document["commits"][0]["model_input_character_truncated"] is False
     rendered = render_quality_report(report, OutputFormat.TEXT)
     assert "(3 lines checked; 1 body line included)" in rendered
 
@@ -441,3 +444,24 @@ def test_quality_report_exposes_input_truncation(monkeypatch: pytest.MonkeyPatch
     assert document["commits"][0]["model_input_truncated"] is True
     assert document["commits"][0]["model_input_tokens"] == 513
     assert "model input 513/512 tokens, truncated" in rendered
+
+
+def test_quality_report_exposes_character_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("pass", 0.1),
+    )
+    report = check_quality(
+        [
+            CommitTarget(
+                label="message",
+                message="fix: parser\n\n" + ("x" * (MAX_MODEL_INPUT_CHARS + 10)),
+            )
+        ],
+        revision=DEFAULT_MODEL_REVISION,
+    )
+
+    result = quality_report_document(report)["commits"][0]
+    assert result["model_input_characters"] == MAX_MODEL_INPUT_CHARS
+    assert result["model_input_character_truncated"] is True
+    assert "character-truncated" in render_quality_report(report, OutputFormat.TEXT)
