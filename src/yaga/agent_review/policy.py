@@ -20,9 +20,10 @@ MAX_INSTRUCTION_BYTES = 4096
 _NAME = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _PRESET = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _ROOT_KEYS = frozenset({"version", "required", "aggregation", "agents"})
-_LENS_KEYS = frozenset({"preset", "instruction", "outcome"})
+_LENS_KEYS = frozenset({"preset", "instruction", "outcome", "publication"})
 _AGGREGATIONS = frozenset({"all-required", "any-required"})
 _OUTCOMES = frozenset({"review", "advisory"})
+_PUBLICATIONS = frozenset({"comment", "inline", "reaction", "review", "check"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +34,7 @@ class ReviewLens:
     preset: str
     instruction: str
     outcome: str
+    publication: str = "review"
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +122,10 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
         outcome = raw_lens.get("outcome", "review")
         if not isinstance(outcome, str) or outcome not in _OUTCOMES:
             raise ConfigurationError(f"agent-review.agents.{name}.outcome is invalid in {path}")
-        lenses.append(ReviewLens(name, preset, instruction, outcome))
+        publication = raw_lens.get("publication", "review")
+        if not isinstance(publication, str) or publication not in _PUBLICATIONS:
+            raise ConfigurationError(f"agent-review.agents.{name}.publication is invalid in {path}")
+        lenses.append(ReviewLens(name, preset, instruction, outcome, publication))
     required = _required(root.get("required", []), seen, lenses, path)
     if not required:
         raise ConfigurationError(f"agent-review.required must name at least one lens in {path}")
