@@ -118,6 +118,8 @@ The result contract is deliberately small:
 results. An adapter must explicitly return `pending` when a lens has not completed; omission is an
 invalid handoff rather than an implicit pending state. Evaluation applies the configured
 aggregation and returns exit `0` only when all blocking policy requirements pass.
+Operational and configuration failures honor the selected output format too: JSON emits the
+versioned `error` document on standard error, while GitHub output emits one escaped error command.
 Advisory failures remain visible without changing that exit state. Use `--format github` when the
 adapter runs in a GitHub Actions step: it emits escaped error annotations for blocking failures and
 pending lenses, warning annotations for advisory findings, and one bounded notice summary. The

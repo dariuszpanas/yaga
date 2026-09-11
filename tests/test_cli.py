@@ -973,6 +973,49 @@ def test_agent_review_policy_evaluate_supports_github_format(tmp_path: Path) -> 
     assert "::error title=YAGA Agent review%3A correctness::failed: Needs%0Awork." in result.stdout
 
 
+def test_agent_review_policy_evaluate_formats_invalid_receipts_as_json(tmp_path: Path) -> None:
+    policy = tmp_path / ".yaga.toml"
+    policy.write_text(
+        "[agent-review]\n"
+        "version = 1\n"
+        "required = ['correctness']\n"
+        "[agent-review.agents.correctness]\n"
+        "preset = 'codex'\n"
+        "instruction = 'Review behavior.'\n",
+        encoding="utf-8",
+    )
+    results = tmp_path / "results.json"
+    results.write_text(
+        '{"version": 1, "plan_digest": "' + single_lens_plan_digest() + '", "results": []}',
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "gate",
+            "agent-review",
+            "policy",
+            "evaluate",
+            "--file",
+            str(policy),
+            "--results",
+            str(results),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert json.loads(result.stderr) == {
+        "schema_version": 1,
+        "error": {
+            "kind": "configuration",
+            "message": "Agent review results are missing lens(es): correctness",
+        },
+    }
+
+
 @pytest.mark.parametrize(
     "operation",
     ["authorize", "finalize", "invalidate", "observe", "prepare", "request"],
