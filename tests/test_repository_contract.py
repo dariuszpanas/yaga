@@ -142,12 +142,16 @@ def test_commit_action_is_a_separate_read_only_closed_interface() -> None:
     assert "persist-credentials: false" in workflow
     assert "uses: ./actions/commit-check" in workflow
     assert "cargo install typos-cli --version 1.49.0 --locked" in workflow
+    assert "uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684" in workflow
+    assert "path: ~/.cargo/registry" in workflow
 
 
 def test_ci_installs_the_pinned_typos_cli_for_the_repository_policy() -> None:
     workflow = read(".github/workflows/ci.yml")
 
     assert "cargo install typos-cli --version 1.49.0 --locked" in workflow
+    assert "uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684" in workflow
+    assert "path: ~/.cargo/registry" in workflow
 
 
 def test_ci_changed_path_policy_uses_explicit_unprivileged_event_boundaries() -> None:
