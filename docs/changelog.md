@@ -38,6 +38,8 @@
 
 ### Changed
 
+- Clarify the command synopsis so `commit quality` is identified as a provider-backed advisory,
+  including the Hugging Face and Bedrock modes documented below.
 - Enable the bounded Typos commit-message check in YAGA's own policy and install the pinned CLI in
   the hosted commit-policy and CI workflows.
 - Resolve Linux quality dependencies from PyTorch's CPU wheel index so CPU-only model checks do not
