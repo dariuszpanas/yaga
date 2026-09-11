@@ -32,6 +32,12 @@ for operational errors. Use `yaga <group> --help` for the exact current option s
 or range—and defaults to `HEAD` only when no source is supplied. A commit range is evaluated
 oldest first. Git-backed commit checks require complete history and never fetch.
 
+Use `--format github` for ordinary CI when the checked range is already known. It emits escaped
+error annotations for each bounded policy finding, followed by a pass/fail summary and compact
+rule counts. This mode does not inspect GitHub events or call the API; use
+`github pull-request check --format github` when the title, exact event boundary, and Dependabot
+identity contract also need to be validated.
+
 `commit quality` accepts the same source selection and defaults to `HEAD`. It is deliberately
 separate from `commit check`: the deterministic Conventional Commit policy remains authoritative,
 while a model is an optional advisory signal. The provider is explicit and bounded:

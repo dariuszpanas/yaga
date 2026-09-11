@@ -11,7 +11,7 @@ from yaga.commits.github_event import (
     DEPENDABOT_PULL_REQUEST_SKIP_REASON,
     PullRequestValidationReport,
 )
-from yaga.commits.models import CheckResult, OutputFormat
+from yaga.commits.models import CheckResult, OutputFormat, ValidationReport
 from yaga.commits.reporting import (
     MAX_DIAGNOSTIC_MESSAGE,
     MAX_DISPLAY_HEADER,
@@ -19,6 +19,7 @@ from yaga.commits.reporting import (
     SCHEMA_VERSION,
     json_text,
     render_error,
+    render_report,
     result_document,
     safe_text,
 )
@@ -28,12 +29,77 @@ MAX_GITHUB_ANNOTATIONS = 50
 MAX_GITHUB_SUMMARY_CODES = 8
 
 
+class CommitOutputFormat(StrEnum):
+    """Supported standalone commit-policy report formats."""
+
+    TEXT = "text"
+    JSON = "json"
+    GITHUB = "github"
+
+
 class PullRequestOutputFormat(StrEnum):
     """Supported pull-request report formats."""
 
     TEXT = "text"
     JSON = "json"
     GITHUB = "github"
+
+
+def render_commit_report(report: ValidationReport, output_format: CommitOutputFormat) -> str:
+    """Render one standalone commit-policy report."""
+    if output_format is CommitOutputFormat.GITHUB:
+        return _render_commit_github_report(report)
+    return render_report(report, OutputFormat(output_format.value))
+
+
+def render_commit_error(error: YagaError, output_format: CommitOutputFormat) -> str:
+    """Render one standalone commit-policy operational failure."""
+    if output_format is CommitOutputFormat.GITHUB:
+        message = _workflow_data(f"YAGA {error.kind} error: {safe_error_text(error)}")
+        return f"::error title=YAGA commit policy::{message}"
+    return render_error(error, OutputFormat(output_format.value))
+
+
+def _render_commit_github_report(report: ValidationReport) -> str:
+    diagnostics = [
+        safe_text(
+            f"{result.target.sha[:12] if result.target.sha else result.target.label}: "
+            f"[{diagnostic.code}] line {diagnostic.line}: {diagnostic.message}",
+            maximum=MAX_DISPLAY_HEADER + MAX_DIAGNOSTIC_MESSAGE,
+        )
+        for result in report.results
+        for diagnostic in result.diagnostics
+    ]
+    visible = diagnostics[:MAX_GITHUB_ANNOTATIONS]
+    if len(diagnostics) > MAX_GITHUB_ANNOTATIONS:
+        visible[-1] = (
+            f"{len(diagnostics) - MAX_GITHUB_ANNOTATIONS + 1} additional policy diagnostic(s) omitted"
+        )
+    lines = [f"::error title=YAGA commit policy::{_workflow_data(message)}" for message in visible]
+    lines.append(
+        f"YAGA checked {len(report.results)} commit(s): {report.passed} passed, "
+        f"{report.failed} failed, {report.skipped} skipped."
+    )
+    finding_summary = _commit_finding_summary(report)
+    if finding_summary is not None:
+        lines.append(finding_summary)
+    return "\n".join(lines)
+
+
+def _commit_finding_summary(report: ValidationReport) -> str | None:
+    counts = Counter(
+        diagnostic.code for result in report.results for diagnostic in result.diagnostics
+    )
+    if not counts:
+        return None
+    entries = [
+        f"{safe_text(code, maximum=80)} ({count})"
+        for code, count in counts.most_common(MAX_GITHUB_SUMMARY_CODES)
+    ]
+    omitted = len(counts) - len(entries)
+    if omitted:
+        entries.append(f"{omitted} additional rule(s) omitted")
+    return f"Findings by rule: {safe_text(', '.join(entries), maximum=1000)}"
 
 
 def render_pull_request_report(
