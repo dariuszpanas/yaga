@@ -23,8 +23,7 @@ from yaga.agent_review.github.constants import (
 from yaga.agent_review.github.events import parse_event_boundary
 from yaga.agent_review.github.gate import authorize, finalize, invalidate, prepare, review
 from yaga.agent_review.github.runs import load_source_from_wake
-from yaga.agent_review.policy import AgentReviewPolicy, load_policy
-from yaga.errors import ConfigurationError, GateError
+from yaga.errors import GateError
 from yaga.github import MAX_API_REQUESTS, GitHubRestApi
 from yaga.models import (
     bounded_text,
@@ -128,44 +127,12 @@ def _trusted_workflow_path(repository: str, default_branch: str) -> str:
     return workflow
 
 
-def _configured_review_policy() -> AgentReviewPolicy | None:
-    """Load an explicitly configured policy from the trusted workspace."""
-    raw_path = os.environ.get("YAGA_AGENT_REVIEW_POLICY_FILE", "")
-    if not raw_path:
-        return None
-    policy_path = Path(bounded_text(raw_path, "Agent review policy path", max_bytes=512))
-    workspace = Path(
-        bounded_text(
-            _required_environment("GITHUB_WORKSPACE"),
-            "GitHub workspace",
-            max_bytes=4_096,
-        )
-    ).resolve()
-    resolved = (workspace / policy_path if not policy_path.is_absolute() else policy_path).resolve()
-    try:
-        resolved.relative_to(workspace)
-    except ValueError as error:
-        raise GateError("Agent review policy must stay inside the GitHub workspace") from error
-    try:
-        return load_policy(resolved)
-    except ConfigurationError as error:
-        raise GateError(f"Agent review policy is invalid: {error}") from error
-
-
-def _validate_github_adapter_policy(policy: AgentReviewPolicy | None) -> None:
-    """Reject policy features the current Codex GitHub adapter cannot execute."""
-    if policy is None:
-        return
-    if len(policy.lenses) != 1:
+def _reject_configured_review_policy() -> None:
+    """Reject work the fixed Codex completion adapter cannot execute or bind."""
+    if os.environ.get("YAGA_AGENT_REVIEW_POLICY_FILE", ""):
         raise GateError(
-            "current GitHub Agent review adapter supports exactly one lens; "
-            "use a provider adapter with policy plan/evaluate for multiple lenses"
-        )
-    lens = policy.lenses[0]
-    if lens.preset != "codex" or lens.outcome != "review" or lens.publication != "review":
-        raise GateError(
-            "current GitHub Agent review adapter supports only preset=codex, "
-            "outcome=review, publication=review"
+            "current GitHub Agent review adapter does not support configured lens policies; "
+            "use an external adapter with policy plan/evaluate"
         )
 
 
@@ -201,13 +168,7 @@ def run_action(selected_operation: str) -> int:
     )
     default_branch = _default_branch(event)
     _trusted_workflow_path(repository, default_branch)
-    policy = _configured_review_policy()
-    _validate_github_adapter_policy(policy)
-    if policy is not None:
-        print(
-            f"YAGA {operation}: loaded Agent review policy with "
-            f"{len(policy.lenses)} lens(es) and {len(policy.required)} required"
-        )
+    _reject_configured_review_policy()
     server_url = _server_url()
     run_id = _environment_positive_int("GITHUB_RUN_ID", "YAGA workflow run ID")
     run_attempt = _environment_positive_int("GITHUB_RUN_ATTEMPT", "YAGA workflow run attempt")

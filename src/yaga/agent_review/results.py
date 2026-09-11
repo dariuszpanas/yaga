@@ -90,7 +90,7 @@ def load_results(path: Path) -> AgentReviewResults:
             object_pairs_hook=_object,
             parse_constant=_reject_constant,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as error:
         raise ConfigurationError(f"Agent review results are not valid JSON: {resolved}") from error
     return _parse_document(document, resolved)
 
@@ -270,13 +270,17 @@ def _parse_document(document: Any, path: Path) -> AgentReviewResults:
         except (TypeError, ValueError) as error:
             raise ConfigurationError(f"Agent review result outcome is invalid in {path}") from error
         summary = raw_result.get("summary")
-        if summary is not None and (
-            not isinstance(summary, str)
-            or not summary.strip()
-            or "\x00" in summary
-            or len(summary.encode("utf-8")) > MAX_SUMMARY_BYTES
-        ):
-            raise ConfigurationError(f"Agent review result summary is invalid in {path}")
+        if summary is not None:
+            if not isinstance(summary, str) or not summary.strip() or "\x00" in summary:
+                raise ConfigurationError(f"Agent review result summary is invalid in {path}")
+            try:
+                summary_bytes = summary.encode("utf-8")
+            except UnicodeEncodeError as error:
+                raise ConfigurationError(
+                    f"Agent review result summary is not valid UTF-8 in {path}"
+                ) from error
+            if len(summary_bytes) > MAX_SUMMARY_BYTES:
+                raise ConfigurationError(f"Agent review result summary is invalid in {path}")
         parsed.append(LensResult(lens, outcome, summary))
     return AgentReviewResults(version, plan_digest, tuple(parsed))
 

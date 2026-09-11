@@ -165,6 +165,48 @@ def test_load_results_rejects_duplicate_json_keys(tmp_path: Path) -> None:
         load_results(path)
 
 
+def test_load_results_rejects_deep_json_within_the_byte_limit(tmp_path: Path) -> None:
+    path = tmp_path / "results.json"
+    path.write_text("[" * 50_000 + "0" + "]" * 50_000, encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match="Agent review results"):
+        load_results(path)
+
+
+def test_load_results_normalizes_json_decoder_recursion_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "results.json"
+    path.write_text("{}", encoding="utf-8")
+
+    def exceed_decoder_depth(*_args: object, **_kwargs: object) -> object:
+        raise RecursionError("decoder nesting limit")
+
+    monkeypatch.setattr("yaga.agent_review.results.json.loads", exceed_decoder_depth)
+
+    with pytest.raises(ConfigurationError, match="Agent review results are not valid JSON"):
+        load_results(path)
+
+
+@pytest.mark.parametrize("summary", ["\ud800", "\udfff"])
+def test_load_results_rejects_unpaired_surrogates_as_configuration_errors(
+    tmp_path: Path,
+    summary: str,
+) -> None:
+    path = write_results(
+        tmp_path,
+        {
+            "version": 1,
+            "plan_digest": review_plan_digest(),
+            "results": [{"lens": "correctness", "outcome": "passed", "summary": summary}],
+        },
+    )
+
+    with pytest.raises(ConfigurationError, match="summary is not valid UTF-8"):
+        load_results(path)
+
+
 def test_json_evaluation_is_versioned_and_bounded() -> None:
     results = AgentReviewResults(
         version=1,

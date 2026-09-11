@@ -26,7 +26,6 @@ from yaga.agent_review.github.constants import (
     MAX_PREPARATION_REQUESTS,
 )
 from yaga.agent_review.github.gate import GateResult
-from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens
 from yaga.errors import GateError
 
 WORKFLOW_PATH = ".github/workflows/agent-review.yml"
@@ -73,10 +72,23 @@ def test_operation_name_is_closed() -> None:
         runtime.operation_name("publish")
 
 
-def test_configured_review_policy_is_loaded_inside_workspace(
+@pytest.mark.parametrize("operation", sorted(runtime.OPERATIONS))
+@pytest.mark.parametrize(
+    "instruction",
+    ["Review behavior.", "Perform a dedicated security audit of all authentication code."],
+)
+def test_configured_lens_policy_fails_before_api_access(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    operation: str,
+    instruction: str,
 ) -> None:
+    output = _environment(
+        monkeypatch,
+        tmp_path,
+        event_name="workflow_run",
+        event={"repository": {"full_name": REPOSITORY, "default_branch": BASE_REF}},
+    )
     policy_path = tmp_path / ".yaga" / "agent-review.toml"
     policy_path.parent.mkdir()
     policy_path.write_text(
@@ -85,60 +97,32 @@ def test_configured_review_policy_is_loaded_inside_workspace(
         "required = ['correctness']\n"
         "[agent-review.agents.correctness]\n"
         "preset = 'codex'\n"
-        "instruction = 'Review behavior.'\n",
+        f"instruction = '{instruction}'\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("YAGA_AGENT_REVIEW_POLICY_FILE", ".yaga/agent-review.toml")
 
-    policy = runtime._configured_review_policy()
+    monkeypatch.setattr(
+        runtime,
+        "GitHubRestApi",
+        lambda *_args, **_kwargs: pytest.fail("unsupported policy reached GitHub API access"),
+    )
 
-    assert policy is not None
-    assert policy.required == ("correctness",)
+    with pytest.raises(GateError, match="does not support configured lens policies"):
+        runtime.run_action(operation)
+
+    assert not output.exists()
 
 
-def test_configured_review_policy_rejects_workspace_escape(
+def test_unsupported_policy_path_is_rejected_without_reading_it(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
     monkeypatch.setenv("YAGA_AGENT_REVIEW_POLICY_FILE", "../agent-review.toml")
 
-    with pytest.raises(GateError, match="inside the GitHub workspace"):
-        runtime._configured_review_policy()
-
-
-def test_github_adapter_rejects_multiple_lenses() -> None:
-    lens = ReviewLens("one", "codex", "Review.", "review")
-    policy = AgentReviewPolicy(
-        version=1,
-        required=("one",),
-        aggregation="all-required",
-        lenses=(lens, lens),
-    )
-
-    with pytest.raises(GateError, match="exactly one lens"):
-        runtime._validate_github_adapter_policy(policy)
-
-
-@pytest.mark.parametrize(
-    "preset,outcome,publication",
-    [("local", "review", "review"), ("codex", "advisory", "review"), ("codex", "review", "inline")],
-)
-def test_github_adapter_rejects_unsupported_lens_capabilities(
-    preset: str,
-    outcome: str,
-    publication: str,
-) -> None:
-    policy = AgentReviewPolicy(
-        version=1,
-        required=("one",),
-        aggregation="all-required",
-        lenses=(ReviewLens("one", preset, "Review.", outcome, publication),),
-    )
-
-    with pytest.raises(GateError, match="only preset=codex"):
-        runtime._validate_github_adapter_policy(policy)
+    with pytest.raises(GateError, match="does not support configured lens policies"):
+        runtime._reject_configured_review_policy()
 
 
 def test_invalidate_dispatches_without_loading_source(

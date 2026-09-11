@@ -84,16 +84,11 @@ The root Agent-review step also captures its bounded stdout and stderr into an e
 `GITHUB_STEP_SUMMARY` block while preserving the underlying operation exit code, so pending,
 policy, and operational outcomes remain visible without opening raw logs.
 
-For Agent review, `agent-review-policy-file` is resolved inside `GITHUB_WORKSPACE` and is
-validated before any GitHub API request. Trusted publisher workflows should check out the
-repository default branch with credentials disabled before passing a relative policy path; a
-missing, malformed, or workspace-escaping policy fails closed. The policy controls review lenses
-and aggregation only; it never supplies credentials or authorization.
-The current GitHub adapter supports one `codex` lens with `review` outcome and `review` publication.
-It rejects multi-lens, advisory, alternate-preset, or alternate-publication policies before the
-first API request. Use `yaga gate agent-review policy plan --format json` and
-`policy evaluate` with a separate trusted adapter when several agents or publication modes are
-needed.
+The fixed GitHub adapter cannot execute configured lens instructions or bind completion evidence
+to a policy digest. Every nonempty `agent-review-policy-file` value is rejected before policy
+loading or GitHub API access; leave that input empty. Its fixed Codex request/completion behavior
+remains available. Use `yaga gate agent-review policy plan --format json` and `policy evaluate`
+with a separate trusted adapter for configured review work, including a single named lens.
 
 The write-capable root runtime uses `YAGA_ACTION_RUNTIME=1` and standard-library-only imports.
 The separate read-only commit Action uses `YAGA_COMMIT_ACTION_RUNTIME=1`; it may use commit policy
