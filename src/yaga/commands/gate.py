@@ -118,7 +118,7 @@ def policy_evaluate(
     ],
     output_format: Annotated[
         str,
-        typer.Option("--format", help="Result format: text or json."),
+        typer.Option("--format", help="Result format: text, json, or github."),
     ] = "text",
 ) -> None:
     """Validate and aggregate named-lens results without contacting a provider."""

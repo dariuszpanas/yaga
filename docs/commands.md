@@ -24,7 +24,7 @@ for operational errors. Use `yaga <group> --help` for the exact current option s
 | `yaga gate agent-review <operation>` | Run the Agent review-gate operation. | trusted Action context |
 | `yaga gate agent-review policy check --file <path>` | Validate named review lenses without contacting a provider. | local policy validation |
 | `yaga gate agent-review policy plan --file <path>` | Expand lenses into provider-neutral adapter work. | local plan inspection |
-| `yaga gate agent-review policy evaluate --file <path> --results <path>` | Validate and aggregate adapter results. | local result evaluation |
+| `yaga gate agent-review policy evaluate --file <path> --results <path>` | Validate and aggregate adapter results. | local result evaluation; `--format text`, `json`, or `github` |
 
 ## Selection rules
 

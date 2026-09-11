@@ -67,6 +67,7 @@ To inspect the exact provider-neutral work the policy describes, render its exec
 yaga gate agent-review policy plan --file .yaga.toml
 yaga gate agent-review policy plan --file .yaga.toml --format json
 yaga gate agent-review policy evaluate --file .yaga.toml --results review-results.json
+yaga gate agent-review policy evaluate --file .yaga.toml --results review-results.json --format github
 ```
 
 The plan preserves configuration order, marks every lens as `required` or `advisory`, and carries
@@ -86,7 +87,11 @@ The result contract is deliberately small:
 
 `policy evaluate` rejects malformed, duplicate, unknown, or oversized results, applies the
 configured aggregation, and returns exit `0` only when all blocking policy requirements pass.
-Advisory failures remain visible without changing that exit state.
+Advisory failures remain visible without changing that exit state. Use `--format github` when the
+adapter runs in a GitHub Actions step: it emits escaped error annotations for blocking failures and
+pending lenses, warning annotations for advisory findings, and one bounded notice summary. The
+format never prints the full untrusted result summary and keeps the same exit codes as text and
+JSON.
 
 ## End-to-end adapter example
 
