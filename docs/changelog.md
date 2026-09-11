@@ -4,6 +4,8 @@
 
 ### Added
 
+- Refined the paragraph-splitting heuristic so punctuation-free one-line notes remain valid while
+  likely sentence continuations still report `body.paragraph-format`.
 - Added GitHub Actions guidance for installing the pinned Typos CLI when a repository enables
   commit-message spelling checks.
 - Run the optional Typos commit-message adapter from the selected repository so `--repo` checks

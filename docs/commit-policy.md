@@ -107,11 +107,12 @@ including input received from older clients
 when compatibility mode is enabled.
 ```
 
-The heuristic looks for a continuation: the previous paragraph does not end in `.`, `!`, or `?`,
-or the next paragraph begins with a lowercase letter. It is deliberately not a general prose
-formatter. Use `body-paragraph-splitting = "skip"` (or omit the key) when the repository does not
-want this layout check; use `body-max-line-length` separately if it also wants to constrain
-physical line width.
+The heuristic looks for a stronger continuation signal: the previous paragraph ends in
+continuation punctuation such as `,`, `;`, `:`, or a dash, or the next paragraph begins with a
+lowercase letter. A paragraph that simply ends without punctuation is not an error by itself. It is
+deliberately not a general prose formatter. Use `body-paragraph-splitting = "skip"` (or omit the
+key) when the repository does not want this layout check; use `body-max-line-length` separately if
+it also wants to constrain physical line width.
 
 YAGA’s own repository policy sets `body-policy = "required"` with a minimum prose length, so normal
 human commits include a durable explanation. The event-aware commit Action still skips policy
