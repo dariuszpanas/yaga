@@ -36,6 +36,12 @@ missing executable is an operational failure (exit `2`), not a skipped spelling 
 This workflow is a quota-saving quality heuristic, not a security authority: pull-request code
 controls its own execution.
 
+The repository's optional `commit-quality` workflow uses `--format github` for both its online
+cache-population run and its offline replay. Flagged model results appear as warning annotations,
+while provider or cache failures appear as error annotations and retain exit `2`. Keep the model
+cache key pinned to the exact revision and do not cache executable files from an untrusted pull
+request.
+
 For an ordinary installed-CLI check, keep the source and checkout boundary explicit:
 
 ```yaml

@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Dogfood `commit quality --format github` in the repository workflow for visible advisory warning
+  annotations in both online and offline cache-replay steps.
 - Add `--format github` to `yaga commit quality`, emitting bounded warning annotations for flagged
   advisory results and an error annotation for provider failures.
 - Refine `body-paragraph-splitting = "check"` so punctuation-free one-line notes remain valid;
