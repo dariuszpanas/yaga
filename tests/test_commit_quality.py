@@ -379,8 +379,12 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
     assert document["commits"][0]["selected_input_sha256"] == (
         "a7d36436d4dd5b0720370efe13f5ed2b5db45fcfc903610429228d90972ac04b"
     )
+    assert document["selected_input_set_sha256"] == (
+        "4ed5377be0decd79f066e1db34913d772c2bf61c9f16af8f44c0c858bcd7a2bf"
+    )
     rendered = render_quality_report(report, OutputFormat.TEXT)
     assert "(3 lines checked; 1 body line included)" in rendered
+    assert "Selected input set sha256:" in rendered
 
 
 def test_quality_report_counts_crlf_body_lines(
@@ -489,6 +493,10 @@ def test_quality_github_report_uses_bounded_warning_annotations(
     assert "Character coverage: 1 complete, 0 truncated, 0 unmeasured" in rendered
     assert "Token coverage" not in rendered
     assert "Threshold: 0.700" in rendered
+    assert (
+        "Input set sha256: e77d104c5c9b7375d1b01f95980e7595d5a8e7ae637514b293b7f3560138f185"
+        in rendered
+    )
     assert (
         "::notice title=YAGA commit quality::YAGA quality checked 1 commit(s): 0 passed, 1 flagged."
         " Provider: huggingface; Task: classification; Model: saridormi/commit-message-quality-codebert"

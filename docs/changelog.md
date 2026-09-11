@@ -4,6 +4,8 @@
 
 ### Added
 
+- Include an ordered report-level SHA-256 fingerprint in quality JSON, text, and GitHub notices so
+  online and offline runs can prove that they covered the same selected message set.
 - Include a per-message SHA-256 fingerprint of the exact bounded quality-model input in text, JSON,
   and GitHub reports, making title/body coverage auditable without exposing commit text.
 - Always run the quality workflow's offline cache proof even when online advisory findings occur,

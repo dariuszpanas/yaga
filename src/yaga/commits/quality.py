@@ -107,6 +107,7 @@ class QualityReport:
     max_input_tokens: int | None
     input_mode: str = "message"
     max_input_characters: int = MAX_MODEL_INPUT_CHARS
+    selected_input_set_sha256: str | None = None
 
     @property
     def flagged(self) -> int:
@@ -198,7 +199,22 @@ def check_quality(
         max_input_tokens if provider == "huggingface" else None,
         input_mode,
         MAX_MODEL_INPUT_CHARS,
+        _selected_input_set_sha256(results),
     )
+
+
+def _selected_input_set_sha256(results: list[QualityResult]) -> str | None:
+    """Fingerprint the ordered bounded inputs represented by a complete report."""
+    if not results:
+        return None
+    digests: list[str] = []
+    for result in results:
+        digest = result.selected_input_sha256
+        if digest is None:
+            return None
+        digests.append(digest)
+    payload = b"".join(digest.encode("ascii") + b"\n" for digest in digests)
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _load_predictor(

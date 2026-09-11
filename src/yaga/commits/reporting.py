@@ -129,6 +129,8 @@ def render_quality_report(
         lines.append(f"Max input tokens: {report.max_input_tokens}")
     lines.append(f"Input mode: {safe_text(report.input_mode, maximum=32)}")
     lines.append(f"Max input characters: {report.max_input_characters}")
+    if report.selected_input_set_sha256 is not None:
+        lines.append(f"Selected input set sha256: {report.selected_input_set_sha256}")
     return "\n".join(lines)
 
 
@@ -215,6 +217,8 @@ def _render_quality_github_report(report: QualityReport) -> str:
     thresholds = {result.threshold for result in report.results if result.threshold is not None}
     if len(thresholds) == 1:
         metadata += f"; Threshold: {next(iter(thresholds)):.3f}"
+    if report.selected_input_set_sha256 is not None:
+        metadata += f"; Input set sha256: {report.selected_input_set_sha256}"
     lines.append(f"::notice title=YAGA commit quality::{_workflow_data(f'{summary} {metadata}')}")
     return "\n".join(lines)
 
@@ -239,6 +243,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
         "max_input_tokens": report.max_input_tokens,
         "input_mode": report.input_mode,
         "max_input_characters": report.max_input_characters,
+        "selected_input_set_sha256": report.selected_input_set_sha256,
         "commits": [
             {
                 "source": json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
