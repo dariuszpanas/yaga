@@ -4,6 +4,7 @@
 
 ### Added
 
+- Link the Agent review gate guide directly from the command reference table.
 - Add a provider-neutral Agent review adapter checklist covering plan digests, multi-lens execution,
   evidence correlation, receipts, bounded summaries, and exit-code handling.
 - Document Docker and actionlint troubleshooting, including bounded cleanup errors and safe
