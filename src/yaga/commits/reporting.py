@@ -145,10 +145,18 @@ def _render_quality_github_report(report: QualityReport) -> str:
         lines.append(
             f"::warning title=YAGA commit quality::{_workflow_data(f'{omitted} additional finding(s) omitted')}"
         )
-    lines.append(
+    summary = (
         f"YAGA quality checked {len(report.results)} commit(s): "
         f"{len(report.results) - report.flagged} passed, {report.flagged} flagged."
     )
+    metadata = (
+        f"Provider: {safe_text(report.provider, maximum=MAX_DISPLAY_PATH)}; "
+        f"Task: {safe_text(report.task, maximum=MAX_DISPLAY_PATH)}; "
+        f"Model: {safe_text(report.model_id, maximum=MAX_DISPLAY_PATH)}"
+    )
+    if report.offline:
+        metadata += "; Mode: offline"
+    lines.append(f"::notice title=YAGA commit quality::{_workflow_data(f'{summary} {metadata}')}")
     return "\n".join(lines)
 
 

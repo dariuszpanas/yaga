@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added a bounded GitHub notice summarizing quality counts and provider metadata alongside warning
+  annotations.
 - Updated the repository commit-quality workflow to use GitHub annotations for online and offline
   model-cache checks.
 - Added GitHub warning annotations for flagged `commit quality` advisory results through

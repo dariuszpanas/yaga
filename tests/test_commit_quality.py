@@ -312,6 +312,11 @@ def test_quality_github_report_uses_bounded_warning_annotations(
         in rendered
     )
     assert "YAGA quality checked 1 commit(s): 0 passed, 1 flagged." in rendered
+    assert (
+        "::notice title=YAGA commit quality::YAGA quality checked 1 commit(s): 0 passed, 1 flagged."
+        " Provider: huggingface; Task: classification; Model: saridormi/commit-message-quality-codebert"
+        in rendered
+    )
 
 
 def test_quality_github_error_is_an_error_annotation() -> None:
