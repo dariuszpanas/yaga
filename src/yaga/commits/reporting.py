@@ -108,6 +108,8 @@ def render_quality_report(
             details.append(
                 f"reason: {safe_text(result.assessment.reason, maximum=MAX_DIAGNOSTIC_MESSAGE)}"
             )
+        if result.selected_input_sha256 is not None:
+            details.append(f"input sha256: {result.selected_input_sha256}")
         if details:
             lines.append(f"         {'; '.join(details)}")
     lines.append(
@@ -165,6 +167,8 @@ def _render_quality_github_report(report: QualityReport) -> str:
             detail += f"; score {result.assessment.score:.3f}"
         if result.assessment.reason:
             detail += f"; {safe_text(result.assessment.reason, maximum=MAX_DIAGNOSTIC_MESSAGE)}"
+        if result.selected_input_sha256 is not None:
+            detail += f"; input sha256 {result.selected_input_sha256}"
         lines.append(f"::warning title=YAGA commit quality::{_workflow_data(detail)}")
     omitted = len(findings) - len(visible)
     if omitted:
@@ -246,6 +250,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
                 "model_input_tokens": result.input_tokens,
                 "model_input_characters": result.input_characters,
                 "model_input_character_truncated": result.input_character_truncated,
+                "selected_input_sha256": result.selected_input_sha256,
                 "status": "flagged" if result.flagged else "passed",
                 "score": result.assessment.score,
                 "reason": json_text(result.assessment.reason, maximum=MAX_REASON_LENGTH)

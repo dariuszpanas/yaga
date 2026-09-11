@@ -376,6 +376,9 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
         "fix: parser\n\nExplain the parser behavior."
     )
     assert document["commits"][0]["model_input_character_truncated"] is False
+    assert document["commits"][0]["selected_input_sha256"] == (
+        "a7d36436d4dd5b0720370efe13f5ed2b5db45fcfc903610429228d90972ac04b"
+    )
     rendered = render_quality_report(report, OutputFormat.TEXT)
     assert "(3 lines checked; 1 body line included)" in rendered
 

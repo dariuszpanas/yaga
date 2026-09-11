@@ -4,6 +4,8 @@
 
 ### Added
 
+- Include a per-message SHA-256 fingerprint of the exact bounded quality-model input in text, JSON,
+  and GitHub reports, making title/body coverage auditable without exposing commit text.
 - Always run the quality workflow's offline cache proof even when online advisory findings occur,
   while preserving operational-error precedence.
 - Use the quality workflow's task and model variables for both online and offline inference, keeping
