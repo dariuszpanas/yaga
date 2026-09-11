@@ -113,7 +113,7 @@ def check_quality(
     provider: str = DEFAULT_PROVIDER,
     task: str = DEFAULT_TASK,
     model_id: str = DEFAULT_MODEL_ID,
-    revision: str | None = DEFAULT_MODEL_REVISION,
+    revision: str | None = None,
     threshold: float = DEFAULT_LOW_QUALITY_THRESHOLD,
     offline: bool = False,
     region: str | None = None,
@@ -121,11 +121,14 @@ def check_quality(
     max_input_tokens: int = DEFAULT_MAX_INPUT_TOKENS,
 ) -> QualityReport:
     """Run an opt-in bounded quality backend against commit messages."""
+    effective_revision = (
+        DEFAULT_MODEL_REVISION if provider == "huggingface" and revision is None else revision
+    )
     _validate_options(
         provider,
         task,
         model_id,
-        revision,
+        effective_revision,
         threshold,
         region,
         max_tokens,
@@ -139,7 +142,7 @@ def check_quality(
         provider,
         task,
         model_id,
-        revision,
+        effective_revision,
         threshold=threshold,
         offline=offline,
         region=region,
@@ -171,7 +174,7 @@ def check_quality(
         provider,
         task,
         model_id,
-        revision,
+        effective_revision,
         offline,
         region,
         max_input_tokens if provider == "huggingface" else None,
@@ -447,6 +450,8 @@ def _validate_options(
         )
     if provider == "huggingface" and revision is None:
         raise InputError("Hugging Face quality requires a pinned model revision")
+    if provider == "bedrock" and revision is not None:
+        raise InputError("Bedrock quality does not use model revisions")
     if type(threshold) is not float or not 0.0 < threshold <= 1.0:
         raise InputError("quality threshold must be a number greater than 0 and at most 1")
     if region is not None and (

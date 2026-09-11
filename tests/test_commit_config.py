@@ -84,6 +84,7 @@ max-input-tokens = 1024
         '[tool.yaga.commit.quality]\nprovider = "unknown"\n',
         '[tool.yaga.commit.quality]\ntask = "unknown"\n',
         '[tool.yaga.commit.quality]\nprovider = "bedrock"\ntask = "seq2seq"\n',
+        '[tool.yaga.commit.quality]\nprovider = "bedrock"\nrevision = "0123456789abcdef"\n',
         '[tool.yaga.commit.quality]\nmodel = "bad\nmodel"\n',
         '[tool.yaga.commit.quality]\nrevision = "main"\n',
         "[tool.yaga.commit.quality]\nthreshold = 0\n",

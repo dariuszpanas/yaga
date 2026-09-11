@@ -123,8 +123,8 @@ max-input-tokens = 512
 
 `provider` is `huggingface` or `bedrock`; `task` is `classification` or `seq2seq`. The Bedrock
 provider currently supports `classification` only; `seq2seq` is a Hugging Face mode. Hugging Face
-requires a lowercase hexadecimal revision. Bedrock may omit `revision` and can set `region` and a
-provider-specific `model`. `max-tokens` is bounded from 1 through 256, while
+requires a lowercase hexadecimal revision. Bedrock does not use `revision` and can set `region`
+and a provider-specific `model`. `max-tokens` is bounded from 1 through 256, while
 `max-input-tokens` defaults to 512 and is bounded from 1 through 4096 for Hugging Face models.
 The CLI `--max-input-tokens` option overrides it for one invocation. Use `--config` when the quality
 settings should come from one explicit file rather than normal nearest-file discovery.

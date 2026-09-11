@@ -399,6 +399,10 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
     revision = value.get(
         "revision", defaults.revision if provider is QualityProvider.HUGGINGFACE else None
     )
+    if provider is QualityProvider.BEDROCK and revision is not None:
+        raise ConfigurationError(
+            f"quality.revision is supported only by the Hugging Face provider in {path}"
+        )
     if revision is not None and (
         not isinstance(revision, str)
         or not revision

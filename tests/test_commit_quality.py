@@ -217,6 +217,31 @@ def test_bedrock_rejects_the_unsupported_seq2seq_task() -> None:
         )
 
 
+def test_bedrock_does_not_inherit_a_huggingface_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("pass", 0.1),
+    )
+    report = check_quality(
+        [],
+        provider="bedrock",
+        model_id="amazon.nova-micro-v1:0",
+    )
+    assert report.revision is None
+
+
+def test_bedrock_rejects_an_explicit_model_revision() -> None:
+    with pytest.raises(InputError, match="does not use model revisions"):
+        check_quality(
+            [],
+            provider="bedrock",
+            model_id="amazon.nova-micro-v1:0",
+            revision=DEFAULT_MODEL_REVISION,
+        )
+
+
 def test_quality_reports_that_the_complete_multiline_message_was_checked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
