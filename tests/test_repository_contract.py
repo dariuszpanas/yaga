@@ -749,3 +749,10 @@ def test_ci_actions_are_pinned_to_full_commit_shas() -> None:
     assert "mode: resolve" not in ci
     assert "steps.action_smoke.outputs" not in ci
     assert "continue-on-error" not in ci
+
+
+def test_docs_navigation_keeps_changelog_last() -> None:
+    config = tomllib.loads(read("zensical.toml"))
+    navigation = config["project"]["nav"]
+
+    assert navigation[-1] == {"Changelog": "changelog.md"}
