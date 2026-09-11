@@ -79,10 +79,20 @@ def evaluate_results(
         raise TypeError("policy must be an AgentReviewPolicy")
     if not isinstance(results, AgentReviewResults):
         raise TypeError("results must be AgentReviewResults")
+    if results.version != policy.version:
+        raise ConfigurationError("Agent review results version does not match the current policy")
     expected_digest = build_plan(policy).digest()
     if results.plan_digest != expected_digest:
         raise ConfigurationError("Agent review results do not match the current policy plan")
-    returned = set(results.outcomes())
+    names = tuple(result.lens for result in results.results)
+    repeated = next((name for index, name in enumerate(names) if name in names[:index]), None)
+    if repeated is not None:
+        raise ConfigurationError(f"Agent review results repeat lens {repeated}")
+    known = {lens.name for lens in policy.lenses}
+    unknown = sorted(set(names) - known)
+    if unknown:
+        raise ConfigurationError(f"Agent review results name unknown lens {unknown[0]}")
+    returned = set(names)
     missing = tuple(lens.name for lens in policy.lenses if lens.name not in returned)
     if missing:
         raise ConfigurationError("Agent review results are missing lens(es): " + ", ".join(missing))
