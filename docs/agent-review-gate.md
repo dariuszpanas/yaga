@@ -123,6 +123,8 @@ adapter runs in a GitHub Actions step: it emits escaped error annotations for bl
 pending lenses, warning annotations for advisory findings, and one bounded notice summary. The
 format never prints the full untrusted result summary and keeps the same exit codes as text and
 JSON.
+An explicitly returned result without a summary is reported as `provider returned no summary`; the
+distinct `no result was returned` detail is reserved for internal incomplete-state rendering.
 
 ## End-to-end adapter example
 
