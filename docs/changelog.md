@@ -6,6 +6,7 @@
 
 - Added per-message quality input character counts and character-bound truncation metadata so
   provider coverage is auditable alongside token coverage.
+- Made YAGA's own online and offline quality workflow explicitly select complete-message input.
 - Bound the text submitted to every commit-quality provider mode to the documented 12,000
   characters, including classification input and title-only mode.
 - Added configurable commit-quality `input-mode` selection between the complete message and title

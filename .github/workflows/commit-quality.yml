@@ -58,6 +58,7 @@ jobs:
             --range "$YAGA_QUALITY_RANGE" \
             --provider huggingface \
             --task classification \
+            --input-mode message \
             --revision "$YAGA_QUALITY_MODEL_REVISION" \
             --format github 2>&1)"
           status=$?
@@ -77,6 +78,7 @@ jobs:
             --range "$YAGA_QUALITY_RANGE" \
             --provider huggingface \
             --task classification \
+            --input-mode message \
             --revision "$YAGA_QUALITY_MODEL_REVISION" \
             --offline \
             --format github 2>&1)"
