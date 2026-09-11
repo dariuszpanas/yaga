@@ -88,6 +88,47 @@ The result contract is deliberately small:
 configured aggregation, and returns exit `0` only when all blocking policy requirements pass.
 Advisory failures remain visible without changing that exit state.
 
+## End-to-end adapter example
+
+The repository contains a synthetic, provider-neutral example in
+[`examples/agent-review-policy.toml`](https://github.com/dariuszpanas/yaga/blob/main/examples/agent-review-policy.toml)
+and its matching result receipt in
+[`examples/agent-review-results.json`](https://github.com/dariuszpanas/yaga/blob/main/examples/agent-review-results.json).
+Run the complete local flow from the repository root:
+
+```bash
+yaga gate agent-review policy check --file examples/agent-review-policy.toml
+yaga gate agent-review policy plan \
+  --file examples/agent-review-policy.toml \
+  --format json
+yaga gate agent-review policy evaluate \
+  --file examples/agent-review-policy.toml \
+  --results examples/agent-review-results.json
+```
+
+The example exits `0`: both blocking lenses passed even though the advisory documentation lens
+failed. A real adapter replaces the example result file after it runs its configured lenses. It
+should translate provider-specific comments, inline findings, reactions, native reviews, or check
+runs into exactly one result per configured lens, preserving a short human-readable summary.
+YAGA does not execute the configured preset or instruction and does not grant provider credentials;
+the trusted integration owns that work and must correlate its evidence to the current pull request,
+commit, lifecycle boundary, and request before writing the receipt.
+
+Use a blocking failure to exercise CI behavior:
+
+```json
+{"version":1,"results":[
+  {"lens":"correctness","outcome":"failed","summary":"A regression is present."},
+  {"lens":"security","outcome":"passed"},
+  {"lens":"documentation","outcome":"passed"}
+]}
+```
+
+In that case `policy evaluate` exits `1` and prints the blocking lens. Exit `2` is reserved for
+malformed policy/results or an operational error, so adapters can distinguish a review finding
+from a broken handoff. The result document is a bounded local interchange format, not an
+authorization token or security authority by itself.
+
 The validator requires schema version `1`, at least one required lens, unique lower-case lens names,
 known outcomes (`review` or `advisory`), publication modes, bounded instructions, and a bounded
 preset name. It does not contact an agent or read credentials. The trusted publisher will consume this same validated

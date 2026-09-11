@@ -1,0 +1,22 @@
+[agent-review]
+version = 1
+required = ["correctness", "security"]
+aggregation = "all-required"
+
+[agent-review.agents.correctness]
+preset = "codex"
+instruction = "Review behavior, tests, and compatibility regressions."
+outcome = "review"
+publication = "inline"
+
+[agent-review.agents.security]
+preset = "codex"
+instruction = "Review trust boundaries, permissions, and untrusted input handling."
+outcome = "review"
+publication = "review"
+
+[agent-review.agents.documentation]
+preset = "docs"
+instruction = "Review public documentation and developer ergonomics."
+outcome = "advisory"
+publication = "comment"
