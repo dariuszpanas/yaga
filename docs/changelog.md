@@ -28,6 +28,11 @@
 - Added a bounded findings-by-rule summary to GitHub commit-policy output so failed rule codes are
   visible in workflow logs and step summaries.
 
+### Security
+
+- Updated the optional Hugging Face `transformers` extra to the patched 5.x line and refreshed the
+  lockfile, closing the active model-initialization and model-save security advisories.
+
 YAGA keeps a human-readable [CHANGELOG.md](https://github.com/dariuszpanas/yaga/blob/main/CHANGELOG.md)
 at the repository root. It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html) for releases.

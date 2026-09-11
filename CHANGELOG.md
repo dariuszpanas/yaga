@@ -47,4 +47,9 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 - Add a bounded findings-by-rule summary to GitHub commit-policy output so failed rule codes are
   visible in workflow logs and step summaries.
 
+### Security
+
+- Update the optional Hugging Face `transformers` extra to the patched 5.x line and refresh the
+  lockfile, closing the active model-initialization and model-save security advisories.
+
 <!-- Release links will be added when version tags are published. -->
