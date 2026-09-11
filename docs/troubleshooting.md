@@ -39,6 +39,53 @@ yaga commit check --repo . --config .yaga.toml --message "feat: example"
 Standalone provider policies (`.yaga/*-policy.toml`) are never discovered by a provider. Pass
 their path explicitly or reference it from a repository plan.
 
+## Quality checks fail before a model result
+
+`commit quality` is an optional advisory and has its own dependency and provider boundary. Install
+the local Hugging Face extra before using the default or `seq2seq` mode:
+
+```bash
+uv sync --extra quality
+yaga commit quality --message "fix(parser): reject malformed trailers"
+```
+
+On Linux, the quality extra resolves the CPU-only PyTorch wheel; GPU drivers and CUDA libraries are
+not required. The first online run can still download model files, while later runs can be made
+network-free with the same model revision and cache directory:
+
+```bash
+HF_HOME="$PWD/.yaga-huggingface" yaga commit quality \
+  --message "fix(parser): reject malformed trailers" \
+  --revision <40-character-model-sha>
+HF_HOME="$PWD/.yaga-huggingface" yaga commit quality \
+  --message "fix(parser): reject malformed trailers" \
+  --revision <40-character-model-sha> --offline
+```
+
+If the offline command reports a missing file, repeat the online command with the same model,
+revision, task, Python environment, and `HF_HOME`. Do not interpret a cache miss as a policy
+finding: missing dependencies, unavailable model files, malformed provider output, and invalid
+configuration return exit `2`. A model finding returns exit `1` and is still advisory; use
+`commit check` for exact body, footer, paragraph, and scope rules.
+
+For Bedrock, install the separate provider extra and keep AWS credentials outside policy files:
+
+```bash
+uv sync --extra quality-bedrock
+yaga commit quality --provider bedrock --region us-east-1 \
+  --message "fix(parser): reject malformed trailers"
+```
+
+Bedrock currently supports classification only and does not use a model revision. Check the AWS
+SDK credential chain, region, model availability, and permissions when this command returns exit
+`2`; YAGA intentionally emits bounded provider details rather than credentials or raw responses.
+
+Quality output states the selected message line count and body-line count. It also reports the
+Hugging Face token window and whether the input was truncated when the tokenizer exposes that
+information. These fields describe coverage, not correctness: a title-only report means the
+selected commit actually had no body, while a truncated report means the model did not see the
+complete bounded prompt.
+
 ## “Exactly one source” errors
 
 `commit check` accepts one of `--message`, `--file`, `--stdin`, `--commit`, or `--range`, and
