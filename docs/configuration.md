@@ -94,10 +94,10 @@ including input received from older clients
 when compatibility mode is enabled.
 ```
 
-The check reports `body.paragraph-format` at the first offending paragraph and is deterministic;
-it does not depend on the optional quality model. This makes it suitable for enforcing repository
-formatting policy when a model would correctly recognize the words but overlook their blank-line
-layout.
+The check reports `body.paragraph-format` at the first offending paragraph and explains that the
+run is likely a sentence split across blank lines. It is deterministic and does not depend on the
+optional quality model. This makes it suitable for enforcing repository formatting policy when a
+model would correctly recognize the words but overlook their blank-line layout.
 
 ### Quality advisory settings
 
