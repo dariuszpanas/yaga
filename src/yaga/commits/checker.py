@@ -239,7 +239,10 @@ def _check_target(
                         )
                     )
                     break
-        if policy.body_max_consecutive_single_line_paragraphs is not None:
+        if (
+            policy.body_max_consecutive_single_line_paragraphs is not None
+            and policy.body_max_consecutive_single_line_paragraphs > 0
+        ):
             count, first_line = _consecutive_single_line_prose_paragraphs(parsed.body_lines)
             if count > policy.body_max_consecutive_single_line_paragraphs:
                 noun = "paragraph" if count == 1 else "paragraphs"
