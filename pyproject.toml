@@ -46,7 +46,7 @@ quality-bedrock = [
 ]
 
 [tool.uv]
-required-version = "==0.9.18"
+required-version = "==0.12.7"
 
 [project.urls]
 Repository = "https://github.com/dariuszpanas/yaga"
