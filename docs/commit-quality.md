@@ -58,9 +58,9 @@ The default is the pinned Hugging Face classifier. It treats `LABEL_0` as the lo
 probability and flags scores at or above `0.70`; classification does not explain its score.
 Classifier output is bounded and duplicate labels are rejected, so malformed or ambiguous model
 responses fail as operational errors rather than silently changing the decision.
-Seq2seq responses must begin with `PASS` or `FLAG` and are still advisory. Bedrock supports
-classification only, defaults to `amazon.nova-micro-v1:0`, and reads credentials from the normal
-AWS SDK chain. Credentials never belong in TOML or reports.
+Seq2seq responses must begin with `PASS` or `FLAG`, are bounded to 4,096 bytes, and are still
+advisory. Bedrock supports classification only, defaults to `amazon.nova-micro-v1:0`, and reads
+credentials from the normal AWS SDK chain. Credentials never belong in TOML or reports.
 
 ## Configuration
 
