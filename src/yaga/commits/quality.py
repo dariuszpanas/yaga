@@ -26,6 +26,7 @@ MAX_INPUT_TOKENS = 4096
 MAX_MODEL_INPUT_CHARS = 12000
 MAX_CLASSIFICATION_SCORES = 16
 MAX_CLASSIFICATION_LABEL_BYTES = 64
+MAX_DECISION_OUTPUT_BYTES = 4096
 
 Decision = Literal["pass", "flag"]
 
@@ -421,6 +422,8 @@ def _selected_model_input(message: str, input_mode: str) -> str:
 def _parse_decision(text: object) -> QualityAssessment:
     if not isinstance(text, str) or not text.strip():
         raise ValueError("expected non-empty text output")
+    if "\x00" in text or len(text.encode("utf-8")) > MAX_DECISION_OUTPUT_BYTES:
+        raise ValueError(f"provider decision exceeds {MAX_DECISION_OUTPUT_BYTES} bytes")
     line = text.strip().splitlines()[0]
     parts = line.split(None, 1)
     if len(parts) in (1, 2) and parts[0].upper() in {"PASS", "FLAG"}:

@@ -12,6 +12,7 @@ from yaga.commits.quality import (
     DEFAULT_MODEL_REVISION,
     MAX_CLASSIFICATION_LABEL_BYTES,
     MAX_CLASSIFICATION_SCORES,
+    MAX_DECISION_OUTPUT_BYTES,
     MAX_MODEL_INPUT_CHARS,
     QualityAssessment,
     QualityPrediction,
@@ -103,6 +104,13 @@ def test_quality_parses_bounded_provider_decisions(text: str, decision: str, rea
 def test_quality_rejects_untrusted_provider_decision() -> None:
     with pytest.raises(ValueError, match="expected PASS"):
         _parse_decision("maybe")
+
+
+def test_quality_bounds_provider_decision_output() -> None:
+    with pytest.raises(ValueError, match="exceeds"):
+        _parse_decision("PASS " + "x" * MAX_DECISION_OUTPUT_BYTES)
+    with pytest.raises(ValueError, match="exceeds"):
+        _parse_decision("PASS\x00 clear")
 
 
 def test_unknown_model_input_coverage_is_not_reported_as_complete() -> None:
