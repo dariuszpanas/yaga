@@ -4,6 +4,46 @@ YAGA is designed to be used at different points in a development lifecycle. The 
 rules and stable reports can run interactively, in local hooks, in ordinary CI, or through one of
 the supplied Actions.
 
+## Choose the right execution surface
+
+The command name tells you which boundary YAGA is checking; it does not automatically select
+every possible check. Keep each concern on the narrowest surface that can express it:
+
+| Surface | Selects | Reads | Writes or trusts | Best use |
+| --- | --- | --- | --- | --- |
+| `commit check` | One message, commit, or range | Message text and, for Git sources, local history | Nothing; no network or fetch | Deterministic commit policy in a hook or ordinary CI |
+| `github pull-request check` | One event title plus its exact commit range | Event file, checked-out head, complete local history | Nothing; no GitHub API calls | Unprivileged pull-request validation |
+| `repo check` | An explicit provider list or versioned plan | Selected policies plus the explicit commit/revision inputs | Nothing; provider reports stay separate | One repeatable repository quality gate |
+| `workflow check` / `security` / `lint` | Explicit workflow files or documented defaults | Workflow YAML and local Action metadata | Nothing; lint runs in a hardened container | Actions supply-chain and syntax checks |
+| `commit quality` | One message, commit, or range | Complete selected message, sent to an optional provider | Nothing; model output is advisory | Finding vague or low-information prose |
+| `gate agent-review` | A trusted review lifecycle operation | Provider evidence, requests, and bounded GitHub state | Trusted workflows may react, comment, review, or publish status | Coordinating external review agents |
+
+The first five surfaces are read-only quality checks. The Agent review gate is different: its
+write-capable operations belong only in a trusted default-branch workflow and must not consume
+pull-request code, artifacts, or caches. A pull-request workflow can report findings, but it is not
+merge-security authority. Combine checks explicitly in CI or a repository plan rather than assuming
+that one provider implies another.
+
+### A practical layering
+
+For a repository that wants strong local feedback and a defensible merge gate, use the layers in
+this order:
+
+1. Run `commit check --message`, `--file`, or `--stdin` before a commit is created. This gives
+   immediate deterministic feedback without requiring Git history.
+2. Install the `commit-msg` pre-commit adapter for editors and normal local commits. Treat it as a
+   convenience because it can be bypassed and cannot inspect merge parents.
+3. Run `commit check --range` and the selected repository/workflow providers in unprivileged CI
+   with a complete checkout. Pass exact event SHAs through quoted environment variables.
+4. Add `commit quality` only as an advisory signal. Keep body layout, scope, footer, and other
+   repository requirements in deterministic policy.
+5. Run `gate agent-review` only from the trusted publisher workflow when external agents need to
+   request, authorize, or publish review outcomes.
+
+This layering keeps local commands fast, CI reproducible, and privileged writes isolated. It also
+makes a failure actionable: a policy finding is exit `1`, while a missing input, malformed event,
+missing Git object, unavailable model, or invalid provider result is exit `2`.
+
 ## Interactive CLI
 
 Use the installed command when a developer is diagnosing one input:
