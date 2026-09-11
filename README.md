@@ -104,7 +104,7 @@ forbidden-footer-tokens = ["WIP"]
 body-policy = "optional"
 body-min-length = 0
 body-min-words = 8
-body-max-line-length = 100
+# Omit body-max-line-length unless this repository wants a wrapping limit.
 dependabot-pull-requests = "skip" # check or skip in event-aware PR checks
 merge-commits = "reject"         # ignore, check, or reject
 ignored-headers = ['Revert "*"'] # bounded, case-sensitive glob patterns
@@ -190,7 +190,7 @@ yaga config init --repo .
 ```
 
 The starter permits the common Conventional Commit types, requires lowercase type and scope,
-allows an optional project-defined scope, bounds headers and body lines, rejects merge commits, and
+allows an optional project-defined scope, bounds headers, rejects merge commits, and
 checks at most 64 commits per range. Initialization creates only `.yaga.toml`: it never edits
 `pyproject.toml`, overwrites a path, or shadows a configuration already discovered for the target
 directory. Use `--format json` when another tool needs the created path and effective policy.
