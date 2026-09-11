@@ -8,7 +8,7 @@ fixes use `fix/<topic>`.
 YAGA is an extensible CLI for checks that work locally and in CI. Keep the Conventional Commit
 checker under `src/yaga/commits/`, installed Typer commands under `src/yaga/commands/`, and the
 Agent review gate is the public review contract. Its current provider adapter remains under
-`src/yaga/codex/` until the generic adapter split is complete; expose operations through
+`src/yaga/agent_review/github/` as the current GitHub provider adapter; expose operations through
 `yaga gate agent-review` and keep the composite Action as a supported adapter.
 
 ## Preserve the CLI contract

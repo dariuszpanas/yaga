@@ -30,6 +30,8 @@
 
 ### Changed
 
+- Isolated the GitHub/Codex connector under the Agent review provider namespace and routed the
+  composite Action through a provider-neutral Agent review runtime entrypoint.
 - Documented the distinction between complete selected-message line counts and the 512-token
   Hugging Face model input window, so quality reports are not mistaken for full semantic coverage.
 - Clarified `body.paragraph-format` diagnostics so failures identify the likely sentence split

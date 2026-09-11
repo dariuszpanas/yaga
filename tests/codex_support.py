@@ -6,7 +6,7 @@ import copy
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from yaga.codex import constants
+from yaga.agent_review.github import constants
 from yaga.errors import GateError
 
 REPOSITORY = "dariuszpanas/django-ray"

@@ -17,15 +17,15 @@ from tests.codex_support import (
     RUN_ID,
     _event,
 )
-from yaga.codex import runtime
-from yaga.codex.constants import (
+from yaga.agent_review.github import runtime
+from yaga.agent_review.github.constants import (
     MAX_AUTHORIZATION_REQUESTS,
     MAX_FINALIZATION_REQUESTS,
     MAX_INVALIDATION_REQUESTS,
     MAX_POLL_REQUESTS,
     MAX_PREPARATION_REQUESTS,
 )
-from yaga.codex.gate import GateResult
+from yaga.agent_review.github.gate import GateResult
 from yaga.errors import GateError
 
 WORKFLOW_PATH = ".github/workflows/agent-review.yml"

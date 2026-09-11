@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, cast
 
-from yaga.codex.constants import EVENT_ACTIONS
+from yaga.agent_review.github.constants import EVENT_ACTIONS
 from yaga.errors import GateError
 from yaga.github import parse_pull_request
 from yaga.models import (

@@ -7,7 +7,7 @@ import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 
-from yaga.codex.constants import MAX_WORKFLOW_RUN_RECORDS
+from yaga.agent_review.github.constants import MAX_WORKFLOW_RUN_RECORDS
 from yaga.errors import GateError
 from yaga.github import RestApi
 from yaga.models import (

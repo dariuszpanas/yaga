@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from yaga.codex.constants import (
+from yaga.agent_review.github.constants import (
     CODEX_STATUS_CONTEXT,
     GITHUB_ACTIONS_LOGIN,
     GITHUB_ACTIONS_USER_ID,

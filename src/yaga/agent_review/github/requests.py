@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from yaga.codex.constants import (
+from yaga.agent_review.github.constants import (
     GITHUB_ACTIONS_LOGIN,
     GITHUB_ACTIONS_USER_ID,
     MAX_PRIOR_REQUESTS,

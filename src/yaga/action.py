@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from yaga.codex.runtime import operation_name, run_action
+from yaga.agent_review.runtime import operation_name, run_action
 from yaga.errors import GateError
 
 SUPPORTED_GATES = frozenset({"agent-review"})

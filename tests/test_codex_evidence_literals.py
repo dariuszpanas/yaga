@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from yaga.codex import evidence
-from yaga.codex.constants import FORMAL_REVIEW_PREFIX
+from yaga.agent_review.github import evidence
+from yaga.agent_review.github.constants import FORMAL_REVIEW_PREFIX
 from yaga.models import PullRequest
 
 REPOSITORY = "owner/repository"

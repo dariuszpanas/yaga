@@ -428,7 +428,7 @@ contracts. Keep a subprocess smoke proving `python -P -S -m yaga gate agent-revi
 dependency-free Action boundary without importing Typer.
 
 Keep generic transport/models/status primitives in `src/yaga/` and provider policy in
-`src/yaga/codex/`. Add focused tests for success, failed CI, direct/protected routing, unsolicited
+`src/yaga/agent_review/github/`. Add focused tests for success, failed CI, direct/protected routing, unsolicited
 external outcomes, exact request idempotency, malformed/incomplete APIs, deadline reserves,
 draft/ready/base/close races, same-head ambiguity, run supersession, status lineage, and
 case-insensitive collisions. Repository-contract tests pin public inputs, outputs, permissions,

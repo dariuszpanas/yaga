@@ -5,20 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from yaga.codex.boundary import (
+from yaga.agent_review.github.boundary import (
     ReviewBoundary,
     parse_boundary_description,
     same_boundary,
     validate_boundary_source,
 )
-from yaga.codex.constants import (
+from yaga.agent_review.github.constants import (
     CODEX_STATUS_CONTEXT,
     GITHUB_ACTIONS_LOGIN,
     GITHUB_ACTIONS_USER_ID,
     MAX_HEAD_ASSOCIATIONS,
 )
-from yaga.codex.publication import status_history
-from yaga.codex.runs import SourceRun
+from yaga.agent_review.github.publication import status_history
+from yaga.agent_review.github.runs import SourceRun
 from yaga.errors import GateError
 from yaga.github import RestApi, load_default_branch, parse_pull_request
 from yaga.models import PullRequest, login, positive_int, record, repository_name

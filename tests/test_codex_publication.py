@@ -20,7 +20,7 @@ from tests.codex_support import (
     _pull_request,
     _status,
 )
-from yaga.codex import constants, publication
+from yaga.agent_review.github import constants, publication
 from yaga.errors import GateError
 from yaga.github import parse_pull_request
 

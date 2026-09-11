@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from yaga.codex.constants import MAX_PRIOR_REQUESTS
-from yaga.codex.requests import (
+from yaga.agent_review.github.constants import MAX_PRIOR_REQUESTS
+from yaga.agent_review.github.requests import (
     AuthorizationComments,
     RequestComment,
     RequestKey,

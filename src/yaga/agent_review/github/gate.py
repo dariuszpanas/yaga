@@ -7,14 +7,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from yaga.codex.boundary import (
+from yaga.agent_review.github.boundary import (
     ReviewBoundary,
     boundary_description,
     parse_boundary_description,
     same_boundary,
 )
-from yaga.codex.candidate import LiveCandidate, load_live_candidate
-from yaga.codex.constants import (
+from yaga.agent_review.github.candidate import LiveCandidate, load_live_candidate
+from yaga.agent_review.github.constants import (
     CI_FAILURE_DESCRIPTION,
     CI_STATUS_CONTEXT,
     CODEX_STATUS_CONTEXT,
@@ -28,15 +28,15 @@ from yaga.codex.constants import (
     SUCCESS_WRITE_REQUEST_RESERVE,
     TIMEOUT_DESCRIPTION,
 )
-from yaga.codex.events import parse_codex_event, parse_event_boundary
-from yaga.codex.evidence import (
+from yaga.agent_review.github.events import parse_codex_event, parse_event_boundary
+from yaga.agent_review.github.evidence import (
     CodexOutcome,
     CodexReviewRequiredError,
     has_codex_pending_reaction,
     select_codex_outcome,
     validate_codex_outcome,
 )
-from yaga.codex.publication import (
+from yaga.agent_review.github.publication import (
     StatusLease,
     ensure_status_capacity,
     latest_trusted_status,
@@ -50,14 +50,14 @@ from yaga.codex.publication import (
     terminal_is_current,
     uniquely_owned,
 )
-from yaga.codex.requests import (
+from yaga.agent_review.github.requests import (
     RequestComment,
     RequestKey,
     ensure_authorization,
     find_authorization,
     validate_authorization,
 )
-from yaga.codex.runs import SourceRun, require_current_source
+from yaga.agent_review.github.runs import SourceRun, require_current_source
 from yaga.errors import GateError
 from yaga.github import RestApi, require_success_tail
 from yaga.models import positive_int, workflow_path
