@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added JSON output for `agent-review policy check`, including the validated lens counts, required
+  lens order, aggregation mode, and matching plan digest.
 - Added deterministic Agent review plan digests so adapter result receipts cannot be evaluated
   against a different lens configuration.
 - Added the opt-in `yaga commit quality` advisory using a pinned local Hugging Face model, with

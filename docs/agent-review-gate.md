@@ -59,7 +59,13 @@ Validate the policy before wiring it into a workflow:
 
 ```bash
 yaga gate agent-review policy check --file .yaga.toml
+yaga gate agent-review policy check --file .yaga.toml --format json
 ```
+
+The JSON check report is a validation summary for wrappers and CI tooling. It contains the schema
+version, `passed` status, aggregation mode, lens and required counts, required lens order, and the
+matching `plan_digest`; it does not contact a provider or include credentials. Use `policy plan
+--format json` when an adapter needs the full instructions and provider-neutral lens items.
 
 To inspect the exact provider-neutral work the policy describes, render its execution plan:
 
