@@ -186,11 +186,12 @@ def _split_explicit_range(revision_range: str) -> tuple[str, str, str]:
 def _validate_commitish(revision: str, *, source: str) -> None:
     _validate_revision(revision)
     if (
-        ".." in revision
+        ":" in revision
+        or ".." in revision
         or revision.startswith("^")
         or _SET_OPERATOR_PATTERN.search(revision) is not None
     ):
-        raise GitError(f"{source} requires exactly one commit-ish, not a revision set")
+        raise GitError(f"{source} requires exactly one commit-ish, not a path or revision set")
 
 
 def _validate_revision(revision: str) -> None:
