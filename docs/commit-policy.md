@@ -168,11 +168,11 @@ in text and JSON reports. Hugging Face results additionally state whether each s
 was truncated at that bound and include the measured input-token count; other providers may leave
 those per-message fields unknown.
 
-The Bedrock provider uses the AWS SDK default credential chain and the Converse API. Its default
-model is `amazon.nova-micro-v1:0`; use `--model` for a different compatible model and `--region`
-to select the runtime region. The adapter sends only the bounded commit message and a fixed
-classification prompt. It does not expose AWS credentials, response headers, or raw provider
-errors in reports.
+The Bedrock provider uses the AWS SDK default credential chain and the Converse API. It supports
+the `classification` task only; `seq2seq` is a local Hugging Face mode. Its default model is
+`amazon.nova-micro-v1:0`; use `--model` for a different compatible model and `--region` to select
+the runtime region. The adapter sends only the bounded commit message and a fixed classification
+prompt. It does not expose AWS credentials, response headers, or raw provider errors in reports.
 
 Input coverage is deliberately visible but bounded. The selected message is passed to the quality
 adapter up to YAGA's 12,000-character provider-input limit. The Hugging Face classification and

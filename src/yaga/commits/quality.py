@@ -201,6 +201,8 @@ def _load_predictor(
             max_input_tokens,
         )
     if provider == "bedrock":
+        if task != "classification":
+            raise InputError("Bedrock quality supports only the classification task")
         return _load_bedrock(model_id, region, max_tokens)
     raise InputError("quality provider must be one of: bedrock, huggingface")
 
