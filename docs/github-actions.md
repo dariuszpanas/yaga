@@ -72,6 +72,9 @@ The root Action accepts only the closed inputs `gate`, `operation`, `github-toke
 `prerequisite-workflow`, `lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`,
 `job-timeout-minutes`, and the optional `agent-review-policy-file`. The token is passed through the environment and never appears in
 arguments, outputs, logs, or exceptions.
+The root Agent-review step also captures its bounded stdout and stderr into an escaped
+`GITHUB_STEP_SUMMARY` block while preserving the underlying operation exit code, so pending,
+policy, and operational outcomes remain visible without opening raw logs.
 
 For Agent review, `agent-review-policy-file` is resolved inside `GITHUB_WORKSPACE` and is
 validated before any GitHub API request. Trusted publisher workflows should check out the

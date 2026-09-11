@@ -79,7 +79,25 @@ runs:
         unset PYTHONHOME
         export PYTHONPATH="$GITHUB_ACTION_PATH/src"
         export PYTHONSAFEPATH=1
-        python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION"
+        YAGA_REPORT="$(mktemp)"
+        YAGA_ERROR="$(mktemp)"
+        trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
+        set +e
+        python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION" > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+        YAGA_STATUS=$?
+        set -e
+        cat "$YAGA_REPORT"
+        cat "$YAGA_ERROR" >&2
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          {
+            printf '%s\n' '## YAGA Agent review gate'
+            printf '%s\n' '<pre>'
+            head -c 65536 "$YAGA_REPORT" "$YAGA_ERROR" | \
+              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+            printf '%s\n' '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$YAGA_STATUS"
 
 branding:
   icon: shield
