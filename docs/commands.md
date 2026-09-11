@@ -9,6 +9,7 @@ for operational errors. Use `yaga <group> --help` for the exact current option s
 | `yaga branch check` | Validate one short branch name. | `--policy ... --name ...` |
 | `yaga change check` | Enforce changed-path coupling. | `--policy ... --range A...B` |
 | `yaga commit check` | Check one message, commit, or range. | `--message ...` or `--range ...` |
+| `yaga commit quality` | Advisory-check message quality with an optional local model. | `--message ...` or `--range ...` |
 | `yaga config init` | Create a starter commit policy. | `--repo .` |
 | `yaga config show` | Show effective policy and source. | `--repo .` |
 | `yaga github pull-request check` | Check one exact GitHub PR event. | event and checkout context |
@@ -30,6 +31,14 @@ for operational errors. Use `yaga <group> --help` for the exact current option s
 `commit check` accepts exactly one explicit source—message, UTF-8 file, standard input, commit,
 or range—and defaults to `HEAD` only when no source is supplied. A commit range is evaluated
 oldest first. Git-backed commit checks require complete history and never fetch.
+
+`commit quality` accepts the same source selection and defaults to `HEAD`. It is deliberately
+separate from `commit check`: the deterministic Conventional Commit policy remains authoritative,
+while the model is an optional advisory signal. Install the optional dependencies with
+`uv sync --extra quality`; the first run downloads the pinned model to the Hugging Face cache.
+Use `--offline` to prevent network access after that cache is populated. A model finding returns
+exit `1`, while missing dependencies, an unavailable model, or invalid model output returns exit
+`2`.
 
 The standalone `branch`, `change`, `mode`, `path`, `size`, and `tree` providers also accept
 `--quiet` (or `-q`) when a caller needs only the exit status. Policy findings are suppressed, while

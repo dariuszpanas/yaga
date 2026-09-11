@@ -102,6 +102,32 @@ an ignored warning. Install Typos separately, for example with `cargo install ty
 and keep project-specific words in Typos' `_typos.toml`. Use Typos' repository-wide action or
 pre-commit integration for source files; YAGA's adapter is narrowly scoped to commit messages.
 
+## Optional model quality advisory
+
+Typos catches spelling mistakes, but it cannot tell whether a message explains a meaningful change.
+For a broader, still local and opt-in signal, install the quality extra and run:
+
+```bash
+uv sync --extra quality
+yaga commit quality --message "fix: update parser behavior"
+yaga commit quality --range origin/main..HEAD --offline
+```
+
+The command uses `saridormi/commit-message-quality-codebert` at a pinned revision by default. The
+model was trained as a binary high/low commit-message quality classifier; YAGA treats its `LABEL_0`
+score as a low-quality probability and flags messages at `0.70` or higher. Override the model,
+revision, and threshold with `--model`, `--revision`, and `--threshold` when testing a compatible
+classifier. The revision must be a lowercase hexadecimal SHA, so an accidental moving tag cannot
+silently change the result.
+
+The model is advisory, not a parser, formatter, security boundary, or replacement for the
+configured commit policy. It may misunderstand project-specific context and should not be used to
+reject automated commits without review. The model and its Python runtime are not imported by
+either composite Action runtime, and the default package installation remains dependency-light.
+The first online run may download roughly 500 MB of model weights; subsequent `--offline` runs use
+the local Hugging Face cache. Use `--format json` for automation and retain the model revision in
+the report for reproducibility.
+
 ## Git selection and hooks
 
 ```bash

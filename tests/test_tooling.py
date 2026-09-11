@@ -313,7 +313,10 @@ def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
         b"Metadata-Version: 2.4\n"
         b"Requires-Python: >=3.12\n"
         b"Requires-Dist: pyyaml<7,>=6.0.3\n"
-        b"Requires-Dist: typer<1,>=0.27.2\n\n"
+        b"Requires-Dist: typer<1,>=0.27.2\n"
+        b"Requires-Dist: torch<3,>=2.6; extra == 'quality'\n"
+        b"Requires-Dist: transformers<5,>=4.49; extra == 'quality'\n"
+        b"\n"
     )
     check_build.validate_wheel_metadata(valid)
 

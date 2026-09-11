@@ -36,6 +36,12 @@ dependencies = [
     "typer>=0.27.2,<1",
 ]
 
+[project.optional-dependencies]
+quality = [
+    "torch>=2.6,<3",
+    "transformers>=4.49,<5",
+]
+
 [tool.uv]
 required-version = "==0.9.18"
 

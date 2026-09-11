@@ -19,12 +19,19 @@ ROOT = Path(__file__).resolve().parents[1]
 MAX_SMOKE_OUTPUT_BYTES = 65_536
 SMOKE_MESSAGE = "feat(build): execute the built wheel"
 EXPECTED_REQUIRES_DIST = ["pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]
+EXPECTED_OPTIONAL_REQUIRES_DIST = [
+    "torch<3,>=2.6; extra == 'quality'",
+    "transformers<5,>=4.49; extra == 'quality'",
+]
 
 
 def validate_wheel_metadata(raw: bytes) -> None:
     """Require the wheel to advertise its complete supported runtime contract."""
     metadata = BytesParser().parsebytes(raw)
-    if metadata.get_all("Requires-Dist", []) != EXPECTED_REQUIRES_DIST:
+    requires_dist = metadata.get_all("Requires-Dist", [])
+    runtime = [item for item in requires_dist if "; extra ==" not in item]
+    optional = sorted(item for item in requires_dist if "; extra ==" in item)
+    if runtime != EXPECTED_REQUIRES_DIST or optional != EXPECTED_OPTIONAL_REQUIRES_DIST:
         raise SystemExit("wheel has the wrong runtime dependency metadata")
     if metadata.get("Requires-Python") != ">=3.12":
         raise SystemExit("wheel has the wrong Python requirement metadata")
