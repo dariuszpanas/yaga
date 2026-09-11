@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -11,7 +12,7 @@ from yaga.action import run_gate
 from yaga.agent_review.plan import build_plan, render_plan, render_policy_check
 from yaga.agent_review.policy import load_policy
 from yaga.agent_review.results import evaluate_results, load_results, render_evaluation
-from yaga.errors import ConfigurationError, GateError, safe_error_text
+from yaga.errors import ConfigurationError, GateError, YagaError, safe_error_text
 
 app = typer.Typer(help="Run a trusted GitHub gate operation.", no_args_is_help=True)
 agent_app = typer.Typer(help="Run the Agent review gate.", no_args_is_help=True)
@@ -28,6 +29,22 @@ def _run(operation: str) -> None:
         raise typer.Exit(code=1) from error
     if exit_code:
         raise typer.Exit(code=exit_code)
+
+
+def _render_policy_error(error: Exception, output_format: str) -> str:
+    """Render policy-command errors in the caller's selected report format."""
+    message = safe_error_text(error)
+    kind = error.kind if isinstance(error, YagaError) else "input"
+    if output_format == "json":
+        return json.dumps(
+            {"schema_version": 1, "error": {"kind": kind, "message": message}},
+            ensure_ascii=False,
+            indent=2,
+        )
+    if output_format == "github":
+        escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        return f"::error title=YAGA Agent review::{escaped}"
+    return f"YAGA {kind} error: {message}"
 
 
 @agent_app.command()
@@ -82,10 +99,10 @@ def policy_check(
         policy = load_policy(policy_file)
         typer.echo(render_policy_check(policy, output_format.lower()))
     except ConfigurationError as error:
-        typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
+        typer.echo(_render_policy_error(error, output_format.lower()), err=True)
         raise typer.Exit(code=2) from error
     except (TypeError, ValueError) as error:
-        typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
+        typer.echo(_render_policy_error(error, output_format.lower()), err=True)
         raise typer.Exit(code=2) from error
 
 
@@ -105,7 +122,7 @@ def policy_plan(
         plan = build_plan(load_policy(policy_file))
         typer.echo(render_plan(plan, output_format.lower()))
     except (ConfigurationError, TypeError, ValueError) as error:
-        typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
+        typer.echo(_render_policy_error(error, output_format.lower()), err=True)
         raise typer.Exit(code=2) from error
 
 
@@ -131,7 +148,7 @@ def policy_evaluate(
         aggregate = evaluate_results(policy, results)
         typer.echo(render_evaluation(results, aggregate, output_format.lower()))
     except (ConfigurationError, TypeError, ValueError) as error:
-        typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
+        typer.echo(_render_policy_error(error, output_format.lower()), err=True)
         raise typer.Exit(code=2) from error
     if aggregate.state.value != "passed":
         raise typer.Exit(code=1)
