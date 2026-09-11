@@ -4,6 +4,8 @@
 
 ### Added
 
+- Use the quality workflow's task and model variables for both online and offline inference, keeping
+  cache identity aligned with the actual provider selection.
 - Include quality task and model identity in the Hugging Face cache key and show cache-hit state in
   the online workflow summary.
 - Mark `config init --dry-run` explicitly in text and JSON reports for automation consumers.

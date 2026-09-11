@@ -60,7 +60,8 @@ jobs:
           report="$(uv run --frozen --python 3.12 yaga commit quality \
             --range "$YAGA_QUALITY_RANGE" \
             --provider huggingface \
-            --task classification \
+            --task "$YAGA_QUALITY_TASK" \
+            --model "$YAGA_QUALITY_MODEL_ID" \
             --input-mode message \
             --revision "$YAGA_QUALITY_MODEL_REVISION" \
             --format github 2>&1)"
@@ -81,7 +82,8 @@ jobs:
           report="$(uv run --frozen --python 3.12 yaga commit quality \
             --range "$YAGA_QUALITY_RANGE" \
             --provider huggingface \
-            --task classification \
+            --task "$YAGA_QUALITY_TASK" \
+            --model "$YAGA_QUALITY_MODEL_ID" \
             --input-mode message \
             --revision "$YAGA_QUALITY_MODEL_REVISION" \
             --offline \

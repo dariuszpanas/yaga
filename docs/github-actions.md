@@ -43,8 +43,10 @@ annotations, while provider or cache failures appear as error annotations and re
 step also copies its escaped output into `GITHUB_STEP_SUMMARY`, preserving the command's original exit code
 so a failed run remains readable from the Actions summary. The online summary records whether the
 model cache was hit. The cache key includes the runner OS, Python family, task, model identifier,
-and exact revision; do not cache executable files from an untrusted pull request. Keeping the input mode
-explicit also prevents a future policy-default change from silently narrowing the workflow's coverage.
+and exact revision, and the workflow passes those same variables to both inference commands so
+cache identity cannot drift from the selected model. Do not cache executable files from an untrusted
+pull request. Keeping the input mode explicit also prevents a future policy-default change from silently
+narrowing the workflow's coverage.
 
 For an ordinary installed-CLI check, keep the source and checkout boundary explicit:
 
