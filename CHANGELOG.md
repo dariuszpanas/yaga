@@ -14,6 +14,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
   configuration feedback without contacting a review provider.
 - Trusted composite Actions can validate a bounded Agent review policy from the default-branch
   workspace before making their first GitHub API request.
+- Add a provider-neutral named-lens evaluator with deterministic `all-required` and `any-required`
+  aggregation and non-blocking advisory outcomes.
 - An explicit `commit.typos = "check"` mode for bounded commit-message spelling checks through an
   installed Typos CLI, with stable `typos.word` diagnostics.
 - Status-only `--quiet`/`-q` output for the standalone branch, change, mode, path, size, and tree
