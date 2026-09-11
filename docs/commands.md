@@ -143,7 +143,9 @@ model tokenizer or provider may apply its own input limit; YAGA bounds the submi
 reports the selected line count, body-line count, exact model-input character count, and token
 coverage in text and JSON output. Character and token truncation are reported independently.
 This makes title-only versus multiline model runs visible in CI logs without printing the full
-message. The model can therefore notice a vague body, but exact rules such as paragraph layout,
+message. Reports also include a SHA-256 fingerprint of the exact bounded selected input, allowing
+online and offline runs to be compared without exposing the commit text. The model can therefore
+notice a vague body, but exact rules such as paragraph layout,
 footer presence, or configured scopes remain the responsibility of `commit check`.
 The default Hugging Face input window is 512 tokens; configure it with `--max-input-tokens` or
 `max-input-tokens` when the selected model supports a different context size. The effective value
