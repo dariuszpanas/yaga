@@ -83,6 +83,7 @@ def render_plan(plan: ReviewPlan, output_format: str = "text") -> str:
     if output_format != "text":
         raise ValueError("output format must be text or json")
     lines = [f"Agent review plan: {len(plan.items)} lens(es), aggregation {plan.aggregation}."]
+    lines.append(f"Plan digest: {plan.digest()}")
     for item in plan.items:
         role = "required" if item.required else "advisory"
         lines.append(f"- {item.name} [{role}, {item.outcome}] via {item.preset}")

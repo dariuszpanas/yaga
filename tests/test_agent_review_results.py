@@ -182,4 +182,9 @@ def test_github_evaluation_escapes_lens_summaries_and_reports_missing_results() 
     assert (
         "::error title=YAGA Agent review%3A security::pending: no result was returned" in rendered
     )
-    assert "::notice title=YAGA Agent review::Agent review result: failed;" in rendered
+    assert (
+        "::notice title=YAGA Agent review::Agent review result: failed; 1 blocking failure(s), "
+        "1 blocking pending, 0 advisory failure(s), 1 advisory pending; plan "
+        + review_plan_digest() + "."
+        in rendered
+    )
