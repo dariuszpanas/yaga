@@ -4,6 +4,8 @@
 
 ### Added
 
+- Updated the repository commit-quality workflow to use GitHub annotations for online and offline
+  model-cache checks.
 - Added GitHub warning annotations for flagged `commit quality` advisory results through
   `--format github`, while provider failures remain error annotations with exit `2`.
 - Refined the paragraph-splitting heuristic so punctuation-free one-line notes remain valid while

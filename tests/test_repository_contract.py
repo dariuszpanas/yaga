@@ -154,6 +154,15 @@ def test_ci_installs_the_pinned_typos_cli_for_the_repository_policy() -> None:
     assert "path: ~/.cargo/registry" in workflow
 
 
+def test_commit_quality_action_publishes_advisory_annotations() -> None:
+    workflow = read(".github/workflows/commit-quality.yml")
+
+    assert workflow.count("--format github") == 2
+    assert "--offline" in workflow
+    assert "actions/cache@5a3ec84eff668545956fd18022155c47e93e2684" in workflow
+    assert "permissions:\n  contents: read" in workflow
+
+
 def test_ci_changed_path_policy_uses_explicit_unprivileged_event_boundaries() -> None:
     workflow = read(".github/workflows/ci.yml")
 

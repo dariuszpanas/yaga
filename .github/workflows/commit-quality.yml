@@ -57,7 +57,7 @@ jobs:
           --provider huggingface
           --task classification
           --revision "$YAGA_QUALITY_MODEL_REVISION"
-          --format text
+          --format github
       - name: Prove offline cache reuse
         run: >-
           uv run --frozen --python 3.12 yaga commit quality
@@ -66,4 +66,4 @@ jobs:
           --task classification
           --revision "$YAGA_QUALITY_MODEL_REVISION"
           --offline
-          --format text
+          --format github
