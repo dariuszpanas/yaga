@@ -31,7 +31,7 @@ The command tree uses deliberately separated groups:
 yaga branch check                  # validate one explicit short branch name
 yaga change check                  # enforce changed-path coupling for one Git range
 yaga commit check                  # validate one message, commit, or range
-yaga commit quality                # optional local model advisory
+yaga commit quality                # optional provider-backed quality advisory
 yaga config init                   # create a safe standalone starter policy
 yaga config show                   # explain the effective policy and its source
 yaga github pull-request check     # validate one exact GitHub PR event

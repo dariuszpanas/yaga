@@ -36,6 +36,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Changed
 
+- Clarify the command synopsis so `commit quality` is identified as a provider-backed advisory,
+  including the Hugging Face and Bedrock modes documented below.
 - Enable the bounded Typos commit-message check in YAGA's own policy and install the pinned CLI in
   the hosted commit-policy and CI workflows.
 - Document classification, seq2seq, and Bedrock quality modes, including Hugging Face cache reuse,
