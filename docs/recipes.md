@@ -169,3 +169,34 @@ yaga repo check --repo . --plan .yaga/checks/ci.toml --commit HEAD --revision HE
 If the result is exit `2`, check the explicit source, revision availability, repository history,
 policy path, and output format. YAGA deliberately does not fetch, infer a branch or revision,
 merge configuration files, or treat the current working tree as a committed snapshot.
+
+## Integrate multiple review agents
+
+Use the Agent review policy when one pull request needs several independent lenses, such as
+correctness, security, and documentation. The policy names each lens, selects a provider preset,
+describes its instruction, chooses whether it blocks, and declares the intended publication mode.
+Start with the checked-in [policy example](https://github.com/dariuszpanas/yaga/blob/main/examples/agent-review-policy.toml):
+
+```bash
+yaga gate agent-review policy check --file examples/agent-review-policy.toml
+yaga gate agent-review policy plan --file examples/agent-review-policy.toml --format json
+```
+
+An adapter should treat the plan as data, run its own provider-specific integration, and write one
+bounded JSON result per named lens. The [matching result example](https://github.com/dariuszpanas/yaga/blob/main/examples/agent-review-results.json)
+shows a passing blocking gate with a visible advisory finding:
+
+```bash
+yaga gate agent-review policy evaluate \
+  --file examples/agent-review-policy.toml \
+  --results examples/agent-review-results.json \
+  --format json
+```
+
+This separation keeps provider details out of YAGA's policy model. A preset can map to Codex,
+another hosted agent, a local model, or a human-assisted integration; the adapter decides how to
+request work and interpret provider evidence. Publication is likewise declarative: `comment`,
+`inline`, `reaction`, `review`, and `check` describe the desired output, while the adapter owns
+the provider API and credentials. Required lenses determine the aggregate exit state; advisory
+lenses remain reportable without blocking a merge. See [Agent review gate](agent-review-gate.md)
+for the result contract, trust boundary, and exit-code details.

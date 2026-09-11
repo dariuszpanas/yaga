@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "results": [
+    {
+      "lens": "correctness",
+      "outcome": "passed",
+      "summary": "No behavior or compatibility findings."
+    },
+    {
+      "lens": "security",
+      "outcome": "passed",
+      "summary": "No trust-boundary findings."
+    },
+    {
+      "lens": "documentation",
+      "outcome": "failed",
+      "summary": "The configuration example needs one more usage note."
+    }
+  ]
+}
