@@ -23,7 +23,7 @@ support text/JSON/GitHub reporting where documented. Configuration reports remai
 | `yaga workflow check` | Require immutable action references. | explicit workflow paths |
 | `yaga workflow security` | Apply the versioned Actions trust policy. | explicit workflow paths |
 | `yaga workflow lint` | Run pinned actionlint in a hardened container. | explicit workflow paths |
-| `yaga gate agent-review <operation>` | Run the Agent review-gate operation. | trusted Action context |
+| `yaga gate agent-review <operation>` | Run the [Agent review gate](agent-review-gate.md) operation. | trusted Action context |
 | `yaga gate agent-review policy check --file <path>` | Validate named review lenses without contacting a provider. | local policy validation; `--format text` or `json` |
 | `yaga gate agent-review policy plan --file <path>` | Expand lenses into provider-neutral adapter work and emit its digest. | local plan inspection |
 | `yaga gate agent-review policy template --file <path>` | Emit a complete pending receipt scaffold for an external adapter. | JSON on standard output |
