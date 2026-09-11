@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Make commit body line length an opt-in policy so longer explanations are accepted by default;
+  repositories can still configure `body-max-line-length` when wrapping is part of their style.
 - A direct `agent-review` gate contract with a provider-neutral public name, renamed workflow
   example, and initial named-lens configuration documentation.
 - A bounded named-lens policy model and `yaga gate agent-review policy check` validator for local

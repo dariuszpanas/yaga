@@ -38,6 +38,12 @@ def test_default_policy_enforces_structure_without_an_opinionated_type_list() ->
     assert codes("not conventional", CommitPolicy()) == ["syntax.header"]
 
 
+def test_default_policy_does_not_impose_a_body_line_limit() -> None:
+    long_body_line = "This is intentionally longer than one hundred characters so prose can remain readable when wrapping is not a repository policy."
+
+    assert result(f"docs: explain the policy\n\n{long_body_line}").valid
+
+
 @pytest.mark.parametrize(
     "message",
     [

@@ -28,7 +28,7 @@ required-footer-tokens = ["Refs"]
 forbidden-footer-tokens = ["WIP"]
 body-policy = "optional"
 body-min-words = 8
-body-max-line-length = 100
+# Omit body-max-line-length unless this repository wants a wrapping limit.
 dependabot-pull-requests = "skip"
 typos = "skip"
 merge-commits = "reject"
@@ -73,6 +73,10 @@ Unicode whitespace and counts only tokens containing a Unicode alphanumeric char
 and emoji-only tokens do not count, and recognized footer content is excluded. A nonzero minimum
 does not make an optional body required. Use `body-policy = "required"` when presence matters, and
 keep both minima at zero when `body-policy = "forbidden"`.
+
+`body-max-line-length` is an optional upper bound, not a default formatting rule. Omit it to allow
+longer prose lines, or set a repository-specific positive limit when commit wrapping is part of the
+project's style. YAGA does not require 72- or 100-column body wrapping.
 
 YAGA’s own repository policy sets `body-policy = "required"` with a minimum prose length, so normal
 human commits include a durable explanation. The event-aware commit Action still skips policy

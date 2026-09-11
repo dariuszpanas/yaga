@@ -50,7 +50,7 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 | `body-policy` | `optional`, `required`, or `forbidden`. |
 | `body-min-length` | Nonnegative prose-body character lower bound. |
 | `body-min-words` | Integer from 0 through 100000, counting prose tokens. |
-| `body-max-line-length` | Optional maximum body-line length. |
+| `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
 | `merge-commits` | `ignore`, `check`, or `reject`, based on Git parent identity. |
