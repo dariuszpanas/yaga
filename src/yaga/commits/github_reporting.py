@@ -1,4 +1,4 @@
-"""Stable reports for GitHub pull-request commit-policy checks."""
+"""Stable reports for standalone and pull-request commit-policy checks."""
 
 from __future__ import annotations
 
