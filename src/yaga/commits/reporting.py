@@ -169,6 +169,16 @@ def _render_quality_github_report(report: QualityReport) -> str:
     if report.offline:
         metadata += "; Mode: offline"
     metadata += "; Input: " + ("title" if report.input_mode == "title" else "message")
+    if report.revision is not None:
+        metadata += f"; Revision: {safe_text(report.revision, maximum=64)}"
+    if report.region is not None:
+        metadata += f"; Region: {safe_text(report.region, maximum=64)}"
+    if report.max_input_tokens is not None:
+        metadata += f"; Max tokens: {report.max_input_tokens}"
+    metadata += f"; Max chars: {report.max_input_characters}"
+    thresholds = {result.threshold for result in report.results if result.threshold is not None}
+    if len(thresholds) == 1:
+        metadata += f"; Threshold: {next(iter(thresholds)):.3f}"
     lines.append(f"::notice title=YAGA commit quality::{_workflow_data(f'{summary} {metadata}')}")
     return "\n".join(lines)
 

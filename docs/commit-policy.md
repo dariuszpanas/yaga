@@ -193,7 +193,8 @@ The first online run may download roughly 500 MB of model weights; subsequent `-
 the local Hugging Face cache. Use `--format json` for automation, or `--format github` in Actions
 for escaped warning annotations for flagged advisory results. Provider failures use an error
 annotation and exit `2`. The GitHub output also emits one bounded notice with counts, provider,
-task, model, and offline mode; retain the model revision in JSON reports for reproducibility.
+task, model, revision, input limits, threshold, and offline mode; retain the same metadata in JSON
+reports for reproducibility.
 
 ## Git selection and hooks
 
