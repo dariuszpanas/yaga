@@ -15,6 +15,8 @@
 
 ### Changed
 
+- Quality reports now state how many body lines were included in each model invocation, making
+  title-only and multiline checks distinguishable without printing the full commit message.
 - Documented the classification, seq2seq, and Bedrock quality modes, including Hugging Face cache
   reuse, offline replay, credential boundaries, and configuration precedence.
 - Aligned the repository and hosted workflows on uv `0.12.7`, the runtime supported by Dependabot.

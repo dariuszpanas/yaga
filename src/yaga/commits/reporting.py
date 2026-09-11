@@ -54,10 +54,13 @@ def render_quality_report(report: QualityReport, output_format: OutputFormat) ->
         status = "FLAGGED" if result.flagged else "PASSED"
         identity = result.target.sha[:12] if result.target.sha else result.target.label
         message_lines = result.target.message.count("\n") + 1
+        body_lines = _message_body_lines(result.target.message)
         line_label = "line" if message_lines == 1 else "lines"
+        body_label = "body line" if body_lines == 1 else "body lines"
+        message_shape = f"{body_lines} {body_label} included" if body_lines else "no body included"
         lines.append(
             f"{status:7} {safe_text(identity, maximum=80)}  "
-            f"({message_lines} {line_label} checked) "
+            f"({message_lines} {line_label} checked; {message_shape}) "
             f"{safe_text(result.target.message.splitlines()[0])}"
         )
         details = []
@@ -105,6 +108,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
                 "sha": json_text(result.target.sha, maximum=64) if result.target.sha else None,
                 "message": json_text(result.target.message, maximum=MAX_DISPLAY_HEADER),
                 "message_lines": result.target.message.count("\n") + 1,
+                "message_body_lines": _message_body_lines(result.target.message),
                 "status": "flagged" if result.flagged else "passed",
                 "score": result.assessment.score,
                 "reason": json_text(result.assessment.reason, maximum=MAX_REASON_LENGTH)
@@ -115,6 +119,14 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
             for result in report.results
         ],
     }
+
+
+def _message_body_lines(message: str) -> int:
+    """Count body lines after the first commit-message separator."""
+    separator = message.find("\n\n")
+    if separator < 0:
+        return 0
+    return len(message[separator + 2 :].splitlines())
 
 
 def render_config(config: LoadedConfig, output_format: OutputFormat) -> str:
