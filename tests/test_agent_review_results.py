@@ -169,6 +169,42 @@ def test_evaluate_results_rejects_a_receipt_for_another_plan() -> None:
         evaluate_results(review_policy(), results)
 
 
+@pytest.mark.parametrize(
+    ("version", "receipt", "message"),
+    [
+        (2, (LensResult("correctness", LensOutcome.PASSED),), "version does not match"),
+        (
+            1,
+            (
+                LensResult("correctness", LensOutcome.PASSED),
+                LensResult("correctness", LensOutcome.PASSED),
+                LensResult("security", LensOutcome.PENDING),
+                LensResult("docs", LensOutcome.PENDING),
+            ),
+            "repeat lens correctness",
+        ),
+        (
+            1,
+            (
+                LensResult("other", LensOutcome.PASSED),
+                LensResult("security", LensOutcome.PENDING),
+                LensResult("docs", LensOutcome.PENDING),
+            ),
+            "unknown lens other",
+        ),
+    ],
+)
+def test_evaluate_results_revalidates_programmatic_receipts(
+    version: int,
+    receipt: tuple[LensResult, ...],
+    message: str,
+) -> None:
+    results = AgentReviewResults(version, review_plan_digest(), receipt)
+
+    with pytest.raises(ConfigurationError, match=message):
+        evaluate_results(review_policy(), results)
+
+
 def test_evaluate_results_rejects_an_incomplete_receipt() -> None:
     results = AgentReviewResults(
         version=1,
