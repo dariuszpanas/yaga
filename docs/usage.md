@@ -17,10 +17,14 @@ yaga workflow security .github/workflows/ci.yml
 The command writes human-readable findings to standard output. Invocation, configuration, Git,
 and other operational errors use standard error and exit `2`; policy findings use exit `1`.
 
-All installed policy providers accept `--quiet` when a caller needs only the exit status. Use
-`--format json` when another program needs the versioned document, or `--format github` inside a
-workflow to emit escaped annotations. Quiet mode suppresses policy findings on standard output;
-operational errors still use standard error and exit `2`.
+The standalone policy-check commands `commit check`, `branch check`, `change check`, `mode check`,
+`path check`, `size check`, and `tree check` accept `--quiet` when a caller needs only the exit
+status. Quiet mode suppresses policy findings on standard output; operational errors still use
+standard error and exit `2`. Use `--format json` when another program needs the versioned document.
+The same providers, plus `workflow check`, `workflow security`, `workflow lint`, and `repo check`,
+support `--format github` for escaped workflow annotations where documented. Configuration and
+quality reports remain text/JSON, while `gate agent-review policy evaluate` additionally supports
+GitHub output for adapter result evaluation.
 
 ## Explicit commit sources
 
