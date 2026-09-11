@@ -194,6 +194,15 @@ The plan contains one item per named lens and a `plan_digest`. The adapter must 
 run the configured provider-specific work, and copy the exact value into the top-level
 `plan_digest` field of its bounded JSON result receipt. It must return exactly one `passed`, `failed`,
 or `pending` outcome for every lens; a missing, duplicate, unknown, or stale result is rejected.
+To avoid hand-maintaining the result shape while providers are running, start with a complete
+pending scaffold:
+
+```bash
+yaga gate agent-review policy template \
+  --file examples/agent-review-policy.toml > review-results.json
+```
+
+Update the scaffold in the adapter as each lens finishes, retaining every lens and the digest.
 The [matching result example](https://github.com/dariuszpanas/yaga/blob/main/examples/agent-review-results.json)
 shows a passing blocking gate with a visible advisory finding:
 

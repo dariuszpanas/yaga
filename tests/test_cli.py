@@ -896,6 +896,39 @@ def test_agent_review_policy_plan_reports_json(tmp_path: Path) -> None:
     assert '"name": "correctness"' in result.stdout
 
 
+def test_agent_review_policy_template_reports_complete_pending_receipt(tmp_path: Path) -> None:
+    policy = tmp_path / ".yaga.toml"
+    policy.write_text(
+        "[agent-review]\n"
+        "version = 1\n"
+        "required = ['correctness']\n"
+        "[agent-review.agents.correctness]\n"
+        "preset = 'codex'\n"
+        "instruction = 'Review behavior.'\n"
+        "[agent-review.agents.docs]\n"
+        "preset = 'other-agent'\n"
+        "instruction = 'Review docs.'\n"
+        "outcome = 'advisory'\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["gate", "agent-review", "policy", "template", "--file", str(policy)],
+    )
+
+    assert result.exit_code == 0
+    document = json.loads(result.stdout)
+    assert (
+        document["plan_digest"]
+        == "c11734dc01020bbd3a358a9847b6bdc05a1abfec857172888d3e0061fca489d1"
+    )
+    assert document["results"] == [
+        {"lens": "correctness", "outcome": "pending"},
+        {"lens": "docs", "outcome": "pending"},
+    ]
+
+
 def test_agent_review_policy_evaluate_uses_result_contract_and_exit_one_for_blocking_failure(
     tmp_path: Path,
 ) -> None:

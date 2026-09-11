@@ -11,7 +11,12 @@ import typer
 from yaga.action import run_gate
 from yaga.agent_review.plan import build_plan, render_plan, render_policy_check
 from yaga.agent_review.policy import load_policy
-from yaga.agent_review.results import evaluate_results, load_results, render_evaluation
+from yaga.agent_review.results import (
+    evaluate_results,
+    load_results,
+    render_evaluation,
+    render_results_template,
+)
 from yaga.errors import ConfigurationError, GateError, YagaError, safe_error_text
 
 app = typer.Typer(help="Run a trusted GitHub gate operation.", no_args_is_help=True)
@@ -123,6 +128,21 @@ def policy_plan(
         typer.echo(render_plan(plan, output_format.lower()))
     except (ConfigurationError, TypeError, ValueError) as error:
         typer.echo(_render_policy_error(error, output_format.lower()), err=True)
+        raise typer.Exit(code=2) from error
+
+
+@policy_app.command("template")
+def policy_template(
+    policy_file: Annotated[
+        Path,
+        typer.Option("--file", help="Explicit TOML policy file for the receipt scaffold."),
+    ],
+) -> None:
+    """Render a complete pending JSON receipt scaffold for an external adapter."""
+    try:
+        typer.echo(render_results_template(load_policy(policy_file)))
+    except (ConfigurationError, TypeError, ValueError) as error:
+        typer.echo(_render_policy_error(error, "text"), err=True)
         raise typer.Exit(code=2) from error
 
 

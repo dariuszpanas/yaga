@@ -13,9 +13,11 @@ from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens
 from yaga.agent_review.results import (
     AgentReviewResults,
     LensResult,
+    build_pending_results,
     evaluate_results,
     load_results,
     render_evaluation,
+    render_results_template,
 )
 from yaga.errors import ConfigurationError
 
@@ -31,6 +33,32 @@ def review_policy() -> AgentReviewPolicy:
             ReviewLens("docs", "other-agent", "Review docs.", "advisory"),
         ),
     )
+
+
+def test_pending_results_template_covers_every_plan_lens() -> None:
+    results = build_pending_results(review_policy())
+
+    assert results.version == 1
+    assert results.plan_digest == "9adadb5cca1a70c8fc2958c3c786551772fc588764d6d10d2842a03572f1edeb"
+    assert [(result.lens, result.outcome.value, result.summary) for result in results.results] == [
+        ("correctness", "pending", None),
+        ("security", "pending", None),
+        ("docs", "pending", None),
+    ]
+
+
+def test_results_template_is_valid_receipt_json() -> None:
+    document = json.loads(render_results_template(review_policy()))
+
+    assert document == {
+        "version": 1,
+        "plan_digest": "9adadb5cca1a70c8fc2958c3c786551772fc588764d6d10d2842a03572f1edeb",
+        "results": [
+            {"lens": "correctness", "outcome": "pending"},
+            {"lens": "security", "outcome": "pending"},
+            {"lens": "docs", "outcome": "pending"},
+        ],
+    }
 
 
 def review_plan_digest() -> str:

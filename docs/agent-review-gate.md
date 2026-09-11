@@ -83,6 +83,7 @@ To inspect the exact provider-neutral work the policy describes, render its exec
 ```bash
 yaga gate agent-review policy plan --file .yaga.toml
 yaga gate agent-review policy plan --file .yaga.toml --format json
+yaga gate agent-review policy template --file .yaga.toml > review-results.json
 yaga gate agent-review policy evaluate --file .yaga.toml --results review-results.json
 yaga gate agent-review policy evaluate --file .yaga.toml --results review-results.json --format github
 ```
@@ -95,6 +96,20 @@ the result receipt while returning one closed outcome for each named lens.
 Text plan output prints the same digest on a separate `Plan digest:` line; JSON plan output carries
 it as `plan_digest`. Evaluation text, JSON, and GitHub notice output repeat the digest so CI logs
 can be correlated with the exact configuration used.
+
+When an adapter needs a result file before all providers have completed, use `policy template` to
+create a complete JSON scaffold:
+
+```bash
+yaga gate agent-review policy template --file .yaga.toml > review-results.json
+```
+
+The scaffold contains the current policy version, matching `plan_digest`, and exactly one explicit
+`pending` result for every configured lens in policy order. Replace each pending outcome with the
+adapter's `passed`, `failed`, or `pending` result and optionally add a bounded `summary`; do not
+remove lenses or edit the digest. The command is read-only and prints only JSON, so it is suitable
+for a temporary handoff file or a job artifact. Evaluation still revalidates the file against the
+current policy.
 
 Treat the plan and receipt as one versioned handoff. A trusted adapter should generate the plan from
 the policy, pass each ordered lens to its selected provider, preserve the lens name and requested

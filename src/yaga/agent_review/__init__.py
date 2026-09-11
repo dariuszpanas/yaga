@@ -6,9 +6,11 @@ from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens, load_policy
 from yaga.agent_review.results import (
     AgentReviewResults,
     LensResult,
+    build_pending_results,
     evaluate_results,
     load_results,
     render_evaluation,
+    render_results_template,
 )
 
 __all__ = [
@@ -21,10 +23,12 @@ __all__ = [
     "ReviewPlanItem",
     "LensResult",
     "build_plan",
+    "build_pending_results",
     "evaluate_policy",
     "evaluate_results",
     "load_policy",
     "load_results",
     "render_plan",
     "render_evaluation",
+    "render_results_template",
 ]

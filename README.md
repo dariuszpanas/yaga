@@ -47,6 +47,7 @@ yaga workflow lint                 # lint workflow syntax with pinned actionlint
 yaga gate agent-review <operation> # run the configured review gate
 yaga gate agent-review policy check # validate a named-lens policy
 yaga gate agent-review policy plan  # inspect provider-neutral lens work
+yaga gate agent-review policy template # scaffold a complete pending receipt
 yaga gate agent-review policy evaluate # aggregate an adapter receipt
 ```
 
