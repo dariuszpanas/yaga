@@ -9,6 +9,12 @@ which recognizes the Codex connector's exact event and evidence contract, is iso
 `yaga.agent_review.github`; other integrations can implement the same lifecycle-facing adapter
 boundary without changing the named-lens policy or result receipt.
 
+The current GitHub adapter is intentionally a single-lens Codex adapter. If its policy file names
+more than one lens, or requests a non-Codex preset, advisory outcome, or non-review publication, it
+fails before making a GitHub API request rather than silently pretending to run work it cannot
+execute. Use `policy plan --format json` as the handoff to an external adapter, run each lens there,
+then pass its complete receipt to `policy evaluate`.
+
 ## Operations
 
 The closed operations are `invalidate`, `prepare`, `authorize`, `observe`, `request`, and

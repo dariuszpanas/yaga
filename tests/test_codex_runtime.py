@@ -26,6 +26,7 @@ from yaga.agent_review.github.constants import (
     MAX_PREPARATION_REQUESTS,
 )
 from yaga.agent_review.github.gate import GateResult
+from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens
 from yaga.errors import GateError
 
 WORKFLOW_PATH = ".github/workflows/agent-review.yml"
@@ -105,6 +106,39 @@ def test_configured_review_policy_rejects_workspace_escape(
 
     with pytest.raises(GateError, match="inside the GitHub workspace"):
         runtime._configured_review_policy()
+
+
+def test_github_adapter_rejects_multiple_lenses() -> None:
+    lens = ReviewLens("one", "codex", "Review.", "review")
+    policy = AgentReviewPolicy(
+        version=1,
+        required=("one",),
+        aggregation="all-required",
+        lenses=(lens, lens),
+    )
+
+    with pytest.raises(GateError, match="exactly one lens"):
+        runtime._validate_github_adapter_policy(policy)
+
+
+@pytest.mark.parametrize(
+    "preset,outcome,publication",
+    [("local", "review", "review"), ("codex", "advisory", "review"), ("codex", "review", "inline")],
+)
+def test_github_adapter_rejects_unsupported_lens_capabilities(
+    preset: str,
+    outcome: str,
+    publication: str,
+) -> None:
+    policy = AgentReviewPolicy(
+        version=1,
+        required=("one",),
+        aggregation="all-required",
+        lenses=(ReviewLens("one", preset, "Review.", outcome, publication),),
+    )
+
+    with pytest.raises(GateError, match="only preset=codex"):
+        runtime._validate_github_adapter_policy(policy)
 
 
 def test_invalidate_dispatches_without_loading_source(

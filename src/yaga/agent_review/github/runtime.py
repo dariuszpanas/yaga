@@ -152,6 +152,23 @@ def _configured_review_policy() -> AgentReviewPolicy | None:
         raise GateError(f"Agent review policy is invalid: {error}") from error
 
 
+def _validate_github_adapter_policy(policy: AgentReviewPolicy | None) -> None:
+    """Reject policy features the current Codex GitHub adapter cannot execute."""
+    if policy is None:
+        return
+    if len(policy.lenses) != 1:
+        raise GateError(
+            "current GitHub Agent review adapter supports exactly one lens; "
+            "use a provider adapter with policy plan/evaluate for multiple lenses"
+        )
+    lens = policy.lenses[0]
+    if lens.preset != "codex" or lens.outcome != "review" or lens.publication != "review":
+        raise GateError(
+            "current GitHub Agent review adapter supports only preset=codex, "
+            "outcome=review, publication=review"
+        )
+
+
 def _write_outputs(route: str, *, pull_request_number: int | None = None) -> None:
     if route not in {"approved", "done", "external", "observe", "owner", "skip"}:
         raise GateError("YAGA route is invalid")
@@ -185,6 +202,7 @@ def run_action(selected_operation: str) -> int:
     default_branch = _default_branch(event)
     _trusted_workflow_path(repository, default_branch)
     policy = _configured_review_policy()
+    _validate_github_adapter_policy(policy)
     if policy is not None:
         print(
             f"YAGA {operation}: loaded Agent review policy with "
