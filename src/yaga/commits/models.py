@@ -110,6 +110,13 @@ class QualityPolicy:
     max_input_tokens: int = 512
     input_mode: QualityInputMode = QualityInputMode.MESSAGE
 
+    @classmethod
+    def for_provider(cls, provider: QualityProvider) -> QualityPolicy:
+        """Return compatible defaults for one provider's model and task."""
+        if provider is QualityProvider.BEDROCK:
+            return cls(provider=provider, model_id="amazon.nova-micro-v1:0", revision=None)
+        return cls()
+
 
 @dataclass(frozen=True, slots=True)
 class CommitPolicy:

@@ -20,7 +20,7 @@ DEFAULT_BEDROCK_MODEL_ID = "amazon.nova-micro-v1:0"
 DEFAULT_LOW_QUALITY_THRESHOLD = 0.70
 DEFAULT_MAX_INPUT_TOKENS = 512
 MAX_MODEL_ID_LENGTH = 256
-MAX_REVISION_LENGTH = 64
+MAX_REVISION_LENGTH = 40
 MAX_RESULTS = 256
 MAX_REASON_LENGTH = 500
 MAX_INPUT_TOKENS = 4096
@@ -123,7 +123,7 @@ def check_quality(
     *,
     provider: str = DEFAULT_PROVIDER,
     task: str = DEFAULT_TASK,
-    model_id: str = DEFAULT_MODEL_ID,
+    model_id: str | None = None,
     revision: str | None = None,
     threshold: float = DEFAULT_LOW_QUALITY_THRESHOLD,
     offline: bool = False,
@@ -133,6 +133,8 @@ def check_quality(
     input_mode: str = "message",
 ) -> QualityReport:
     """Run an opt-in bounded quality backend against commit messages."""
+    if model_id is None:
+        model_id = DEFAULT_BEDROCK_MODEL_ID if provider == "bedrock" else DEFAULT_MODEL_ID
     effective_revision = (
         DEFAULT_MODEL_REVISION if provider == "huggingface" and revision is None else revision
     )
@@ -513,13 +515,12 @@ def _validate_options(
     if any(ord(character) < 0x21 or ord(character) > 0x7E for character in model_id):
         raise InputError("model identifier must contain printable ASCII only")
     if revision is not None and (
-        not revision
-        or len(revision) > MAX_REVISION_LENGTH
+        not isinstance(revision, str)
+        or len(revision) != MAX_REVISION_LENGTH
         or any(character not in "0123456789abcdef" for character in revision)
     ):
         raise InputError(
-            "model revision must be a lowercase hexadecimal SHA of at most "
-            f"{MAX_REVISION_LENGTH} characters"
+            f"model revision must be a {MAX_REVISION_LENGTH}-character lowercase hexadecimal SHA"
         )
     if provider == "huggingface" and revision is None:
         raise InputError("Hugging Face quality requires a pinned model revision")

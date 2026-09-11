@@ -308,9 +308,10 @@ def test_classifier_receives_title_only_when_configured(monkeypatch: pytest.Monk
     assert received == ["fix: parser"]
 
 
-def test_quality_rejects_unpinned_revision() -> None:
+@pytest.mark.parametrize("revision", ["main", "a", "deadbeef", "a" * 39, "a" * 41, "A" * 40])
+def test_quality_rejects_unpinned_revision(revision: str) -> None:
     with pytest.raises(InputError, match="lowercase hexadecimal"):
-        check_quality([], revision="main")
+        check_quality([], revision=revision)
 
 
 def test_bedrock_rejects_the_unsupported_seq2seq_task() -> None:
@@ -334,9 +335,9 @@ def test_bedrock_does_not_inherit_a_huggingface_revision(
     report = check_quality(
         [],
         provider="bedrock",
-        model_id="amazon.nova-micro-v1:0",
     )
     assert report.revision is None
+    assert report.model_id == "amazon.nova-micro-v1:0"
 
 
 def test_bedrock_rejects_an_explicit_model_revision() -> None:

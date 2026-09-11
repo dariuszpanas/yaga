@@ -124,6 +124,41 @@ def test_commit_quality_quiet_suppresses_advisory_report(
     assert result.stdout == ""
 
 
+@pytest.mark.parametrize("source", ["message", "file", "stdin"])
+@pytest.mark.parametrize("output_format", ["text", "json", "github"])
+@pytest.mark.parametrize("decision", ["pass", "flag"])
+def test_commit_quality_renders_empty_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    output_format: str,
+    decision: str,
+) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: (
+            lambda _message: QualityAssessment("flag" if decision == "flag" else "pass")
+        ),
+    )
+    arguments = ["commit", "quality", "--repo", str(tmp_path), "--format", output_format]
+    if source == "message":
+        arguments.extend(["--message", ""])
+    elif source == "file":
+        path = tmp_path / "empty-message.txt"
+        path.write_text("", encoding="utf-8")
+        arguments.extend(["--file", str(path)])
+    else:
+        arguments.append("--stdin")
+
+    result = runner.invoke(app, arguments, input="")
+
+    assert result.exit_code == (1 if decision == "flag" else 0)
+    if output_format == "json":
+        assert json.loads(result.stdout)["commits"][0]["message"] == ""
+    else:
+        assert "1 commit(s)" in result.stdout
+
+
 def test_version_is_available_from_the_installed_command() -> None:
     result = runner.invoke(app, ["--version"])
 

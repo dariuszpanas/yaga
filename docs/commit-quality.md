@@ -66,21 +66,26 @@ credentials from the normal AWS SDK chain. Credentials never belong in TOML or r
 ## Configuration
 
 Use `[tool.yaga.commit.quality]` in `pyproject.toml` or `[commit.quality]` in `.yaga.toml`.
-Use `--config` for one explicit file; CLI options override configured values:
+Use `--config` for one explicit file; CLI options override configured values. Switching providers
+selects that provider's default model, task, revision, and region; shared threshold and input
+settings are preserved. Explicit CLI settings then override those defaults. Keeping the same
+provider preserves its configured settings:
 
 ```toml
 [tool.yaga.commit.quality]
 provider = "huggingface"
 task = "classification"
 model = "saridormi/commit-message-quality-codebert"
-revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553d"
+revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
 threshold = 0.70
 max-tokens = 32
 max-input-tokens = 512
 input-mode = "message"
 ```
 
-Hugging Face revisions must be lowercase hexadecimal commit identifiers. The tokenizer window
+Hugging Face revisions must be full 40-character lowercase hexadecimal commit identifiers.
+A local model directory is mutable local input: a displayed revision does not verify the contents
+of that directory. Use a pinned remote model for revision-based cache identity. The tokenizer window
 defaults to 512 tokens and can be set from 1 through 4096. Character and token bounds are
 independent, so a message can fit YAGA's character limit but still be tokenizer-truncated.
 

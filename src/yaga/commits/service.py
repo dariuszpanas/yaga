@@ -12,6 +12,8 @@ from yaga.commits.models import (
     CheckResult,
     CommitPolicy,
     CommitTarget,
+    QualityPolicy,
+    QualityProvider,
     TyposPolicy,
     ValidationReport,
 )
@@ -123,6 +125,19 @@ def check_commit_quality(
         raise InputError("choose only one of --message, --file, --stdin, --commit, or --range")
     repo = _resolve_repository(repository)
     settings = load_config(config, start=repo).policy.quality
+    if provider is not None and provider != settings.provider.value:
+        try:
+            provider_defaults = QualityPolicy.for_provider(QualityProvider(provider))
+        except ValueError as error:
+            raise InputError("quality provider must be one of: bedrock, huggingface") from error
+        settings = replace(
+            settings,
+            provider=provider_defaults.provider,
+            task=provider_defaults.task,
+            model_id=provider_defaults.model_id,
+            revision=provider_defaults.revision,
+            region=provider_defaults.region,
+        )
     targets = _select_targets(
         message=message,
         file=file,
@@ -134,9 +149,9 @@ def check_commit_quality(
     )
     return check_quality(
         targets,
-        provider=provider or settings.provider.value,
-        task=task or settings.task.value,
-        model_id=model_id or settings.model_id,
+        provider=settings.provider.value,
+        task=task if task is not None else settings.task.value,
+        model_id=model_id if model_id is not None else settings.model_id,
         revision=revision if revision is not None else settings.revision,
         threshold=threshold if threshold is not None else settings.threshold,
         offline=offline,

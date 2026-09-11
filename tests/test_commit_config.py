@@ -89,6 +89,23 @@ def test_quality_policy_accepts_zero_threshold(tmp_path: Path) -> None:
     assert loaded.policy.quality.threshold == 0.0
 
 
+def test_quality_policy_selects_the_bedrock_default_model(tmp_path: Path) -> None:
+    project = write_pyproject(tmp_path, '[tool.yaga.commit.quality]\nprovider = "bedrock"\n')
+
+    settings = load_config(project, start=tmp_path).policy.quality
+
+    assert settings.model_id == "amazon.nova-micro-v1:0"
+    assert settings.revision is None
+
+
+@pytest.mark.parametrize("revision", ["a", "deadbeef", "a" * 39, "a" * 41, "a" * 64, "A" * 40])
+def test_quality_policy_rejects_non_full_model_revisions(tmp_path: Path, revision: str) -> None:
+    project = write_pyproject(tmp_path, f'[tool.yaga.commit.quality]\nrevision = "{revision}"\n')
+
+    with pytest.raises(ConfigurationError, match="40-character lowercase hexadecimal"):
+        load_config(project, start=tmp_path)
+
+
 @pytest.mark.parametrize(
     "quality",
     [

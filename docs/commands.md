@@ -179,7 +179,7 @@ selection explicit:
 provider = "huggingface"
 task = "classification"
 model = "saridormi/commit-message-quality-codebert"
-revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553d"
+revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
 threshold = 0.70
 max-tokens = 32
 max-input-tokens = 512

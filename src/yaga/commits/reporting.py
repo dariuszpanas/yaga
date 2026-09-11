@@ -97,7 +97,7 @@ def render_quality_report(
             f"({message_lines} {line_label} checked; {message_shape}) "
             f"[model input: {model_input_label}] "
             f"{character_coverage.lstrip('; ')} "
-            f"{safe_text(result.target.message.splitlines()[0])}"
+            f"{safe_text(_message_header(result.target.message))}"
         )
         details = []
         if result.assessment.score is not None:
@@ -150,7 +150,7 @@ def _render_quality_github_report(report: QualityReport) -> str:
     lines = []
     for result in visible:
         label = safe_text(result.target.label, maximum=MAX_DISPLAY_PATH)
-        header = safe_text(result.target.message.splitlines()[0], maximum=MAX_DISPLAY_HEADER)
+        header = safe_text(_message_header(result.target.message), maximum=MAX_DISPLAY_HEADER)
         detail = f"{label}: {header}"
         body_lines = _message_body_lines(result.target.message)
         body_label = "body line" if body_lines == 1 else "body lines"
@@ -266,6 +266,12 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
             for result in report.results
         ],
     }
+
+
+def _message_header(message: str) -> str:
+    """Return a header even when a valid input source contains an empty message."""
+    lines = message.splitlines()
+    return lines[0] if lines else ""
 
 
 def _message_body_lines(message: str) -> int:
