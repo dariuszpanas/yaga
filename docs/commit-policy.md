@@ -82,8 +82,8 @@ project’s style. YAGA does not require 72- or 100-column body wrapping.
 
 `body-max-single-line-paragraphs` is an optional upper bound for prose paragraphs containing one
 non-empty line. It catches bodies that put a blank line between every sentence without rejecting
-intentional list items. Omitted means unlimited; `0` requires every prose paragraph to contain at
-least two lines.
+intentional list items. Omitted means unlimited; `1` permits one intentional short paragraph while
+flagging repeated paragraph splitting.
 
 YAGA’s own repository policy sets `body-policy = "required"` with a minimum prose length, so normal
 human commits include a durable explanation. The event-aware commit Action still skips policy

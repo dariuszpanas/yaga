@@ -69,8 +69,8 @@ unique, non-overlapping, and cannot use `BREAKING CHANGE` or `BREAKING-CHANGE`.
 unlimited. `body-max-single-line-paragraphs` is a separate optional layout limit. It counts prose
 paragraphs made of exactly one non-empty line after parsing the header and final footer block. List
 items beginning with `-`, `*`, `+`, or a numbered marker such as `1.` are not counted. Omit the
-setting to allow any layout, set it to `2` to permit two intentional one-line paragraphs, or set it
-to `0` to require every prose paragraph to contain at least two lines.
+setting to allow any layout, or set it to `1` to permit one intentional one-line paragraph while
+flagging repeated paragraph splitting.
 
 The check reports `body.paragraph-format` at the first offending paragraph and is deterministic;
 it does not depend on the optional quality model. This makes it suitable for enforcing repository
