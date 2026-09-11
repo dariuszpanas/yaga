@@ -340,7 +340,10 @@ def test_body_paragraph_policy_catches_repeated_single_line_prose_paragraphs() -
 
 
 def test_body_paragraph_policy_allows_wrapped_prose_and_list_items() -> None:
-    policy = CommitPolicy(body_max_single_line_paragraphs=0)
+    policy = CommitPolicy(body_max_single_line_paragraphs=1)
+    one_short_paragraph = "fix: document parser behavior\n\nA short justification."
+    assert result(one_short_paragraph, policy).valid
+
     message = (
         "fix: document parser behavior\n\n"
         "First sentence continues on the next line.\n"
