@@ -451,7 +451,11 @@ def remove_labeled_containers(
                 return
             _pause_cleanup_poll(late_deadline)
     except InputError as error:
-        raise InputError(f"Docker could not remove actionlint container {resource}") from error
+        detail = safe_error_text(error, maximum=200)
+        message = f"Docker could not remove actionlint container {resource}"
+        if detail:
+            message += f": {detail}"
+        raise InputError(message) from error
 
 
 def _list_labeled_containers(
@@ -543,9 +547,11 @@ def remove_workspace_volume(
                 return
             _pause_cleanup_poll(late_deadline)
     except InputError as error:
-        raise InputError(
-            f"Docker could not remove private actionlint workspace {volume_name}"
-        ) from error
+        detail = safe_error_text(error, maximum=200)
+        message = f"Docker could not remove private actionlint workspace {volume_name}"
+        if detail:
+            message += f": {detail}"
+        raise InputError(message) from error
 
 
 def _list_labeled_volumes(

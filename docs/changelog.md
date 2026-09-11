@@ -98,6 +98,8 @@
 
 ### Fixed
 
+- Include a bounded sanitized Docker cause when actionlint container or workspace cleanup fails,
+  making daemon and resource-state errors actionable in local and CI reports.
 - Count body lines correctly in commit-quality reports when messages use Windows CRLF line
   endings.
 - Reject invalid Bedrock `seq2seq` quality configuration while loading policy files instead of
