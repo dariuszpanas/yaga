@@ -108,6 +108,10 @@ yaga commit quality --commit HEAD --format json > quality.json
 yaga commit quality --range origin/main..HEAD --format github
 ```
 
+Use `--quiet` when a caller needs only the exit status. It suppresses the advisory report while
+preserving exit `0` for no flags, `1` for flagged messages, and `2` for provider or configuration
+errors.
+
 Text and JSON identify provider, task, model, revision, input mode, character limit, and per-message
 coverage. Hugging Face results also expose measured token count and token truncation; unsupported
 measurements are `null`. GitHub output emits warning annotations for flagged messages and one

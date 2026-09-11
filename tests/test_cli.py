@@ -15,8 +15,11 @@ from typer.testing import CliRunner
 from yaga.agent_review.plan import build_plan
 from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens
 from yaga.cli import app
+from yaga.commands import commit as commit_commands
 from yaga.commands import gate as gate_commands
 from yaga.commands import workflow as workflow_commands
+from yaga.commits.models import CommitTarget
+from yaga.commits.quality import QualityAssessment, QualityReport, QualityResult
 from yaga.errors import InputError
 from yaga.workflows import lint as workflow_lint
 from yaga.workflows.models import (
@@ -86,6 +89,39 @@ def test_commit_quality_help_explains_provider_specific_options() -> None:
     assert "unsupported" in help_text
     assert "rejected" in help_text
     assert "ignored" in help_text
+
+
+def test_commit_quality_quiet_suppresses_advisory_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        commit_commands,
+        "check_commit_quality",
+        lambda *_args, **_kwargs: QualityReport(
+            results=(
+                QualityResult(
+                    target=CommitTarget(label="message", message="fix: vague"),
+                    assessment=QualityAssessment("flag", 0.91, "too vague"),
+                    threshold=0.70,
+                ),
+            ),
+            provider="huggingface",
+            task="classification",
+            model_id="test-model",
+            revision="a" * 40,
+            offline=True,
+            region=None,
+            max_input_tokens=512,
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        ["commit", "quality", "--message", "fix: vague", "--repo", str(tmp_path), "--quiet"],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
 
 
 def test_version_is_available_from_the_installed_command() -> None:

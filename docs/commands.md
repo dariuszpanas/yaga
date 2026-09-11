@@ -47,6 +47,9 @@ while a model is an optional advisory signal. See the dedicated [commit quality 
 for the full source, provider, cache, configuration, and reporting contract. The provider is explicit
 and bounded:
 
+Use `--quiet` with `commit quality` when a script needs only its exit status; flagged advisory
+results still return exit `1`, and provider or configuration failures still return exit `2`.
+
 Use `--provider huggingface` for local classification or seq2seq inference, or
 `--provider bedrock` for AWS-hosted classification. The default provider is Hugging Face; the
 Bedrock adapter does not use `--offline`, `--revision`, or Hugging Face input-token settings.

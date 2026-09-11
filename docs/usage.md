@@ -19,8 +19,9 @@ and other operational errors use standard error and exit `2`; policy findings us
 
 The standalone policy-check commands `commit check`, `branch check`, `change check`, `mode check`,
 `path check`, `size check`, and `tree check` accept `--quiet` when a caller needs only the exit
-status. Quiet mode suppresses policy findings on standard output; operational errors still use
-standard error and exit `2`. Use `--format json` when another program needs the versioned document.
+status. `commit quality` accepts the same option for advisory findings. Quiet mode suppresses
+policy or advisory reports on standard output; operational errors still use standard error and
+exit `2`. Use `--format json` when another program needs the versioned document.
 The same providers, plus `workflow check`, `workflow security`, `workflow lint`, and `repo check`,
 support `--format github` for escaped workflow annotations where documented. Configuration reports
 remain text/JSON; `commit quality` also supports GitHub warning/error annotations, while `gate
