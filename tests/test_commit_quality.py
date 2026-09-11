@@ -11,6 +11,7 @@ from yaga.commits.quality import (
     DEFAULT_MAX_INPUT_TOKENS,
     DEFAULT_MODEL_REVISION,
     QualityAssessment,
+    QualityPrediction,
     _load_huggingface,
     _low_quality_probability,
     _parse_decision,
@@ -149,6 +150,49 @@ def test_classifier_receives_the_configured_input_window(monkeypatch: pytest.Mon
     assert calls[0]["max_length"] == 1024
 
 
+def test_classifier_reports_when_the_input_exceeds_the_configured_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Tokenizer:
+        def __call__(self, text: str, **kwargs: object) -> dict[str, list[int]]:
+            if kwargs.get("truncation") is False:
+                return {"input_ids": list(range(9))}
+            return {"input_ids": list(range(4))}
+
+    tokenizer = Tokenizer()
+
+    class Loader:
+        @staticmethod
+        def from_pretrained(*args: object, **kwargs: object) -> object:
+            return tokenizer
+
+    def pipeline(*args: object, **kwargs: object):
+        return lambda _message: [{"label": "LABEL_0", "score": 0.1}]
+
+    monkeypatch.setattr(
+        "yaga.commits.quality.import_module",
+        lambda _name: SimpleNamespace(
+            AutoTokenizer=Loader,
+            AutoModelForSequenceClassification=Loader,
+            pipeline=pipeline,
+        ),
+    )
+
+    predictor = _load_huggingface(
+        "classification",
+        "model",
+        DEFAULT_MODEL_REVISION,
+        0.7,
+        True,
+        32,
+        8,
+    )
+
+    prediction = predictor("feat: message")
+    assert isinstance(prediction, QualityPrediction)
+    assert prediction.input_truncated is True
+
+
 def test_quality_rejects_unpinned_revision() -> None:
     with pytest.raises(InputError, match="lowercase hexadecimal"):
         check_quality([], revision="main")
@@ -173,6 +217,7 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
     )
     document = quality_report_document(report)
     assert document["max_input_tokens"] == DEFAULT_MAX_INPUT_TOKENS
+    assert document["commits"][0]["model_input_truncated"] is None
     assert document["commits"][0]["message_lines"] == 3
     assert document["commits"][0]["message_body_lines"] == 1
     rendered = render_quality_report(report, OutputFormat.TEXT)
@@ -194,3 +239,21 @@ def test_quality_report_makes_title_only_input_explicit(
     document = quality_report_document(report)
     assert document["commits"][0]["message_body_lines"] == 0
     assert "no body included" in render_quality_report(report, OutputFormat.TEXT)
+
+
+def test_quality_report_exposes_input_truncation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: (
+            lambda _message: QualityPrediction(QualityAssessment("pass", 0.1), True)
+        ),
+    )
+    report = check_quality(
+        [CommitTarget(label="message", message="fix: parser")],
+        revision=DEFAULT_MODEL_REVISION,
+    )
+
+    document = quality_report_document(report)
+    rendered = render_quality_report(report, OutputFormat.TEXT)
+    assert document["commits"][0]["model_input_truncated"] is True
+    assert "model input truncated" in rendered

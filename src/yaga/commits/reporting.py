@@ -58,6 +58,10 @@ def render_quality_report(report: QualityReport, output_format: OutputFormat) ->
         line_label = "line" if message_lines == 1 else "lines"
         body_label = "body line" if body_lines == 1 else "body lines"
         message_shape = f"{body_lines} {body_label} included" if body_lines else "no body included"
+        if result.input_truncated is True:
+            message_shape += "; model input truncated"
+        elif result.input_truncated is False:
+            message_shape += "; model input complete"
         lines.append(
             f"{status:7} {safe_text(identity, maximum=80)}  "
             f"({message_lines} {line_label} checked; {message_shape}) "
@@ -112,6 +116,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
                 "message": json_text(result.target.message, maximum=MAX_DISPLAY_HEADER),
                 "message_lines": result.target.message.count("\n") + 1,
                 "message_body_lines": _message_body_lines(result.target.message),
+                "model_input_truncated": result.input_truncated,
                 "status": "flagged" if result.flagged else "passed",
                 "score": result.assessment.score,
                 "reason": json_text(result.assessment.reason, maximum=MAX_REASON_LENGTH)

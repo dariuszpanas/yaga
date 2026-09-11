@@ -165,7 +165,8 @@ with `--max-tokens`, and accepts only a `PASS`/`FLAG` response. Pin every Huggin
 with a lowercase hexadecimal SHA, so an accidental moving tag cannot silently change the result.
 Use `--max-input-tokens` or `quality.max-input-tokens` to tune the tokenizer window for a compatible
 model; the default is 512 and the allowed range is 1 through 4096. The effective bound is printed
-in text and JSON reports.
+in text and JSON reports. Hugging Face results additionally state whether each selected message
+was truncated at that bound; other providers may leave that per-message field unknown.
 
 The Bedrock provider uses the AWS SDK default credential chain and the Converse API. Its default
 model is `amazon.nova-micro-v1:0`; use `--model` for a different compatible model and `--region`
