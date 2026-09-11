@@ -54,6 +54,7 @@ class QualityPrediction:
 
     assessment: QualityAssessment
     input_truncated: bool | None = None
+    input_tokens: int | None = None
 
     @property
     def flagged(self) -> bool:
@@ -77,6 +78,7 @@ class QualityResult:
     assessment: QualityAssessment
     threshold: float | None
     input_truncated: bool | None = None
+    input_tokens: int | None = None
 
     @property
     def flagged(self) -> bool:
@@ -150,15 +152,18 @@ def check_quality(
         if isinstance(prediction, QualityPrediction):
             assessment = prediction.assessment
             input_truncated = prediction.input_truncated
+            input_tokens = prediction.input_tokens
         else:
             assessment = prediction
             input_truncated = None
+            input_tokens = None
         results.append(
             QualityResult(
                 target,
                 assessment,
                 threshold if task == "classification" else None,
                 input_truncated,
+                input_tokens,
             )
         )
     return QualityReport(
@@ -239,9 +244,11 @@ def _load_huggingface(
             )
 
             def predict(message: str) -> QualityPrediction:
+                input_tokens = _input_token_count(tokenizer, message)
                 return QualityPrediction(
                     _classification_assessment(classifier(message), threshold),
-                    _input_would_truncate(tokenizer, message, max_input_tokens),
+                    input_tokens is not None and input_tokens > max_input_tokens,
+                    input_tokens,
                 )
 
             return _guarded_predict(predict)
@@ -258,6 +265,7 @@ def _load_huggingface(
 
         def predict(message: str) -> QualityPrediction:
             prompt = _prompt(message)
+            input_tokens = _input_token_count(tokenizer, prompt)
             encoded = tokenizer(
                 prompt,
                 return_tensors="pt",
@@ -268,7 +276,8 @@ def _load_huggingface(
             text = tokenizer.decode(generated[0], skip_special_tokens=True)
             return QualityPrediction(
                 _parse_decision(text),
-                _input_would_truncate(tokenizer, prompt, max_input_tokens),
+                input_tokens is not None and input_tokens > max_input_tokens,
+                input_tokens,
             )
 
         return _guarded_predict(predict)
@@ -377,8 +386,8 @@ def _parse_decision(text: object) -> QualityAssessment:
     return QualityAssessment(decision, reason=reason[:MAX_REASON_LENGTH] if reason else None)
 
 
-def _input_would_truncate(tokenizer: _QualityTokenizer, text: str, maximum: int) -> bool | None:
-    """Return whether a tokenizer's unbounded input exceeds the configured window."""
+def _input_token_count(tokenizer: _QualityTokenizer, text: str) -> int | None:
+    """Return the unbounded input-token count when the tokenizer exposes it."""
     try:
         encoded = tokenizer(text, add_special_tokens=True, truncation=False)
         if not isinstance(encoded, Mapping):
@@ -386,11 +395,11 @@ def _input_would_truncate(tokenizer: _QualityTokenizer, text: str, maximum: int)
         input_ids = encoded.get("input_ids")
         if isinstance(input_ids, list):
             if input_ids and isinstance(input_ids[0], list):
-                return len(input_ids[0]) > maximum
-            return len(input_ids) > maximum
+                return len(input_ids[0])
+            return len(input_ids)
         shape = getattr(input_ids, "shape", None)
         if shape is not None and len(shape):
-            return int(shape[-1]) > maximum
+            return int(shape[-1])
     except Exception:  # noqa: BLE001 - coverage metadata must not hide provider results.
         return None
     return None

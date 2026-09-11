@@ -58,7 +58,14 @@ def render_quality_report(report: QualityReport, output_format: OutputFormat) ->
         line_label = "line" if message_lines == 1 else "lines"
         body_label = "body line" if body_lines == 1 else "body lines"
         message_shape = f"{body_lines} {body_label} included" if body_lines else "no body included"
-        if result.input_truncated is True:
+        if result.input_tokens is not None and report.max_input_tokens is not None:
+            coverage = f"{result.input_tokens}/{report.max_input_tokens} tokens"
+            message_shape += f"; model input {coverage}"
+            if result.input_truncated is True:
+                message_shape += ", truncated"
+            elif result.input_truncated is False:
+                message_shape += ", complete"
+        elif result.input_truncated is True:
             message_shape += "; model input truncated"
         elif result.input_truncated is False:
             message_shape += "; model input complete"
@@ -117,6 +124,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
                 "message_lines": result.target.message.count("\n") + 1,
                 "message_body_lines": _message_body_lines(result.target.message),
                 "model_input_truncated": result.input_truncated,
+                "model_input_tokens": result.input_tokens,
                 "status": "flagged" if result.flagged else "passed",
                 "score": result.assessment.score,
                 "reason": json_text(result.assessment.reason, maximum=MAX_REASON_LENGTH)
