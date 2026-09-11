@@ -19,6 +19,9 @@ from yaga.commits.models import (
     LoadedConfig,
     MergePolicy,
     PresencePolicy,
+    QualityPolicy,
+    QualityProvider,
+    QualityTask,
     TyposPolicy,
 )
 from yaga.errors import ConfigurationError
@@ -53,6 +56,7 @@ _COMMIT_KEYS = frozenset(
         "breaking-markers",
         "dependabot-pull-requests",
         "typos",
+        "quality",
         "required-footer-tokens",
         "forbidden-footer-tokens",
         "merge-commits",
@@ -154,6 +158,8 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
     if not isinstance(raw_commit, dict):
         raise ConfigurationError(f"commit must be a table in {path}")
     _reject_unknown(raw_commit, _COMMIT_KEYS, label="commit", path=path)
+    raw_quality = raw_commit.get("quality", {})
+    quality = _quality_policy(raw_quality, path)
 
     allowed_types = _optional_tokens(
         raw_commit,
@@ -344,7 +350,63 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             "typos",
             path,
         ),
+        quality=quality,
     )
+
+
+def _quality_policy(value: object, path: Path) -> QualityPolicy:
+    if not isinstance(value, dict):
+        raise ConfigurationError(f"quality must be a table in {path}")
+    allowed = frozenset(
+        {"provider", "task", "model", "revision", "threshold", "region", "max-tokens"}
+    )
+    _reject_unknown(value, allowed, label="commit.quality", path=path)
+    defaults = QualityPolicy()
+    provider = _enum(
+        value.get("provider", defaults.provider.value), QualityProvider, "quality.provider", path
+    )
+    task = _enum(value.get("task", defaults.task.value), QualityTask, "quality.task", path)
+    model_id = value.get("model", defaults.model_id)
+    if (
+        not isinstance(model_id, str)
+        or not 1 <= len(model_id) <= 256
+        or any(ord(char) < 0x21 or ord(char) > 0x7E for char in model_id)
+    ):
+        raise ConfigurationError(
+            f"quality.model must be printable ASCII of 1-256 characters in {path}"
+        )
+    revision = value.get(
+        "revision", defaults.revision if provider is QualityProvider.HUGGINGFACE else None
+    )
+    if revision is not None and (
+        not isinstance(revision, str)
+        or not revision
+        or len(revision) > 64
+        or any(char not in "0123456789abcdef" for char in revision)
+    ):
+        raise ConfigurationError(f"quality.revision must be a lowercase hexadecimal SHA in {path}")
+    threshold = value.get("threshold", defaults.threshold)
+    if type(threshold) not in {float, int} or not 0 < threshold <= 1:
+        raise ConfigurationError(
+            f"quality.threshold must be greater than 0 and at most 1 in {path}"
+        )
+    region = value.get("region")
+    if region is not None and (
+        not isinstance(region, str)
+        or not 1 <= len(region) <= 64
+        or any(ord(char) < 0x21 or ord(char) > 0x7E for char in region)
+    ):
+        raise ConfigurationError(
+            f"quality.region must be printable ASCII of 1-64 characters in {path}"
+        )
+    max_tokens = _integer(
+        value.get("max-tokens", defaults.max_tokens), "quality.max-tokens", 1, 256, path
+    )
+    if provider is QualityProvider.HUGGINGFACE and revision is None:
+        raise ConfigurationError(
+            f"quality.revision is required for the Hugging Face provider in {path}"
+        )
+    return QualityPolicy(provider, task, model_id, revision, float(threshold), region, max_tokens)
 
 
 def _reject_unknown(

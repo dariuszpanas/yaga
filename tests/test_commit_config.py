@@ -17,6 +17,8 @@ from yaga.commits.models import (
     EndingPolicy,
     MergePolicy,
     PresencePolicy,
+    QualityProvider,
+    QualityTask,
     TyposPolicy,
 )
 from yaga.errors import ConfigurationError
@@ -47,6 +49,49 @@ def test_missing_configuration_uses_spec_only_defaults(tmp_path: Path) -> None:
     assert loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.CHECK
     assert loaded.policy.typos is TyposPolicy.SKIP
     assert loaded.policy.merge_commits is MergePolicy.IGNORE
+
+
+def test_quality_policy_is_configurable_without_secrets(tmp_path: Path) -> None:
+    project = write_pyproject(
+        tmp_path,
+        """
+[tool.yaga.commit.quality]
+provider = "bedrock"
+task = "seq2seq"
+model = "amazon.nova-micro-v1:0"
+threshold = 0.4
+region = "us-west-2"
+max-tokens = 12
+""",
+    )
+
+    loaded = load_config(project, start=tmp_path)
+
+    assert loaded.policy.quality.provider is QualityProvider.BEDROCK
+    assert loaded.policy.quality.task is QualityTask.SEQ2SEQ
+    assert loaded.policy.quality.model_id == "amazon.nova-micro-v1:0"
+    assert loaded.policy.quality.revision is None
+    assert loaded.policy.quality.threshold == 0.4
+    assert loaded.policy.quality.region == "us-west-2"
+    assert loaded.policy.quality.max_tokens == 12
+
+
+@pytest.mark.parametrize(
+    "quality",
+    [
+        '[tool.yaga.commit.quality]\nprovider = "unknown"\n',
+        '[tool.yaga.commit.quality]\ntask = "unknown"\n',
+        '[tool.yaga.commit.quality]\nmodel = "bad\nmodel"\n',
+        '[tool.yaga.commit.quality]\nrevision = "main"\n',
+        "[tool.yaga.commit.quality]\nthreshold = 0\n",
+        "[tool.yaga.commit.quality]\nmax-tokens = 0\n",
+        "[tool.yaga.commit.quality]\nextra = true\n",
+    ],
+)
+def test_quality_policy_rejects_invalid_values(tmp_path: Path, quality: str) -> None:
+    project = write_pyproject(tmp_path, quality)
+    with pytest.raises(ConfigurationError):
+        load_config(project, start=tmp_path)
 
 
 def test_commit_policy_preserves_the_legacy_positional_constructor() -> None:

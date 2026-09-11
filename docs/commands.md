@@ -36,6 +36,10 @@ oldest first. Git-backed commit checks require complete history and never fetch.
 separate from `commit check`: the deterministic Conventional Commit policy remains authoritative,
 while a model is an optional advisory signal. The provider is explicit and bounded:
 
+The command also reads non-secret defaults from `[tool.yaga.commit.quality]` or `[commit.quality]`
+in the discovered configuration. Use `--config` to select one explicit file; CLI options override
+the configured provider, task, model, revision, threshold, region, and generation bound.
+
 ```bash
 # Pinned local classifier (default)
 uv sync --extra quality
@@ -58,6 +62,27 @@ policy files or command output. `--offline` is available only for local Hugging 
 A model finding returns exit `1`, while missing dependencies, unavailable credentials/models, or
 invalid provider output returns exit `2`. Use `--format json` when another tool needs the stable
 provider, task, model, decision, score, and reason fields.
+
+### Interpreting quality findings
+
+The default classifier is an advisory signal about how much useful change description a message
+resembles. It is not a second Conventional Commit parser and it does not know the repository's
+actual diff. For example, `fix: update parser behavior` is structurally valid, but the classifier
+may flag it because the subject does not identify what changed or why. A more concrete subject such
+as `fix(parser): reject malformed trailer values` is more likely to pass. Adding a body that
+explains the behavior change usually lowers the score further.
+
+Classification scores are low-quality probabilities: a larger score is more suspicious, and the
+default `0.70` threshold flags the message. The classifier can catch vague subjects, missing
+structure, and low-information bodies, but it can also flag intentionally concise messages and
+pass fluent but generic text. It cannot reliably enforce configured types, scopes, body minimums,
+footers, line limits, or any requirement that depends on the repository diff; use `commit check`
+for those exact rules.
+
+Classification providers do not produce an explanation beyond the score. Use `--format json` to
+retain the score for diagnostics, or use a seq2seq/Bedrock provider when a bounded natural-language
+reason is more useful than a stable probability. Treat model findings as review prompts rather than
+proof that a message is invalid.
 
 The standalone `branch`, `change`, `mode`, `path`, `size`, and `tree` providers also accept
 `--quiet` (or `-q`) when a caller needs only the exit status. Policy findings are suppressed, while

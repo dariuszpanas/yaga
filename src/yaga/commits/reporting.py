@@ -53,8 +53,12 @@ def render_quality_report(report: QualityReport, output_format: OutputFormat) ->
     for result in report.results:
         status = "FLAGGED" if result.flagged else "PASSED"
         identity = result.target.sha[:12] if result.target.sha else result.target.label
+        message_lines = result.target.message.count("\n") + 1
+        line_label = "line" if message_lines == 1 else "lines"
         lines.append(
-            f"{status:7} {safe_text(identity, maximum=80)}  {safe_text(result.target.message.splitlines()[0])}"
+            f"{status:7} {safe_text(identity, maximum=80)}  "
+            f"({message_lines} {line_label} checked) "
+            f"{safe_text(result.target.message.splitlines()[0])}"
         )
         details = []
         if result.assessment.score is not None:
@@ -100,6 +104,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
                 "source": json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
                 "sha": json_text(result.target.sha, maximum=64) if result.target.sha else None,
                 "message": json_text(result.target.message, maximum=MAX_DISPLAY_HEADER),
+                "message_lines": result.target.message.count("\n") + 1,
                 "status": "flagged" if result.flagged else "passed",
                 "score": result.assessment.score,
                 "reason": json_text(result.assessment.reason, maximum=MAX_REASON_LENGTH)
@@ -162,6 +167,15 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "body_max_line_length": policy.body_max_line_length,
         "dependabot_pull_requests": policy.dependabot_pull_requests.value,
         "typos": policy.typos.value,
+        "quality": {
+            "provider": policy.quality.provider.value,
+            "task": policy.quality.task.value,
+            "model_id": json_text(policy.quality.model_id, maximum=256),
+            "revision": policy.quality.revision,
+            "threshold": policy.quality.threshold,
+            "region": policy.quality.region,
+            "max_tokens": policy.quality.max_tokens,
+        },
         "merge_commits": policy.merge_commits.value,
         "ignored_headers": _json_values(policy.ignored_headers, maximum=256),
         "max_commits": policy.max_commits,

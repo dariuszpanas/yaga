@@ -53,6 +53,7 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 | `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
+| `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, and max-tokens. |
 | `merge-commits` | `ignore`, `check`, or `reject`, based on Git parent identity. |
 | `ignored-headers` | Bounded case-sensitive glob patterns for intentional headers. |
 | `max-commits` | Positive bound for a selected commit range. |
@@ -60,6 +61,27 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 `scope-policy-by-type` keys are case-insensitively unique and must be reachable through
 `allowed-types`. `required-footer-tokens` and `forbidden-footer-tokens` are case-insensitively
 unique, non-overlapping, and cannot use `BREAKING CHANGE` or `BREAKING-CHANGE`.
+
+### Quality advisory settings
+
+The optional model advisory reads `[tool.yaga.commit.quality]` in `pyproject.toml`, or
+`[commit.quality]` in `.yaga.toml`. These settings are defaults for `yaga commit quality`; every
+corresponding CLI option overrides them for one invocation. Credentials are never valid here.
+
+```toml
+[tool.yaga.commit.quality]
+provider = "huggingface"
+task = "classification"
+model = "saridormi/commit-message-quality-codebert"
+revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
+threshold = 0.70
+max-tokens = 32
+```
+
+`provider` is `huggingface` or `bedrock`; `task` is `classification` or `seq2seq`. Hugging Face
+requires a lowercase hexadecimal revision. Bedrock may omit `revision` and can set `region` and a
+provider-specific `model`. `max-tokens` is bounded from 1 through 256. Use `--config` when the
+quality settings should come from one explicit file rather than normal nearest-file discovery.
 
 ## Generate and inspect policy
 

@@ -8,14 +8,6 @@ from typing import Annotated
 import typer
 
 from yaga.commits.models import OutputFormat
-from yaga.commits.quality import (
-    DEFAULT_BEDROCK_MODEL_ID,
-    DEFAULT_LOW_QUALITY_THRESHOLD,
-    DEFAULT_MODEL_ID,
-    DEFAULT_MODEL_REVISION,
-    DEFAULT_PROVIDER,
-    DEFAULT_TASK,
-)
 from yaga.commits.reporting import render_error, render_quality_report, render_report
 from yaga.commits.service import check_commit_quality
 from yaga.commits.service import check_commits as check_commit_service
@@ -102,24 +94,27 @@ def quality_check(
         str | None, typer.Option("--range", "-r", help="Check a Git revision range oldest-first.")
     ] = None,
     repository: Annotated[Path, typer.Option("--repo", help="Git repository root.")] = Path("."),
+    config: Annotated[
+        Path | None, typer.Option("--config", help="Explicit YAGA configuration file.")
+    ] = None,
     provider: Annotated[
-        str, typer.Option("--provider", help="Quality backend: huggingface or bedrock.")
-    ] = DEFAULT_PROVIDER,
+        str | None, typer.Option("--provider", help="Override configured backend.")
+    ] = None,
     task: Annotated[
-        str, typer.Option("--task", help="Hugging Face task: classification or seq2seq.")
-    ] = DEFAULT_TASK,
+        str | None, typer.Option("--task", help="Override configured Hugging Face task.")
+    ] = None,
     model_id: Annotated[
-        str | None, typer.Option("--model", help="Provider model identifier.")
+        str | None, typer.Option("--model", help="Override configured model identifier.")
     ] = None,
     revision: Annotated[
-        str | None, typer.Option("--revision", help="Pinned lowercase Hugging Face revision SHA.")
+        str | None, typer.Option("--revision", help="Override configured model revision SHA.")
     ] = None,
     threshold: Annotated[
-        float,
+        float | None,
         typer.Option(
-            "--threshold", min=0.0, max=1.0, help="Low-quality probability that flags a message."
+            "--threshold", min=0.0, max=1.0, help="Override configured low-quality threshold."
         ),
-    ] = DEFAULT_LOW_QUALITY_THRESHOLD,
+    ] = None,
     offline: Annotated[
         bool, typer.Option("--offline", help="Use only the local Hugging Face cache.")
     ] = False,
@@ -127,8 +122,9 @@ def quality_check(
         str | None, typer.Option("--region", help="AWS region for the Bedrock provider.")
     ] = None,
     max_tokens: Annotated[
-        int, typer.Option("--max-tokens", min=1, max=256, help="Bound generated response tokens.")
-    ] = 32,
+        int | None,
+        typer.Option("--max-tokens", min=1, max=256, help="Bound generated response tokens."),
+    ] = None,
     output_format: Annotated[
         OutputFormat, typer.Option("--format", case_sensitive=False, help="Report format.")
     ] = OutputFormat.TEXT,
@@ -138,12 +134,9 @@ def quality_check(
 ) -> None:
     """Advisory-check commit-message quality with an optional local model."""
     try:
-        if model_id is None:
-            model_id = DEFAULT_BEDROCK_MODEL_ID if provider == "bedrock" else DEFAULT_MODEL_ID
-        if revision is None and provider == "huggingface":
-            revision = DEFAULT_MODEL_REVISION
         report = check_commit_quality(
             repository,
+            config=config,
             message=message,
             file=file_,
             stdin=stdin,

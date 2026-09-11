@@ -8,6 +8,8 @@
   offline cache support and versioned text/JSON reports.
 - Extended commit quality with configurable Hugging Face classification/seq2seq tasks and an
   optional Amazon Bedrock Converse adapter using Nova Micro by default.
+- Added strict `[commit.quality]` configuration defaults with per-invocation CLI overrides; secrets
+  remain outside YAGA policy files.
 
 YAGA keeps a human-readable [CHANGELOG.md](https://github.com/dariuszpanas/yaga/blob/main/CHANGELOG.md)
 at the repository root. It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
