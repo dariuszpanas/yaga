@@ -98,6 +98,7 @@ def check_commit_quality(
     offline: bool = False,
     region: str | None = None,
     max_tokens: int | None = None,
+    max_input_tokens: int | None = None,
 ) -> QualityReport:
     """Run the opt-in quality model against one explicit source selection."""
     selected = [
@@ -130,6 +131,9 @@ def check_commit_quality(
         offline=offline,
         region=region if region is not None else settings.region,
         max_tokens=max_tokens if max_tokens is not None else settings.max_tokens,
+        max_input_tokens=(
+            max_input_tokens if max_input_tokens is not None else settings.max_input_tokens
+        ),
     )
 
 

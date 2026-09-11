@@ -17,10 +17,12 @@ DEFAULT_MODEL_ID = "saridormi/commit-message-quality-codebert"
 DEFAULT_MODEL_REVISION = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
 DEFAULT_BEDROCK_MODEL_ID = "amazon.nova-micro-v1:0"
 DEFAULT_LOW_QUALITY_THRESHOLD = 0.70
+DEFAULT_MAX_INPUT_TOKENS = 512
 MAX_MODEL_ID_LENGTH = 256
 MAX_REVISION_LENGTH = 64
 MAX_RESULTS = 256
 MAX_REASON_LENGTH = 500
+MAX_INPUT_TOKENS = 4096
 
 Decision = Literal["pass", "flag"]
 
@@ -70,6 +72,7 @@ class QualityReport:
     revision: str | None
     offline: bool
     region: str | None
+    max_input_tokens: int | None
 
     @property
     def flagged(self) -> int:
@@ -91,9 +94,19 @@ def check_quality(
     offline: bool = False,
     region: str | None = None,
     max_tokens: int = 32,
+    max_input_tokens: int = DEFAULT_MAX_INPUT_TOKENS,
 ) -> QualityReport:
     """Run an opt-in bounded quality backend against commit messages."""
-    _validate_options(provider, task, model_id, revision, threshold, region, max_tokens)
+    _validate_options(
+        provider,
+        task,
+        model_id,
+        revision,
+        threshold,
+        region,
+        max_tokens,
+        max_input_tokens,
+    )
     if len(targets) > MAX_RESULTS:
         raise InputError(f"quality check cannot inspect more than {MAX_RESULTS} messages")
     if offline and provider != "huggingface":
@@ -107,6 +120,7 @@ def check_quality(
         offline=offline,
         region=region,
         max_tokens=max_tokens,
+        max_input_tokens=max_input_tokens,
     )
     results = tuple(
         QualityResult(
@@ -116,7 +130,16 @@ def check_quality(
         )
         for target in targets
     )
-    return QualityReport(results, provider, task, model_id, revision, offline, region)
+    return QualityReport(
+        results,
+        provider,
+        task,
+        model_id,
+        revision,
+        offline,
+        region,
+        max_input_tokens if provider == "huggingface" else None,
+    )
 
 
 def _load_predictor(
@@ -129,9 +152,18 @@ def _load_predictor(
     offline: bool,
     region: str | None,
     max_tokens: int,
+    max_input_tokens: int,
 ) -> Callable[[str], QualityAssessment]:
     if provider == "huggingface":
-        return _load_huggingface(task, model_id, revision, threshold, offline, max_tokens)
+        return _load_huggingface(
+            task,
+            model_id,
+            revision,
+            threshold,
+            offline,
+            max_tokens,
+            max_input_tokens,
+        )
     if provider == "bedrock":
         return _load_bedrock(model_id, region, max_tokens)
     raise InputError("quality provider must be one of: bedrock, huggingface")
@@ -144,6 +176,7 @@ def _load_huggingface(
     threshold: float,
     offline: bool,
     max_tokens: int,
+    max_input_tokens: int = DEFAULT_MAX_INPUT_TOKENS,
 ) -> Callable[[str], QualityAssessment]:
     try:
         transformers = import_module("transformers")
@@ -165,7 +198,7 @@ def _load_huggingface(
                 model=model,
                 tokenizer=tokenizer,
                 truncation=True,
-                max_length=512,
+                max_length=max_input_tokens,
                 top_k=None,
             )
 
@@ -186,7 +219,10 @@ def _load_huggingface(
 
         def predict(message: str) -> QualityAssessment:
             encoded = tokenizer(
-                _prompt(message), return_tensors="pt", truncation=True, max_length=512
+                _prompt(message),
+                return_tensors="pt",
+                truncation=True,
+                max_length=max_input_tokens,
             )
             generated = model.generate(**encoded, max_new_tokens=max_tokens, do_sample=False)
             text = tokenizer.decode(generated[0], skip_special_tokens=True)
@@ -310,6 +346,7 @@ def _validate_options(
     threshold: float,
     region: str | None,
     max_tokens: int,
+    max_input_tokens: int,
 ) -> None:
     if provider not in {"bedrock", "huggingface"}:
         raise InputError("quality provider must be one of: bedrock, huggingface")
@@ -340,3 +377,7 @@ def _validate_options(
         raise InputError("Bedrock region must be printable ASCII of at most 64 characters")
     if type(max_tokens) is not int or not 1 <= max_tokens <= 256:
         raise InputError("quality max tokens must be an integer from 1 through 256")
+    if type(max_input_tokens) is not int or not 1 <= max_input_tokens <= MAX_INPUT_TOKENS:
+        raise InputError(
+            f"quality max input tokens must be an integer from 1 through {MAX_INPUT_TOKENS}"
+        )

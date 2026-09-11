@@ -8,6 +8,7 @@ import pytest
 
 from yaga.commits.models import CommitTarget, OutputFormat
 from yaga.commits.quality import (
+    DEFAULT_MAX_INPUT_TOKENS,
     DEFAULT_MODEL_REVISION,
     QualityAssessment,
     _load_huggingface,
@@ -54,6 +55,7 @@ def test_quality_uses_injected_predictor_boundary(monkeypatch: pytest.MonkeyPatc
     )
     assert report.flagged == 1
     assert report.results[0].assessment.score == 0.81
+    assert report.max_input_tokens == DEFAULT_MAX_INPUT_TOKENS
 
 
 @pytest.mark.parametrize(
@@ -112,6 +114,41 @@ def test_classifier_applies_offline_only_during_model_loading(
     assert "local_files_only" not in next(kwargs for kind, kwargs in calls if kind == "pipeline")
 
 
+def test_classifier_receives_the_configured_input_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    class Loader:
+        @staticmethod
+        def from_pretrained(*args: object, **kwargs: object) -> object:
+            return object()
+
+    def pipeline(*args: object, **kwargs: object):
+        calls.append(dict(kwargs))
+        return lambda _message: [{"label": "LABEL_0", "score": 0.1}]
+
+    monkeypatch.setattr(
+        "yaga.commits.quality.import_module",
+        lambda _name: SimpleNamespace(
+            AutoTokenizer=Loader,
+            AutoModelForSequenceClassification=Loader,
+            pipeline=pipeline,
+        ),
+    )
+
+    predictor = _load_huggingface(
+        "classification",
+        "model",
+        DEFAULT_MODEL_REVISION,
+        0.7,
+        True,
+        32,
+        1024,
+    )
+
+    assert predictor("feat: message").decision == "pass"
+    assert calls[0]["max_length"] == 1024
+
+
 def test_quality_rejects_unpinned_revision() -> None:
     with pytest.raises(InputError, match="lowercase hexadecimal"):
         check_quality([], revision="main")
@@ -135,6 +172,7 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
         revision=DEFAULT_MODEL_REVISION,
     )
     document = quality_report_document(report)
+    assert document["max_input_tokens"] == DEFAULT_MAX_INPUT_TOKENS
     assert document["commits"][0]["message_lines"] == 3
     assert document["commits"][0]["message_body_lines"] == 1
     rendered = render_quality_report(report, OutputFormat.TEXT)
