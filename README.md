@@ -80,6 +80,8 @@ window. Quality sends the complete message, including the body, by default; use 
 or `input-mode = "title"` when title-only scoring is intentional. Reports identify the selected
 mode. Use `--format github` in Actions for escaped warning annotations when the advisory flags a
 message; provider failures remain error annotations with exit `2`.
+Reports also include a SHA-256 fingerprint of the exact bounded title or full-message input selected
+for inference, so title/body coverage can be compared without printing commit text.
 
 See the [commit policy guide](docs/commit-policy.md#optional-model-quality-advisory) for source
 modes, provider/task compatibility, cache and offline replay, configuration precedence, and report
