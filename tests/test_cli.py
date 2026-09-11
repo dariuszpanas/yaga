@@ -777,6 +777,36 @@ instruction = "Review behavior."
     assert "1 lens(es), 1 required (correctness)" in result.stdout
 
 
+def test_agent_review_policy_plan_reports_json(tmp_path: Path) -> None:
+    policy = tmp_path / ".yaga.toml"
+    policy.write_text(
+        "[agent-review]\n"
+        "version = 1\n"
+        "required = ['correctness']\n"
+        "[agent-review.agents.correctness]\n"
+        "preset = 'codex'\n"
+        "instruction = 'Review behavior.'\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "gate",
+            "agent-review",
+            "policy",
+            "plan",
+            "--file",
+            str(policy),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert '"name": "correctness"' in result.stdout
+
+
 @pytest.mark.parametrize(
     "operation",
     ["authorize", "finalize", "invalidate", "observe", "prepare", "request"],

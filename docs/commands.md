@@ -22,6 +22,7 @@ for operational errors. Use `yaga <group> --help` for the exact current option s
 | `yaga workflow lint` | Run pinned actionlint in a hardened container. | explicit workflow paths |
 | `yaga gate agent-review <operation>` | Run the Agent review-gate operation. | trusted Action context |
 | `yaga gate agent-review policy check --file <path>` | Validate named review lenses without contacting a provider. | local policy validation |
+| `yaga gate agent-review policy plan --file <path>` | Expand lenses into provider-neutral adapter work. | local plan inspection |
 
 ## Selection rules
 
