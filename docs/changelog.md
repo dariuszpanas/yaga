@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add a provider-neutral Agent review adapter checklist covering plan digests, multi-lens execution,
+  evidence correlation, receipts, bounded summaries, and exit-code handling.
 - Document Docker and actionlint troubleshooting, including bounded cleanup errors and safe
   inspection of the exact named workspace without broad Docker pruning.
 - Count only parsed prose-body lines in quality coverage output, excluding recognized footer blocks.

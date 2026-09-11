@@ -111,6 +111,34 @@ remove lenses or edit the digest. The command is read-only and prints only JSON,
 for a temporary handoff file or a job artifact. Evaluation still revalidates the file against the
 current policy.
 
+## Adapter integration checklist
+
+An adapter can be implemented in any language or workflow system. Keep provider-specific execution
+outside YAGA and make the YAGA boundary a small, deterministic handoff:
+
+1. Load the trusted policy and run `policy check` before contacting a provider.
+2. Render `policy plan --format json` and retain its `plan_digest` with the adapter run.
+3. For each ordered lens, select the adapter named by `preset`, pass its `instruction` as data,
+   and preserve the requested `outcome` and `publication` mode. Do not treat the instruction as
+   executable shell or workflow source.
+4. Correlate every provider result to the exact pull request, base SHA, head SHA, lifecycle
+   boundary, and adapter request before accepting it. An uncorrelated result is `pending` or an
+   operational failure, never an implicit pass.
+5. Start from `policy template` or construct the same complete receipt: one result per lens, in
+   any order, with the exact plan digest. Use `passed` for a completed clean lens, `failed` for a
+   completed finding, and `pending` when the provider has not completed.
+6. Run `policy evaluate --format github` in the publishing step. Exit `0` means all required
+   lenses passed, `1` means a valid blocking finding, and `2` means the policy, receipt, provider
+   handoff, or invocation could not be validated safely.
+
+The adapter may publish comments, inline findings, reactions, reviews, or checks while it runs,
+but those provider artifacts are not the receipt itself. Keep the receipt summary short and
+bounded; store detailed provider output in the provider's own bounded artifact or review surface.
+Never put credentials, access tokens, or unbounded provider responses in the policy, plan, receipt,
+GitHub outputs, or error text. If a lens fails before a provider result can be correlated, retain
+the explicit `pending` result and report the operational cause separately rather than fabricating a
+`failed` review outcome.
+
 Treat the plan and receipt as one versioned handoff. A trusted adapter should generate the plan from
 the policy, pass each ordered lens to its selected provider, preserve the lens name and requested
 publication mode in its own provider work, and write one result for every plan item. If the policy
