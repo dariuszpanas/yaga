@@ -10,6 +10,8 @@
   optional Amazon Bedrock Converse adapter using Nova Micro by default.
 - Added strict `[commit.quality]` configuration defaults with per-invocation CLI overrides; secrets
   remain outside YAGA policy files.
+- Added configurable `body-max-single-line-paragraphs` enforcement for deterministic detection of
+  bodies split into excessive one-line prose paragraphs; list items remain exempt.
 
 YAGA keeps a human-readable [CHANGELOG.md](https://github.com/dariuszpanas/yaga/blob/main/CHANGELOG.md)
 at the repository root. It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)

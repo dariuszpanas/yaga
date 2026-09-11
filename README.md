@@ -112,6 +112,8 @@ body-policy = "optional"
 body-min-length = 0
 body-min-words = 8
 # Omit body-max-line-length unless this repository wants a wrapping limit.
+# Omit body-max-single-line-paragraphs unless this repository wants to limit
+# one-line prose paragraphs separated by blank lines.
 dependabot-pull-requests = "skip" # check or skip in event-aware PR checks
 merge-commits = "reject"         # ignore, check, or reject
 ignored-headers = ['Revert "*"'] # bounded, case-sensitive glob patterns
@@ -189,6 +191,10 @@ token. The minimum is checked only when a prose body exists, so use `body-policy
 require one. A recognized final footer block is not prose body and does not contribute words. When
 `body-policy = "forbidden"`, both body minima must be zero.
 
+`body-max-single-line-paragraphs` optionally limits prose paragraphs that contain only one
+non-empty line. It catches bodies with a blank line between every sentence while leaving list items
+alone. Omit it for unlimited layout, or set it to `0` when every prose paragraph must be wrapped.
+
 For a new repository, YAGA can create a recommended standalone policy and immediately report its
 effective values:
 
@@ -203,7 +209,8 @@ checks at most 64 commits per range. Initialization creates only `.yaga.toml`: i
 directory. Use `--format json` when another tool needs the created path and effective policy.
 
 Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`,
-`scope.forbidden`, `header.length`, `breaking.marker-pair`, `body.word-count`, `footer.required`,
+`scope.forbidden`, `header.length`, `breaking.marker-pair`, `body.word-count`,
+`body.paragraph-format`, `footer.required`,
 and `footer.forbidden`. Text and versioned JSON reports use these exit codes:
 
 | Exit | Meaning |

@@ -51,6 +51,7 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 | `body-min-length` | Nonnegative prose-body character lower bound. |
 | `body-min-words` | Integer from 0 through 100000, counting prose tokens. |
 | `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
+| `body-max-single-line-paragraphs` | Optional maximum number of one-line prose paragraphs; omitted means unlimited. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
 | `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, and max-tokens. |
@@ -61,6 +62,20 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 `scope-policy-by-type` keys are case-insensitively unique and must be reachable through
 `allowed-types`. `required-footer-tokens` and `forbidden-footer-tokens` are case-insensitively
 unique, non-overlapping, and cannot use `BREAKING CHANGE` or `BREAKING-CHANGE`.
+
+### Body layout settings
+
+`body-max-line-length` is an optional wrapping limit; omitting it leaves body line length
+unlimited. `body-max-single-line-paragraphs` is a separate optional layout limit. It counts prose
+paragraphs made of exactly one non-empty line after parsing the header and final footer block. List
+items beginning with `-`, `*`, `+`, or a numbered marker such as `1.` are not counted. Omit the
+setting to allow any layout, set it to `2` to permit two intentional one-line paragraphs, or set it
+to `0` to require every prose paragraph to contain at least two lines.
+
+The check reports `body.paragraph-format` at the first offending paragraph and is deterministic;
+it does not depend on the optional quality model. This makes it suitable for enforcing repository
+formatting policy when a model would correctly recognize the words but overlook their blank-line
+layout.
 
 ### Quality advisory settings
 
