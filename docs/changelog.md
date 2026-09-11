@@ -4,6 +4,8 @@
 
 ### Added
 
+- Clarify that `config init` requires lowercase commit types while keeping scopes optional and
+  lowercased when present.
 - Include aggregate character and token coverage counts in the GitHub quality notice, including
   complete, truncated, and unmeasured messages when per-message warnings are absent.
 - Link the Agent review gate guide directly from the command reference table.
