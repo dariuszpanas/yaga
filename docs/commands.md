@@ -1,8 +1,10 @@
 # Commands
 
-The installed command groups are deliberately separated. Every command has bounded inputs,
-stable text/JSON/GitHub reporting, and exit codes `0` for pass, `1` for policy findings, and `2`
-for operational errors. Use `yaga <group> --help` for the exact current option surface.
+The installed command groups are deliberately separated. Commands have bounded inputs, stable
+reports, and exit codes `0` for pass, `1` for policy findings, and `2` for operational errors.
+Report formats are command-specific: provider checks and standalone `commit check` support
+text/JSON/GitHub reporting where documented, while configuration and quality reports use
+text/JSON. Use `yaga <group> --help` for the exact current option surface.
 
 | Command | Purpose | Typical source |
 | --- | --- | --- |
