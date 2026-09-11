@@ -16,6 +16,7 @@ TIMEOUT_SECONDS = 5
 MAX_CORRECTIONS = 16
 MAX_CORRECTION_BYTES = 128
 MAX_SUGGESTION_BYTES = 256
+MAX_BYTE_OFFSET = 100_000
 
 
 def check_typos(message: str, *, repository: Path | None = None) -> tuple[Diagnostic, ...]:
@@ -62,12 +63,19 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
         if not isinstance(value, dict) or value.get("type") != "typo":
             raise InputError("typos returned an unexpected JSON diagnostic")
         line_value = value.get("line_num")
+        byte_offset = value.get("byte_offset")
         typo = value.get("typo")
         corrections = value.get("corrections")
         if (
             type(line_value) is not int
             or line_value < 1
             or line_value > 100_000
+            or (
+                byte_offset is not None
+                and (
+                    type(byte_offset) is not int or byte_offset < 0 or byte_offset > MAX_BYTE_OFFSET
+                )
+            )
             or not isinstance(typo, str)
             or not typo
             or len(typo.encode("utf-8")) > MAX_CORRECTION_BYTES
@@ -81,7 +89,14 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
         message = f"possible typo {typo!r}"
         if suggestion:
             message += f"; suggestions: {suggestion}"
-        diagnostics.append(Diagnostic(code="typos.word", message=message, line=line_value))
+        diagnostics.append(
+            Diagnostic(
+                code="typos.word",
+                message=message,
+                line=line_value,
+                column=byte_offset + 1 if byte_offset is not None else 1,
+            )
+        )
         if len(diagnostics) >= 256:
             raise InputError("typos returned too many commit-message diagnostics")
     if not diagnostics:
