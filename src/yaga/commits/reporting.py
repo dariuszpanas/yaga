@@ -190,6 +190,24 @@ def _render_quality_github_report(report: QualityReport) -> str:
     if report.max_input_tokens is not None:
         metadata += f"; Max tokens: {report.max_input_tokens}"
     metadata += f"; Max chars: {report.max_input_characters}"
+    character_results = [result for result in report.results if result.input_characters is not None]
+    if character_results:
+        character_truncated = sum(
+            result.input_character_truncated is True for result in character_results
+        )
+        metadata += (
+            f"; Character coverage: {len(character_results) - character_truncated} complete, "
+            f"{character_truncated} truncated, "
+            f"{len(report.results) - len(character_results)} unmeasured"
+        )
+    token_results = [result for result in report.results if result.input_tokens is not None]
+    if token_results:
+        token_truncated = sum(result.input_truncated is True for result in token_results)
+        metadata += (
+            f"; Token coverage: {len(token_results) - token_truncated} measured, "
+            f"{token_truncated} truncated, "
+            f"{len(report.results) - len(token_results)} unmeasured"
+        )
     thresholds = {result.threshold for result in report.results if result.threshold is not None}
     if len(thresholds) == 1:
         metadata += f"; Threshold: {next(iter(thresholds)):.3f}"

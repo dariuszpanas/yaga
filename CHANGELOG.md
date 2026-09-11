@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Include aggregate character and token coverage counts in the GitHub quality notice, including
+  complete, truncated, and unmeasured messages when per-message warnings are absent.
 - Count only parsed prose-body lines in quality coverage output, excluding recognized footer blocks.
 - Include per-message body-line and model-input coverage in flagged GitHub quality annotations so
   complete-message versus title-only and truncation behavior is visible in CI output.

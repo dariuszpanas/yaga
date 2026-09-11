@@ -4,6 +4,8 @@
 
 ### Added
 
+- Include aggregate character and token coverage counts in the GitHub quality notice, including
+  complete, truncated, and unmeasured messages when per-message warnings are absent.
 - Link the Agent review gate guide directly from the command reference table.
 - Add a provider-neutral Agent review adapter checklist covering plan digests, multi-lens execution,
   evidence correlation, receipts, bounded summaries, and exit-code handling.
