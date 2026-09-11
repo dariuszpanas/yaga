@@ -70,6 +70,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Fixed
 
+- Include a bounded sanitized Docker cause when actionlint container or workspace cleanup fails,
+  making daemon and resource-state errors actionable in local and CI reports.
 - Count body lines correctly in commit-quality reports when messages use Windows CRLF line
   endings.
 - Reject unsupported Bedrock quality tasks and model revisions during configuration or invocation,

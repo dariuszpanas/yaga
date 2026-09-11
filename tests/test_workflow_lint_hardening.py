@@ -775,7 +775,7 @@ def test_cleanup_removes_exact_names_and_names_unconfirmed_resources(
         "_list_labeled_containers",
         lambda *args, **kwargs: (_ for _ in ()).throw(InputError("inspect failed")),
     )
-    with pytest.raises(InputError, match="private-container"):
+    with pytest.raises(InputError, match="private-container: inspect failed"):
         runtime.remove_labeled_containers(
             "docker",
             tmp_path,
@@ -788,7 +788,7 @@ def test_cleanup_removes_exact_names_and_names_unconfirmed_resources(
         "_list_labeled_volumes",
         lambda *args, **kwargs: (_ for _ in ()).throw(InputError("inspect failed")),
     )
-    with pytest.raises(InputError, match="private-volume"):
+    with pytest.raises(InputError, match="private-volume: inspect failed"):
         runtime.remove_workspace_volume(
             "docker",
             tmp_path,
