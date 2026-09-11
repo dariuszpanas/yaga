@@ -173,13 +173,10 @@ def test_evaluate_results_rejects_an_incomplete_receipt() -> None:
     results = AgentReviewResults(
         version=1,
         plan_digest=review_plan_digest(),
-        results=(
-            LensResult("correctness", LensOutcome.PASSED),
-            LensResult("security", LensOutcome.PENDING),
-        ),
+        results=(LensResult("correctness", LensOutcome.PASSED),),
     )
 
-    with pytest.raises(ConfigurationError, match="missing lens docs"):
+    with pytest.raises(ConfigurationError, match=r"missing lens\(es\): security, docs"):
         evaluate_results(review_policy(), results)
 
 
