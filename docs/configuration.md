@@ -148,13 +148,16 @@ Python package cache, so changing or clearing one does not silently make the oth
 
 ```bash
 yaga config init --repo .
+yaga config init --repo . --dry-run
 yaga config show --repo .
 yaga config show --repo . --format json
 ```
 
 `config init` creates only `.yaga.toml`, refuses to overwrite an existing discovered policy, and
 prints the created path and effective values. `config show` is useful for diagnosing discovery,
-normalization, and default values before running a check.
+normalization, and default values before running a check. Add `--dry-run` to perform the same
+directory, discovery, target, and policy validation without publishing the file; its report names
+the `.yaga.toml` path that would be created.
 
 ## Standalone provider policies
 

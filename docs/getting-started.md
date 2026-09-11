@@ -23,7 +23,8 @@ uv run yaga config show --repo .
 
 Initialization creates only `.yaga.toml` and refuses to overwrite an existing discovered policy.
 Policy discovery selects one nearest `.yaga.toml` or `pyproject.toml`; use `--config` when the
-source must be explicit.
+source must be explicit. Use `uv run yaga config init --repo . --dry-run` when a bootstrap or CI
+step should validate and inspect the starter policy without writing it.
 
 ## Check a commit
 

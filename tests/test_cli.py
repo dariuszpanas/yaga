@@ -680,6 +680,15 @@ def test_config_init_creates_and_reports_a_standalone_policy(tmp_path: Path) -> 
     assert document["config"]["scope_policy_by_type"] == {}
 
 
+def test_config_init_dry_run_reports_without_creating_policy(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["config", "init", "--repo", str(tmp_path), "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "source: " in result.stdout
+    assert str(tmp_path / ".yaga.toml") in result.stdout
+    assert not (tmp_path / ".yaga.toml").exists()
+
+
 def test_config_init_refuses_to_overwrite_and_uses_exit_two(tmp_path: Path) -> None:
     config = tmp_path / ".yaga.toml"
     original = 'config-version = 1\n[commit]\nallowed-types = ["docs"]\n'

@@ -69,6 +69,18 @@ def test_initialize_config_writes_exact_recommended_configuration(tmp_path: Path
         assert stat.S_IMODE(target.stat().st_mode) == 0o644
 
 
+def test_initialize_config_dry_run_validates_without_publishing(tmp_path: Path) -> None:
+    target_repository = repository(tmp_path / "repository")
+
+    loaded = initialize_config(target_repository, dry_run=True)
+
+    target = target_repository / ".yaga.toml"
+    assert not target.exists()
+    assert loaded.path == target.resolve()
+    assert loaded.policy.body_paragraph_splitting.value == "check"
+    assert list(target_repository.glob(".yaga.toml.*.tmp")) == []
+
+
 def test_initialized_configuration_round_trips_to_the_recommended_policy(
     tmp_path: Path,
 ) -> None:
