@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from yaga.commits.models import Diagnostic
@@ -14,7 +15,7 @@ MAX_OUTPUT_BYTES = 64 * 1024
 TIMEOUT_SECONDS = 5
 
 
-def check_typos(message: str) -> tuple[Diagnostic, ...]:
+def check_typos(message: str, *, repository: Path | None = None) -> tuple[Diagnostic, ...]:
     """Check one commit message through an installed ``typos`` executable."""
     executable = shutil.which("typos")
     if executable is None:
@@ -22,6 +23,7 @@ def check_typos(message: str) -> tuple[Diagnostic, ...]:
     try:
         completed = subprocess.run(
             [executable, "-", "--format", "json"],
+            cwd=str(repository) if repository is not None else None,
             input=message.encode("utf-8"),
             capture_output=True,
             check=False,
