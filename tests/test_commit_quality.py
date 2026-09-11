@@ -17,6 +17,7 @@ from yaga.commits.quality import (
     _input_truncation,
     _load_huggingface,
     _low_quality_probability,
+    _model_input,
     _parse_decision,
     check_quality,
 )
@@ -86,6 +87,13 @@ def test_unknown_model_input_coverage_is_not_reported_as_complete() -> None:
     assert _input_truncation(None, 512) is None
     assert _input_truncation(512, 512) is False
     assert _input_truncation(513, 512) is True
+
+
+def test_quality_input_mode_selects_title_or_complete_message() -> None:
+    message = "fix: parser\n\nExplain the parser behavior."
+
+    assert _model_input(message, "message") == message
+    assert _model_input(message, "title") == "fix: parser"
 
 
 def test_classifier_applies_offline_only_during_model_loading(
@@ -208,6 +216,44 @@ def test_classifier_reports_when_the_input_exceeds_the_configured_window(
     assert prediction.input_tokens == 9
 
 
+def test_classifier_receives_title_only_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    received: list[str] = []
+
+    class Loader:
+        @staticmethod
+        def from_pretrained(*args: object, **kwargs: object) -> object:
+            return SimpleNamespace()
+
+    def pipeline(*args: object, **kwargs: object):
+        def classify(message: str) -> list[dict[str, object]]:
+            received.append(message)
+            return [{"label": "LABEL_0", "score": 0.1}]
+
+        return classify
+
+    monkeypatch.setattr(
+        "yaga.commits.quality.import_module",
+        lambda _name: SimpleNamespace(
+            AutoTokenizer=Loader,
+            AutoModelForSequenceClassification=Loader,
+            pipeline=pipeline,
+        ),
+    )
+
+    predictor = _load_huggingface(
+        "classification",
+        "model",
+        DEFAULT_MODEL_REVISION,
+        0.7,
+        True,
+        32,
+        input_mode="title",
+    )
+
+    assert predictor("fix: parser\n\nExplain the parser behavior.").decision == "pass"
+    assert received == ["fix: parser"]
+
+
 def test_quality_rejects_unpinned_revision() -> None:
     with pytest.raises(InputError, match="lowercase hexadecimal"):
         check_quality([], revision="main")
@@ -274,6 +320,22 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
     assert document["commits"][0]["message_body_lines"] == 1
     rendered = render_quality_report(report, OutputFormat.TEXT)
     assert "(3 lines checked; 1 body line included)" in rendered
+
+
+def test_quality_report_identifies_title_only_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("pass", 0.1),
+    )
+    report = check_quality(
+        [CommitTarget(label="message", message="fix: parser\n\nExplain the parser behavior.")],
+        revision=DEFAULT_MODEL_REVISION,
+        input_mode="title",
+    )
+
+    document = quality_report_document(report)
+    assert document["input_mode"] == "title"
+    assert "[model input: title only]" in render_quality_report(report, OutputFormat.TEXT)
 
 
 def test_quality_report_makes_title_only_input_explicit(

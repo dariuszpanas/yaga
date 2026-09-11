@@ -120,6 +120,7 @@ revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
 threshold = 0.70
 max-tokens = 32
 max-input-tokens = 512
+input-mode = "message"
 ```
 
 `provider` is `huggingface` or `bedrock`; `task` is `classification` or `seq2seq`. The Bedrock
@@ -129,6 +130,12 @@ and a provider-specific `model`. `max-tokens` is bounded from 1 through 256, whi
 `max-input-tokens` defaults to 512 and is bounded from 1 through 4096 for Hugging Face models.
 The CLI `--max-input-tokens` option overrides it for one invocation. Use `--config` when the quality
 settings should come from one explicit file rather than normal nearest-file discovery.
+
+`input-mode` controls the text sent to the provider. It accepts `message` (the default, sending the
+complete commit message including its body) or `title` (sending only the first line). Reports
+always retain the full selected commit message and identify the mode so a title-only result is not
+mistaken for a full-message check. The CLI `--input-mode` option overrides this default for one
+invocation.
 
 The development quality extra uses PyTorch's CPU wheel index on Linux because YAGA's quality
 adapters run CPU inference; this avoids installing CUDA libraries in the hosted quality workflow.

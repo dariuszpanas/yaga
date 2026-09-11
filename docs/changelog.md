@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added configurable commit-quality `input-mode` selection between the complete message and title
+  only, with the selected mode included in reports.
 - Added `agent-review policy template` to emit a complete, plan-digest-bound pending receipt
   scaffold for multi-lens external adapters.
 - Added escaped commit-quality output to the GitHub Actions step summary for both online and offline

@@ -158,6 +158,13 @@ def quality_check(
             help="Bound Hugging Face model input tokens; ignored by Bedrock.",
         ),
     ] = None,
+    input_mode: Annotated[
+        str | None,
+        typer.Option(
+            "--input-mode",
+            help="Select model input: complete message or title only.",
+        ),
+    ] = None,
     output_format: Annotated[
         QualityOutputFormat,
         typer.Option("--format", case_sensitive=False, help="Report format."),
@@ -185,6 +192,7 @@ def quality_check(
             region=region,
             max_tokens=max_tokens,
             max_input_tokens=max_input_tokens,
+            input_mode=input_mode,
         )
     except YagaError as error:
         typer.echo(render_quality_error(error, output_format), err=True)

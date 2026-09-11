@@ -20,6 +20,7 @@ from yaga.commits.models import (
     MergePolicy,
     ParagraphSplittingPolicy,
     PresencePolicy,
+    QualityInputMode,
     QualityPolicy,
     QualityProvider,
     QualityTask,
@@ -375,6 +376,7 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
             "region",
             "max-tokens",
             "max-input-tokens",
+            "input-mode",
         }
     )
     _reject_unknown(value, allowed, label="commit.quality", path=path)
@@ -383,6 +385,12 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
         value.get("provider", defaults.provider.value), QualityProvider, "quality.provider", path
     )
     task = _enum(value.get("task", defaults.task.value), QualityTask, "quality.task", path)
+    input_mode = _enum(
+        value.get("input-mode", defaults.input_mode.value),
+        QualityInputMode,
+        "quality.input-mode",
+        path,
+    )
     if provider is QualityProvider.BEDROCK and task is QualityTask.SEQ2SEQ:
         raise ConfigurationError(
             f"quality.task = 'seq2seq' is supported only by the Hugging Face provider in {path}"
@@ -447,6 +455,7 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
         region,
         max_tokens,
         max_input_tokens,
+        input_mode,
     )
 
 
