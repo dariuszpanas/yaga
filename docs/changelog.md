@@ -36,6 +36,8 @@
 
 ### Changed
 
+- Enable the bounded Typos commit-message check in YAGA's own policy and install the pinned CLI in
+  the hosted commit-policy and CI workflows.
 - Resolve Linux quality dependencies from PyTorch's CPU wheel index so CPU-only model checks do not
   download the CUDA runtime stack.
 - Added `--format github` to standalone `commit check`, producing bounded escaped annotations,

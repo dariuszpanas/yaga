@@ -136,6 +136,7 @@ forbidden-footer-tokens = ["WIP"]
 body-policy = "required"
 body-min-words = 8
 body-paragraph-splitting = "check"
+typos = "check"
 dependabot-pull-requests = "skip"
 merge-commits = "reject"
 ignored-headers = []

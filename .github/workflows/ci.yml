@@ -29,6 +29,8 @@ jobs:
         with:
           enable-cache: true
           version: "0.12.7"
+      - name: Install Typos CLI
+        run: cargo install typos-cli --version 1.49.0 --locked
       - run: uv sync --frozen --group dev --python 3.12
       - run: uv run --frozen --python 3.12 ruff check .
       - run: uv run --frozen --python 3.12 ruff format --check .
