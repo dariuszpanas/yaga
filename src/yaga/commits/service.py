@@ -92,10 +92,14 @@ def check_commit_quality(
     stdin: bool = False,
     commit: str | None = None,
     revision_range: str | None = None,
+    provider: str = "huggingface",
+    task: str = "classification",
     model_id: str = DEFAULT_MODEL_ID,
-    revision: str = DEFAULT_MODEL_REVISION,
+    revision: str | None = DEFAULT_MODEL_REVISION,
     threshold: float = DEFAULT_LOW_QUALITY_THRESHOLD,
     offline: bool = False,
+    region: str | None = None,
+    max_tokens: int = 32,
 ) -> QualityReport:
     """Run the opt-in quality model against one explicit source selection."""
     selected = [
@@ -119,10 +123,14 @@ def check_commit_quality(
     )
     return check_quality(
         targets,
+        provider=provider,
+        task=task,
         model_id=model_id,
         revision=revision,
         threshold=threshold,
         offline=offline,
+        region=region,
+        max_tokens=max_tokens,
     )
 
 

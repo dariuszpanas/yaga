@@ -7,7 +7,9 @@ import pytest
 from yaga.commits.models import CommitTarget
 from yaga.commits.quality import (
     DEFAULT_MODEL_REVISION,
+    QualityAssessment,
     _low_quality_probability,
+    _parse_decision,
     check_quality,
 )
 from yaga.errors import InputError
@@ -34,14 +36,29 @@ def test_quality_rejects_untrusted_model_output(value: object) -> None:
 def test_quality_uses_injected_predictor_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "yaga.commits.quality._load_predictor",
-        lambda *_args, **_kwargs: lambda _message: 0.81,
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("flag", 0.81),
     )
     report = check_quality(
         [CommitTarget(label="message", message="feat: a message")],
         revision=DEFAULT_MODEL_REVISION,
     )
     assert report.flagged == 1
-    assert report.results[0].prediction.low_quality_probability == 0.81
+    assert report.results[0].assessment.score == 0.81
+
+
+@pytest.mark.parametrize(
+    ("text", "decision", "reason"),
+    [("PASS clear change", "pass", "clear change"), ("FLAG vague", "flag", "vague")],
+)
+def test_quality_parses_bounded_provider_decisions(text: str, decision: str, reason: str) -> None:
+    assessment = _parse_decision(text)
+    assert assessment.decision == decision
+    assert assessment.reason == reason
+
+
+def test_quality_rejects_untrusted_provider_decision() -> None:
+    with pytest.raises(ValueError, match="expected PASS"):
+        _parse_decision("maybe")
 
 
 def test_quality_rejects_unpinned_revision() -> None:

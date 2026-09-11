@@ -105,22 +105,36 @@ pre-commit integration for source files; YAGA's adapter is narrowly scoped to co
 ## Optional model quality advisory
 
 Typos catches spelling mistakes, but it cannot tell whether a message explains a meaningful change.
-For a broader, still local and opt-in signal, install the quality extra and run:
+For a broader, opt-in signal, choose a provider and run:
 
 ```bash
 uv sync --extra quality
 yaga commit quality --message "fix: update parser behavior"
 yaga commit quality --range origin/main..HEAD --offline
+
+# Local instruction model
+yaga commit quality --task seq2seq --model google/flan-t5-small --revision <sha>
+
+# Amazon Bedrock
+uv sync --extra quality-bedrock
+yaga commit quality --provider bedrock --region us-east-1
 ```
 
 The command uses `saridormi/commit-message-quality-codebert` at a pinned revision by default. The
 model was trained as a binary high/low commit-message quality classifier; YAGA treats its `LABEL_0`
 score as a low-quality probability and flags messages at `0.70` or higher. Override the model,
 revision, and threshold with `--model`, `--revision`, and `--threshold` when testing a compatible
-classifier. The revision must be a lowercase hexadecimal SHA, so an accidental moving tag cannot
-silently change the result.
+classifier. The `seq2seq` task uses `AutoTokenizer` and `AutoModelForSeq2SeqLM`, bounds generation
+with `--max-tokens`, and accepts only a `PASS`/`FLAG` response. Pin every Hugging Face revision
+with a lowercase hexadecimal SHA, so an accidental moving tag cannot silently change the result.
 
-The model is advisory, not a parser, formatter, security boundary, or replacement for the
+The Bedrock provider uses the AWS SDK default credential chain and the Converse API. Its default
+model is `amazon.nova-micro-v1:0`; use `--model` for a different compatible model and `--region`
+to select the runtime region. The adapter sends only the bounded commit message and a fixed
+classification prompt. It does not expose AWS credentials, response headers, or raw provider
+errors in reports.
+
+All providers are advisory, not a parser, formatter, security boundary, or replacement for the
 configured commit policy. It may misunderstand project-specific context and should not be used to
 reject automated commits without review. The model and its Python runtime are not imported by
 either composite Action runtime, and the default package installation remains dependency-light.

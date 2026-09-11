@@ -9,9 +9,12 @@ import typer
 
 from yaga.commits.models import OutputFormat
 from yaga.commits.quality import (
+    DEFAULT_BEDROCK_MODEL_ID,
     DEFAULT_LOW_QUALITY_THRESHOLD,
     DEFAULT_MODEL_ID,
     DEFAULT_MODEL_REVISION,
+    DEFAULT_PROVIDER,
+    DEFAULT_TASK,
 )
 from yaga.commits.reporting import render_error, render_quality_report, render_report
 from yaga.commits.service import check_commit_quality
@@ -99,12 +102,18 @@ def quality_check(
         str | None, typer.Option("--range", "-r", help="Check a Git revision range oldest-first.")
     ] = None,
     repository: Annotated[Path, typer.Option("--repo", help="Git repository root.")] = Path("."),
+    provider: Annotated[
+        str, typer.Option("--provider", help="Quality backend: huggingface or bedrock.")
+    ] = DEFAULT_PROVIDER,
+    task: Annotated[
+        str, typer.Option("--task", help="Hugging Face task: classification or seq2seq.")
+    ] = DEFAULT_TASK,
     model_id: Annotated[
-        str, typer.Option("--model", help="Hugging Face model identifier.")
-    ] = DEFAULT_MODEL_ID,
+        str | None, typer.Option("--model", help="Provider model identifier.")
+    ] = None,
     revision: Annotated[
-        str, typer.Option("--revision", help="Pinned lowercase model revision SHA.")
-    ] = DEFAULT_MODEL_REVISION,
+        str | None, typer.Option("--revision", help="Pinned lowercase Hugging Face revision SHA.")
+    ] = None,
     threshold: Annotated[
         float,
         typer.Option(
@@ -114,6 +123,12 @@ def quality_check(
     offline: Annotated[
         bool, typer.Option("--offline", help="Use only the local Hugging Face cache.")
     ] = False,
+    region: Annotated[
+        str | None, typer.Option("--region", help="AWS region for the Bedrock provider.")
+    ] = None,
+    max_tokens: Annotated[
+        int, typer.Option("--max-tokens", min=1, max=256, help="Bound generated response tokens.")
+    ] = 32,
     output_format: Annotated[
         OutputFormat, typer.Option("--format", case_sensitive=False, help="Report format.")
     ] = OutputFormat.TEXT,
@@ -123,6 +138,10 @@ def quality_check(
 ) -> None:
     """Advisory-check commit-message quality with an optional local model."""
     try:
+        if model_id is None:
+            model_id = DEFAULT_BEDROCK_MODEL_ID if provider == "bedrock" else DEFAULT_MODEL_ID
+        if revision is None and provider == "huggingface":
+            revision = DEFAULT_MODEL_REVISION
         report = check_commit_quality(
             repository,
             message=message,
@@ -130,10 +149,14 @@ def quality_check(
             stdin=stdin,
             commit=commit,
             revision_range=revision_range,
+            provider=provider,
+            task=task,
             model_id=model_id,
             revision=revision,
             threshold=threshold,
             offline=offline,
+            region=region,
+            max_tokens=max_tokens,
         )
     except YagaError as error:
         typer.echo(render_error(error, output_format), err=True)
