@@ -164,7 +164,10 @@ def test_commit_quality_action_publishes_advisory_annotations() -> None:
     assert "id: model-cache" in workflow
     assert "YAGA_QUALITY_TASK: classification" in workflow
     assert "YAGA_QUALITY_MODEL_ID: saridormi/commit-message-quality-codebert" in workflow
-    assert "${{ env.YAGA_QUALITY_TASK }}-${{ env.YAGA_QUALITY_MODEL_ID }}-${{ env.YAGA_QUALITY_MODEL_REVISION }}" in workflow
+    assert (
+        "${{ env.YAGA_QUALITY_TASK }}-${{ env.YAGA_QUALITY_MODEL_ID }}-${{ env.YAGA_QUALITY_MODEL_REVISION }}"
+        in workflow
+    )
     assert "Model cache hit: ${{ steps.model-cache.outputs.cache-hit }}" in workflow
     assert "permissions:\n  contents: read" in workflow
     assert workflow.count("GITHUB_STEP_SUMMARY") == 2
