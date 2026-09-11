@@ -7,8 +7,13 @@ from typing import Annotated
 
 import typer
 
+from yaga.commits.github_reporting import (
+    CommitOutputFormat,
+    render_commit_error,
+    render_commit_report,
+)
 from yaga.commits.models import OutputFormat
-from yaga.commits.reporting import render_error, render_quality_report, render_report
+from yaga.commits.reporting import render_error, render_quality_report
 from yaga.commits.service import check_commit_quality
 from yaga.commits.service import check_commits as check_commit_service
 from yaga.errors import YagaError
@@ -47,9 +52,9 @@ def check_commits(
         typer.Option("--config", help="Use one explicit pyproject.toml or .yaga.toml."),
     ] = None,
     output_format: Annotated[
-        OutputFormat,
+        CommitOutputFormat,
         typer.Option("--format", case_sensitive=False, help="Report format."),
-    ] = OutputFormat.TEXT,
+    ] = CommitOutputFormat.TEXT,
     quiet: Annotated[
         bool,
         typer.Option("--quiet", "-q", help="Suppress reports and use only the exit code."),
@@ -67,11 +72,11 @@ def check_commits(
             config=config,
         )
     except YagaError as error:
-        typer.echo(render_error(error, output_format), err=True)
+        typer.echo(render_commit_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
 
     if not quiet:
-        typer.echo(render_report(report, output_format))
+        typer.echo(render_commit_report(report, output_format))
     if not report.valid:
         raise typer.Exit(code=1)
 

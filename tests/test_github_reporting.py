@@ -7,12 +7,15 @@ import json
 from yaga.commits.github_event import PullRequestEvent, PullRequestValidationReport
 from yaga.commits.github_reporting import (
     MAX_GITHUB_ANNOTATIONS,
+    CommitOutputFormat,
     PullRequestOutputFormat,
     _workflow_data,
+    render_commit_error,
+    render_commit_report,
     render_pull_request_error,
     render_pull_request_report,
 )
-from yaga.commits.models import CheckResult, CommitTarget, Diagnostic
+from yaga.commits.models import CheckResult, CommitTarget, Diagnostic, ValidationReport
 from yaga.errors import InputError
 
 
@@ -56,6 +59,42 @@ def _report(
         commits=(commit,),
         config_path=None,
     )
+
+
+def _commit_report(*diagnostics: Diagnostic) -> ValidationReport:
+    return ValidationReport(
+        results=(
+            CheckResult(
+                target=CommitTarget(label="commit", message="bad", sha="b" * 40),
+                header="bad",
+                diagnostics=diagnostics,
+            ),
+        ),
+        config_path=None,
+    )
+
+
+def test_standalone_commit_github_report_emits_annotations_and_summary() -> None:
+    rendered = render_commit_report(
+        _commit_report(Diagnostic(code="syntax.header", message="bad % value\n::warning::")),
+        CommitOutputFormat.GITHUB,
+    )
+
+    assert "::error title=YAGA commit policy::" in rendered
+    assert "%25" in rendered
+    assert "?::warning::" in rendered
+    assert "YAGA checked 1 commit(s): 0 passed, 1 failed, 0 skipped." in rendered
+    assert "Findings by rule: syntax.header (1)" in rendered
+    assert all(not line.startswith("::warning::") for line in rendered.splitlines())
+
+
+def test_standalone_commit_github_error_is_one_annotation() -> None:
+    rendered = render_commit_error(InputError("bad % path\n::warning::"), CommitOutputFormat.GITHUB)
+
+    assert rendered.startswith("::error title=YAGA commit policy::YAGA input error:")
+    assert "%25" in rendered
+    assert "?::warning::" in rendered
+    assert "\n" not in rendered
 
 
 def test_text_and_json_reports_keep_title_separate_from_commits() -> None:

@@ -238,6 +238,28 @@ def test_commit_check_accepts_a_message_and_uses_exit_one_for_violations(
     assert "syntax.header" in invalid.stdout
 
 
+def test_commit_check_supports_github_annotations_for_standalone_ci(
+    tmp_path: Path,
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "commit",
+            "check",
+            "--message",
+            "not a conventional commit",
+            "--repo",
+            str(tmp_path),
+            "--format",
+            "github",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout.startswith("::error title=YAGA commit policy::")
+    assert "[syntax.header]" in result.stdout
+
+
 def test_explicit_message_encoding_failure_is_exit_two(tmp_path: Path) -> None:
     result = runner.invoke(
         app,

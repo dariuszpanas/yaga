@@ -29,6 +29,8 @@
 
 ### Changed
 
+- Added `--format github` to standalone `commit check`, producing bounded escaped annotations,
+  pass/fail totals, and compact rule-count summaries for ordinary CI ranges.
 - Isolated the GitHub/Codex connector under the Agent review provider namespace and routed the
   composite Action through a provider-neutral Agent review runtime entrypoint.
 - Documented the distinction between complete selected-message line counts and the 512-token
