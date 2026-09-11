@@ -127,6 +127,7 @@ breaking-markers = "paired"
 forbidden-footer-tokens = ["WIP"]
 body-policy = "required"
 body-min-words = 8
+body-max-single-line-paragraphs = 2
 dependabot-pull-requests = "skip"
 merge-commits = "reject"
 ignored-headers = []

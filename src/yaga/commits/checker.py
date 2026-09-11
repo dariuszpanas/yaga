@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from fnmatch import fnmatchcase
 
@@ -27,6 +28,7 @@ from yaga.commits.parser import (
 from yaga.errors import InputError
 
 _TERMINAL_PUNCTUATION = (".", "!", "?")
+_LIST_ITEM = re.compile(r"^(?:[-*+]\s+|\d+[.)]\s+)")
 
 
 def check_target(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
@@ -237,6 +239,20 @@ def _check_target(
                         )
                     )
                     break
+        if policy.body_max_single_line_paragraphs is not None:
+            count, first_line = _single_line_prose_paragraphs(parsed.body_lines)
+            if count > policy.body_max_single_line_paragraphs:
+                noun = "paragraph" if count == 1 else "paragraphs"
+                diagnostics.append(
+                    Diagnostic(
+                        code="body.paragraph-format",
+                        message=(
+                            f"body has {count} single-line prose {noun}; maximum is "
+                            f"{policy.body_max_single_line_paragraphs}"
+                        ),
+                        line=parsed.body_start_line + first_line,
+                    )
+                )
         if policy.required_footer_tokens or policy.forbidden_footer_tokens:
             footers = (
                 iter_footer_starts(
@@ -249,6 +265,31 @@ def _check_target(
             _check_footer_tokens(diagnostics, footers, policy)
 
     return CheckResult(target=target, header=header, diagnostics=tuple(diagnostics))
+
+
+def _single_line_prose_paragraphs(body_lines: tuple[str, ...]) -> tuple[int, int]:
+    """Count single-line prose paragraphs and return the first zero-based line offset."""
+    count = 0
+    first_line = 0
+    paragraph_start = 0
+    paragraph: list[str] = []
+    for offset, line in enumerate((*body_lines, "")):
+        if line:
+            if not paragraph:
+                paragraph_start = offset
+            paragraph.append(line)
+            continue
+        if len(paragraph) == 1 and _is_prose_paragraph_line(paragraph[0]):
+            if count == 0:
+                first_line = paragraph_start
+            count += 1
+        paragraph.clear()
+    return count, first_line
+
+
+def _is_prose_paragraph_line(line: str) -> bool:
+    """Leave intentionally formatted list items out of paragraph-style checks."""
+    return bool(line.strip()) and _LIST_ITEM.match(line.lstrip()) is None
 
 
 def _check_case(

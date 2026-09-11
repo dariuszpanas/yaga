@@ -29,6 +29,8 @@ forbidden-footer-tokens = ["WIP"]
 body-policy = "optional"
 body-min-words = 8
 # Omit body-max-line-length unless this repository wants a wrapping limit.
+# Omit body-max-single-line-paragraphs unless this repository wants to limit
+# single-line prose paragraphs separated by blank lines.
 dependabot-pull-requests = "skip"
 typos = "skip"
 merge-commits = "reject"
@@ -76,7 +78,12 @@ keep both minima at zero when `body-policy = "forbidden"`.
 
 `body-max-line-length` is an optional upper bound, not a default formatting rule. Omit it to allow
 longer prose lines, or set a repository-specific positive limit when commit wrapping is part of the
-project's style. YAGA does not require 72- or 100-column body wrapping.
+project’s style. YAGA does not require 72- or 100-column body wrapping.
+
+`body-max-single-line-paragraphs` is an optional upper bound for prose paragraphs containing one
+non-empty line. It catches bodies that put a blank line between every sentence without rejecting
+intentional list items. Omitted means unlimited; `0` requires every prose paragraph to contain at
+least two lines.
 
 YAGA’s own repository policy sets `body-policy = "required"` with a minimum prose length, so normal
 human commits include a durable explanation. The event-aware commit Action still skips policy

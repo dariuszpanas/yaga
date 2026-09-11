@@ -324,6 +324,34 @@ def test_body_min_words_is_not_applied_when_no_body_exists() -> None:
     assert result("feat: allow footers\n\nRefs: issue 123", policy).valid
 
 
+def test_body_paragraph_policy_catches_repeated_single_line_prose_paragraphs() -> None:
+    policy = CommitPolicy(body_max_single_line_paragraphs=1)
+    message = (
+        "fix: explain parser behavior\n\nFirst sentence.\n\nSecond sentence.\n\nThird sentence."
+    )
+
+    checked = result(message, policy)
+
+    assert [diagnostic.code for diagnostic in checked.diagnostics] == ["body.paragraph-format"]
+    assert checked.diagnostics[0].message == (
+        "body has 3 single-line prose paragraphs; maximum is 1"
+    )
+    assert checked.diagnostics[0].line == 3
+
+
+def test_body_paragraph_policy_allows_wrapped_prose_and_list_items() -> None:
+    policy = CommitPolicy(body_max_single_line_paragraphs=0)
+    message = (
+        "fix: document parser behavior\n\n"
+        "First sentence continues on the next line.\n"
+        "The paragraph is intentionally wrapped.\n\n"
+        "- Keep this list item separate.\n"
+        "- Keep this other item separate."
+    )
+
+    assert result(message, policy).valid
+
+
 def test_disabled_body_min_words_does_not_call_the_counter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
