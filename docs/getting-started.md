@@ -78,7 +78,8 @@ make docs-serve
 ```
 
 `make docs` performs a clean strict build. `make docs-serve` starts the local preview server at
-`http://localhost:8000`.
+`http://localhost:9000` by default. Override the address when needed, for example
+`make docs-serve DOCS_ADDR=127.0.0.1:8000`.
 
 Every push to `main` publishes the clean build to [GitHub Pages](https://dariuszpanas.github.io/yaga/).
 

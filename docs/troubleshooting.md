@@ -105,6 +105,7 @@ make docs
 make docs-serve
 ```
 
-The preview server serves `http://localhost:8000`. The Pages workflow publishes only from
-`main`; if the build passes locally but deployment fails, inspect the latest `docs.yml` run and
-confirm that the repository has GitHub Pages configured for workflow deployment.
+The preview server serves `http://localhost:9000` by default. Override it with
+`make docs-serve DOCS_ADDR=127.0.0.1:8000` if that port is occupied. The Pages workflow publishes
+only from `main`; if the build passes locally but deployment fails, inspect the latest `docs.yml`
+run and confirm that the repository has GitHub Pages configured for workflow deployment.

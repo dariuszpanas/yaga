@@ -1,5 +1,7 @@
 .PHONY: actionlint build check docs docs-serve test ci
 
+DOCS_ADDR ?= localhost:9000
+
 actionlint:
 	uv run yaga workflow lint .github/workflows examples
 
@@ -7,7 +9,7 @@ docs:
 	uv run zensical build --strict --clean
 
 docs-serve:
-	uv run zensical serve
+	uv run zensical serve --dev-addr "$(DOCS_ADDR)"
 
 build:
 	uv run python scripts/check_build.py
