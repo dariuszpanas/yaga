@@ -8,6 +8,7 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Count only parsed prose-body lines in quality coverage output, excluding recognized footer blocks.
 - Include per-message body-line and model-input coverage in flagged GitHub quality annotations so
   complete-message versus title-only and truncation behavior is visible in CI output.
 - Allow a quality classification threshold of `0`, matching the CLI's inclusive `0`-through-`1`

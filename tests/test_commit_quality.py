@@ -403,6 +403,28 @@ def test_quality_report_counts_crlf_body_lines(
     assert "1 body line included" in render_quality_report(report, OutputFormat.TEXT)
 
 
+def test_quality_report_excludes_footer_lines_from_body_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("pass", 0.1),
+    )
+    report = check_quality(
+        [
+            CommitTarget(
+                label="commit footer",
+                message="fix: parser\n\nExplain the parser behavior.\n\nReviewed-by: YAGA",
+            )
+        ],
+        revision=DEFAULT_MODEL_REVISION,
+    )
+
+    document = quality_report_document(report)
+
+    assert document["commits"][0]["message_body_lines"] == 1
+
+
 def test_quality_report_identifies_title_only_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "yaga.commits.quality._load_predictor",
