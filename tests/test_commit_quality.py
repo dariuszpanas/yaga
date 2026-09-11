@@ -12,6 +12,8 @@ from yaga.commits.quality import (
     DEFAULT_MODEL_REVISION,
     QualityAssessment,
     QualityPrediction,
+    QualityReport,
+    QualityResult,
     _input_truncation,
     _load_huggingface,
     _low_quality_probability,
@@ -297,7 +299,7 @@ def test_quality_github_report_uses_bounded_warning_annotations(
     monkeypatch.setattr(
         "yaga.commits.quality._load_predictor",
         lambda *_args, **_kwargs: (
-            lambda _message: QualityAssessment("flag", 0.91, "Needs\nmore detail")
+            lambda _message: QualityAssessment("flag", 0.91, "Needs 100%\nmore detail")
         ),
     )
     report = check_quality(
@@ -308,7 +310,7 @@ def test_quality_github_report_uses_bounded_warning_annotations(
     rendered = render_quality_report(report, QualityOutputFormat.GITHUB)
 
     assert (
-        "::warning title=YAGA commit quality::message: fix: vague change; score 0.910; Needs?more detail"
+        "::warning title=YAGA commit quality::message: fix: vague change; score 0.910; Needs 100%25?more detail"
         in rendered
     )
     assert "YAGA quality checked 1 commit(s): 0 passed, 1 flagged." in rendered
@@ -323,6 +325,31 @@ def test_quality_github_error_is_an_error_annotation() -> None:
     rendered = render_quality_error(InputError("bad\nprovider"), QualityOutputFormat.GITHUB)
 
     assert rendered == "::error title=YAGA commit quality::bad?provider"
+
+
+def test_quality_github_report_bounds_warning_annotations() -> None:
+    report = QualityReport(
+        results=tuple(
+            QualityResult(
+                CommitTarget(label=f"message-{index}", message="fix: vague change"),
+                QualityAssessment("flag", 0.9),
+                0.7,
+            )
+            for index in range(51)
+        ),
+        provider="huggingface",
+        task="classification",
+        model_id="model",
+        revision=None,
+        offline=False,
+        region=None,
+        max_input_tokens=512,
+    )
+
+    rendered = render_quality_report(report, QualityOutputFormat.GITHUB)
+
+    assert rendered.count("::warning title=YAGA commit quality::") == 51
+    assert "1 additional finding(s) omitted" in rendered
 
 
 def test_quality_report_exposes_input_truncation(monkeypatch: pytest.MonkeyPatch) -> None:
