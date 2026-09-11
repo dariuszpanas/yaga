@@ -228,10 +228,12 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
 
 def _message_body_lines(message: str) -> int:
     """Count body lines after the first commit-message separator."""
-    separator = message.find("\n\n")
-    if separator < 0:
+    lines = message.splitlines()
+    try:
+        separator = lines.index("")
+    except ValueError:
         return 0
-    return len(message[separator + 2 :].splitlines())
+    return len(lines[separator + 1 :])
 
 
 def render_config(config: LoadedConfig, output_format: OutputFormat) -> str:

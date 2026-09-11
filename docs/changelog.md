@@ -95,6 +95,8 @@
 
 ### Fixed
 
+- Count body lines correctly in commit-quality reports when messages use Windows CRLF line
+  endings.
 - Reject invalid Bedrock `seq2seq` quality configuration while loading policy files instead of
   waiting until the advisory command runs.
 - Keep Bedrock quality reports free of Hugging Face model revisions, which the Bedrock adapter does
