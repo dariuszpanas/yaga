@@ -16,6 +16,8 @@ concurrency:
 
 env:
   HF_HOME: ${{ github.workspace }}/.yaga-huggingface
+  YAGA_QUALITY_TASK: classification
+  YAGA_QUALITY_MODEL_ID: saridormi/commit-message-quality-codebert
   YAGA_QUALITY_MODEL_REVISION: 30c7895b3eb0270a3246ef3db7b43c837d8e553a
   YAGA_QUALITY_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
   YAGA_QUALITY_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -35,10 +37,11 @@ jobs:
         with:
           enable-cache: true
           version: "0.12.7"
-      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      - id: model-cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ${{ github.workspace }}/.yaga-huggingface
-          key: yaga-quality-${{ runner.os }}-python3.12-${{ env.YAGA_QUALITY_MODEL_REVISION }}
+          key: yaga-quality-${{ runner.os }}-python3.12-${{ env.YAGA_QUALITY_TASK }}-${{ env.YAGA_QUALITY_MODEL_ID }}-${{ env.YAGA_QUALITY_MODEL_REVISION }}
       - run: uv sync --frozen --group dev --extra quality --python 3.12
       - name: Select the checked commit range
         shell: bash
@@ -65,6 +68,7 @@ jobs:
           printf '%s\n' "$report"
           {
             printf '%s\n' '### YAGA commit quality (online)'
+            printf '%s\n' 'Model cache hit: ${{ steps.model-cache.outputs.cache-hit }}'
             printf '%s\n' '<pre>'
             printf '%s\n' "$report" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
             printf '%s\n' '</pre>'

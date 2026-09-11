@@ -4,6 +4,8 @@
 
 ### Added
 
+- Include quality task and model identity in the Hugging Face cache key and show cache-hit state in
+  the online workflow summary.
 - Mark `config init --dry-run` explicitly in text and JSON reports for automation consumers.
 - Add `config init --dry-run` to validate and report the generated policy without creating a file.
 - Add regression coverage proving event-aware Dependabot skips remain valid for multiline commits.
