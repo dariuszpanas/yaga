@@ -20,10 +20,16 @@ state, or silently combine inputs.
 ## Quick start
 
 ```bash
+git clone https://github.com/dariuszpanas/yaga.git
+cd yaga
 uv sync --group dev
 uv run yaga --help
-uv run yaga commit check --message "feat(cli): add a policy check"
+uv run yaga commit check --message "feat(cli): add a policy check
+
+Explain the new check with enough context for future maintainers."
 ```
+
+The checkout uses a stricter policy than YAGA's built-in defaults, including a required body.
 
 Continue with [Get started](getting-started.md) for a first repository policy and the
 [command reference](commands.md) for provider-specific invocations. The detailed

@@ -88,6 +88,8 @@
 
 ### Changed
 
+- Run the full test suite on Windows with Python 3.12 as well as Linux with Python 3.12–3.14,
+  including the Windows Git executable and process-containment regressions.
 - Cache the verified Cargo registry used to install the pinned Typos CLI, reducing repeated network
   downloads without caching an executable supplied by pull-request code.
 - Clarify the command synopsis so `commit quality` is identified as a provider-backed advisory,
@@ -120,6 +122,14 @@
 
 ### Fixed
 
+- Select only pull-request commits in the quality workflow, use an exact commit for manual runs,
+  and treat unexpected process exits as operational failures.
+- Resolve quality defaults for the selected provider, so Bedrock does not inherit a Hugging Face
+  model or revision, and render empty-message assessments without crashing.
+- Normalize deeply nested and invalid-Unicode Agent review receipts to formatted operational
+  errors with exit `2`.
+- Keep one release-history source, correct model revision examples, and make checkout quick-start
+  messages pass the repository's required-body policy.
 - Include a bounded sanitized Docker cause when actionlint container or workspace cleanup fails,
   making daemon and resource-state errors actionable in local and CI reports.
 - Count body lines correctly in commit-quality reports when messages use Windows CRLF line
@@ -135,11 +145,20 @@
 
 ### Security
 
+- Reject Windows command scripts as Git executables and reject path selectors in commit and range
+  inputs before launching Git.
+- Enforce Typos output limits during execution and contain its process tree, including input
+  backpressure and descendant-held pipes, within the timeout and bounded cleanup window.
+- Reject configured lens policies in the retained GitHub review adapter because it cannot execute
+  their instructions or bind its completion evidence to their plan digest. Provider-neutral
+  plan/template/evaluate commands remain available to external adapters.
+- Require full 40-character Hugging Face commit revisions rather than accepting short hexadecimal
+  names that can resolve as mutable references.
 - Updated the optional Hugging Face `transformers` extra to the patched 5.x line and refreshed the
   lockfile, closing the active model-initialization and model-save security advisories.
 
-YAGA keeps a human-readable [CHANGELOG.md](https://github.com/dariuszpanas/yaga/blob/main/CHANGELOG.md)
-at the repository root. It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
+This page is the single release-history source, linked from the root `CHANGELOG.md`.
+It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html) for releases.
 
 ## How entries are organized

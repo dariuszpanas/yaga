@@ -6,6 +6,8 @@ development tools, and documentation builder reproducible.
 ## Install from a checkout
 
 ```bash
+git clone https://github.com/dariuszpanas/yaga.git
+cd yaga
 uv sync --group dev
 uv run yaga --help
 ```
@@ -32,10 +34,15 @@ With no source option, `commit check` checks `HEAD`. Otherwise select exactly on
 
 ```bash
 uv run yaga commit check
-uv run yaga commit check --message "feat(cli): add a check"
+uv run yaga commit check --message "feat(cli): add a check
+
+Explain the new check with enough context for future maintainers."
 uv run yaga commit check --file .git/COMMIT_EDITMSG
 uv run yaga commit check --range origin/main..HEAD
 ```
+
+This complete-message example also passes YAGA's own stricter checkout policy, which requires
+a prose body. Other repositories can keep the starter policy's optional body.
 
 The stable exit contract is:
 
