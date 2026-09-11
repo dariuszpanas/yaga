@@ -191,6 +191,7 @@ def test_classifier_reports_when_the_input_exceeds_the_configured_window(
     prediction = predictor("feat: message")
     assert isinstance(prediction, QualityPrediction)
     assert prediction.input_truncated is True
+    assert prediction.input_tokens == 9
 
 
 def test_quality_rejects_unpinned_revision() -> None:
@@ -218,6 +219,7 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
     document = quality_report_document(report)
     assert document["max_input_tokens"] == DEFAULT_MAX_INPUT_TOKENS
     assert document["commits"][0]["model_input_truncated"] is None
+    assert document["commits"][0]["model_input_tokens"] is None
     assert document["commits"][0]["message_lines"] == 3
     assert document["commits"][0]["message_body_lines"] == 1
     rendered = render_quality_report(report, OutputFormat.TEXT)
@@ -245,7 +247,7 @@ def test_quality_report_exposes_input_truncation(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         "yaga.commits.quality._load_predictor",
         lambda *_args, **_kwargs: (
-            lambda _message: QualityPrediction(QualityAssessment("pass", 0.1), True)
+            lambda _message: QualityPrediction(QualityAssessment("pass", 0.1), True, 513)
         ),
     )
     report = check_quality(
@@ -256,4 +258,5 @@ def test_quality_report_exposes_input_truncation(monkeypatch: pytest.MonkeyPatch
     document = quality_report_document(report)
     rendered = render_quality_report(report, OutputFormat.TEXT)
     assert document["commits"][0]["model_input_truncated"] is True
-    assert "model input truncated" in rendered
+    assert document["commits"][0]["model_input_tokens"] == 513
+    assert "model input 513/512 tokens, truncated" in rendered

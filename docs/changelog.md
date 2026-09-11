@@ -5,7 +5,8 @@
 ### Added
 
 - Added per-message quality coverage metadata so Hugging Face text and JSON reports identify
-  whether the configured input-token window truncated the model input.
+  the measured input-token count and whether the configured input-token window truncated the model
+  input.
 - Added configurable Hugging Face quality input windows through `max-input-tokens` and
   `--max-input-tokens`, with the effective bound included in text and JSON reports.
 - Added concrete passing and failing examples for the configurable consecutive single-line

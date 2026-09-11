@@ -65,8 +65,9 @@ override individual settings with CLI flags. Provider credentials are always sup
 provider's normal environment/SDK credential chain, never through YAGA configuration.
 Use `--max-input-tokens` or `max-input-tokens` in the quality table to tune the Hugging Face
 tokenizer window; it defaults to 512 and accepts values through 4096. Reports identify the
-effective bound alongside the selected message and body-line counts, and Hugging Face reports state
-whether each message was actually truncated at the model window.
+effective bound alongside the selected message and body-line counts. Hugging Face reports also show
+the measured input-token count and state whether each message was actually truncated at the model
+window.
 
 Git commit and range sources read complete messages without fetching or invoking a shell. Exact
 commit checks select one commit; range checks preserve oldest-first order. Both require complete,
