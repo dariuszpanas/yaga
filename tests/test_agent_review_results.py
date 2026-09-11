@@ -192,6 +192,15 @@ def test_evaluate_results_rejects_a_receipt_for_another_plan() -> None:
             ),
             "unknown lens other",
         ),
+        (
+            1,
+            (
+                LensResult("Not-valid", LensOutcome.PASSED),
+                LensResult("security", LensOutcome.PENDING),
+                LensResult("docs", LensOutcome.PENDING),
+            ),
+            "invalid lens name",
+        ),
     ],
 )
 def test_evaluate_results_revalidates_programmatic_receipts(
