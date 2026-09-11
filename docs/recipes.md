@@ -182,8 +182,19 @@ yaga gate agent-review policy check --file examples/agent-review-policy.toml
 yaga gate agent-review policy plan --file examples/agent-review-policy.toml --format json
 ```
 
-An adapter should treat the plan as data, run its own provider-specific integration, and write one
-bounded JSON result per named lens. The [matching result example](https://github.com/dariuszpanas/yaga/blob/main/examples/agent-review-results.json)
+Save the JSON plan when an adapter needs a durable handoff between jobs or systems:
+
+```bash
+yaga gate agent-review policy plan \
+  --file examples/agent-review-policy.toml \
+  --format json > review-plan.json
+```
+
+The plan contains one item per named lens and a `plan_digest`. The adapter must read that digest,
+run the configured provider-specific work, and copy the exact value into the top-level
+`plan_digest` field of its bounded JSON result receipt. It must return exactly one `passed`, `failed`,
+or `pending` outcome for every lens; a missing, duplicate, unknown, or stale result is rejected.
+The [matching result example](https://github.com/dariuszpanas/yaga/blob/main/examples/agent-review-results.json)
 shows a passing blocking gate with a visible advisory finding:
 
 ```bash
@@ -192,6 +203,19 @@ yaga gate agent-review policy evaluate \
   --results examples/agent-review-results.json \
   --format json
 ```
+
+Use GitHub output only at the publishing boundary:
+
+```bash
+yaga gate agent-review policy evaluate \
+  --file examples/agent-review-policy.toml \
+  --results review-results.json \
+  --format github
+```
+
+If the policy changes after the plan was generated, regenerate the plan and receipt together. The
+evaluator compares the receipt digest with the current policy instead of accepting a result produced
+for an older lens set.
 
 This separation keeps provider details out of YAGA's policy model. A preset can map to Codex,
 another hosted agent, a local model, or a human-assisted integration; the adapter decides how to
