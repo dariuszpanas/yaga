@@ -53,6 +53,8 @@
 
 ### Fixed
 
+- Reject invalid Bedrock `seq2seq` quality configuration while loading policy files instead of
+  waiting until the advisory command runs.
 - Refined paragraph enforcement to catch likely blank-line sentence splitting without treating every
   one-line prose paragraph as a failure; the check uses punctuation and paragraph-shape clues.
 - Added a bounded findings-by-rule summary to GitHub commit-policy output so failed rule codes are
