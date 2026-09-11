@@ -18,7 +18,12 @@ from yaga.commits.quality import (
     _parse_decision,
     check_quality,
 )
-from yaga.commits.reporting import quality_report_document, render_quality_report
+from yaga.commits.reporting import (
+    QualityOutputFormat,
+    quality_report_document,
+    render_quality_error,
+    render_quality_report,
+)
 from yaga.errors import InputError
 
 
@@ -284,6 +289,35 @@ def test_quality_report_makes_title_only_input_explicit(
     document = quality_report_document(report)
     assert document["commits"][0]["message_body_lines"] == 0
     assert "no body included" in render_quality_report(report, OutputFormat.TEXT)
+
+
+def test_quality_github_report_uses_bounded_warning_annotations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: (
+            lambda _message: QualityAssessment("flag", 0.91, "Needs\nmore detail")
+        ),
+    )
+    report = check_quality(
+        [CommitTarget(label="message", message="fix: vague change")],
+        revision=DEFAULT_MODEL_REVISION,
+    )
+
+    rendered = render_quality_report(report, QualityOutputFormat.GITHUB)
+
+    assert (
+        "::warning title=YAGA commit quality::message: fix: vague change; score 0.910; Needs?more detail"
+        in rendered
+    )
+    assert "YAGA quality checked 1 commit(s): 0 passed, 1 flagged." in rendered
+
+
+def test_quality_github_error_is_an_error_annotation() -> None:
+    rendered = render_quality_error(InputError("bad\nprovider"), QualityOutputFormat.GITHUB)
+
+    assert rendered == "::error title=YAGA commit quality::bad?provider"
 
 
 def test_quality_report_exposes_input_truncation(monkeypatch: pytest.MonkeyPatch) -> None:

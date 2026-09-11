@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added GitHub warning annotations for flagged `commit quality` advisory results through
+  `--format github`, while provider failures remain error annotations with exit `2`.
 - Refined the paragraph-splitting heuristic so punctuation-free one-line notes remain valid while
   likely sentence continuations still report `body.paragraph-format`.
 - Added GitHub Actions guidance for installing the pinned Typos CLI when a repository enables

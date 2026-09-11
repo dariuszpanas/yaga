@@ -12,8 +12,11 @@ from yaga.commits.github_reporting import (
     render_commit_error,
     render_commit_report,
 )
-from yaga.commits.models import OutputFormat
-from yaga.commits.reporting import render_error, render_quality_report
+from yaga.commits.reporting import (
+    QualityOutputFormat,
+    render_quality_error,
+    render_quality_report,
+)
 from yaga.commits.service import check_commit_quality
 from yaga.commits.service import check_commits as check_commit_service
 from yaga.errors import YagaError
@@ -156,8 +159,9 @@ def quality_check(
         ),
     ] = None,
     output_format: Annotated[
-        OutputFormat, typer.Option("--format", case_sensitive=False, help="Report format.")
-    ] = OutputFormat.TEXT,
+        QualityOutputFormat,
+        typer.Option("--format", case_sensitive=False, help="Report format."),
+    ] = QualityOutputFormat.TEXT,
     quiet: Annotated[
         bool, typer.Option("--quiet", "-q", help="Suppress reports and use only the exit code.")
     ] = False,
@@ -183,7 +187,7 @@ def quality_check(
             max_input_tokens=max_input_tokens,
         )
     except YagaError as error:
-        typer.echo(render_error(error, output_format), err=True)
+        typer.echo(render_quality_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
     if not quiet:
         typer.echo(render_quality_report(report, output_format))

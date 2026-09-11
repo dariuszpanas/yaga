@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Add `--format github` to `yaga commit quality`, emitting bounded warning annotations for flagged
+  advisory results and an error annotation for provider failures.
 - Refine `body-paragraph-splitting = "check"` so punctuation-free one-line notes remain valid;
   only stronger continuation signals such as continuation punctuation or a lowercase next paragraph
   are reported.
