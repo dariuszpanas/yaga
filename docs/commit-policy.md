@@ -170,6 +170,14 @@ to select the runtime region. The adapter sends only the bounded commit message 
 classification prompt. It does not expose AWS credentials, response headers, or raw provider
 errors in reports.
 
+Input coverage is deliberately visible but bounded. The selected message is passed to the quality
+adapter up to YAGA's 12,000-character provider-input limit. The Hugging Face classification and
+seq2seq adapters then tokenize with a 512-token limit, so a very long message can have its tail
+truncated by the model even though the report still counts every selected message and body line.
+Use `commit check` for exact full-message rules such as body structure, paragraph layout, footer
+presence, and Typos findings; treat model output as an advisory signal about the bounded model
+input, not proof that every token was semantically reviewed.
+
 All providers are advisory, not a parser, formatter, security boundary, or replacement for the
 configured commit policy. It may misunderstand project-specific context and should not be used to
 reject automated commits without review. The model and its Python runtime are not imported by

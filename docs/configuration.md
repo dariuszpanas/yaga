@@ -105,6 +105,13 @@ The optional model advisory reads `[tool.yaga.commit.quality]` in `pyproject.tom
 `[commit.quality]` in `.yaga.toml`. These settings are defaults for `yaga commit quality`; every
 corresponding CLI option overrides them for one invocation. Credentials are never valid here.
 
+Quality reports count the complete selected message and its body lines, but those counts describe
+the input selection, not the model's token window. YAGA bounds the provider input to 12,000
+characters; Hugging Face classification and seq2seq adapters additionally tokenize with a 512-token
+limit, so a long message may be truncated at the model boundary. Keep exact structural and lexical
+requirements in the normal commit policy, which receives the complete bounded message, and use the
+quality result as an advisory signal.
+
 ```toml
 [tool.yaga.commit.quality]
 provider = "huggingface"
