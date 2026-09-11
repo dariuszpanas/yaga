@@ -129,6 +129,19 @@ def test_text_and_json_reports_keep_title_separate_from_commits() -> None:
     assert len(document["pull_request"]["commits"]) == 1
 
 
+def test_pull_request_text_report_preserves_diagnostic_columns() -> None:
+    rendered = render_pull_request_report(
+        _report(
+            diagnostics=(
+                Diagnostic(code="typos.word", message="possible typo 'teh'", line=3, column=7),
+            )
+        ),
+        PullRequestOutputFormat.TEXT,
+    )
+
+    assert "[typos.word] line 3, column 7: possible typo 'teh'" in rendered
+
+
 def test_dependabot_skip_reason_is_visible_in_every_report_format() -> None:
     report = _report(
         skipped_reason="Dependabot pull request",
