@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from enum import StrEnum
 from typing import Any
 
@@ -24,6 +25,7 @@ from yaga.commits.reporting import (
 from yaga.errors import YagaError, safe_error_text
 
 MAX_GITHUB_ANNOTATIONS = 50
+MAX_GITHUB_SUMMARY_CODES = 8
 
 
 class PullRequestOutputFormat(StrEnum):
@@ -160,7 +162,27 @@ def _render_github_report(report: PullRequestValidationReport) -> str:
     ):
         summary += f" Skip reason: {DEPENDABOT_PULL_REQUEST_SKIP_REASON}."
     lines.append(summary)
+    finding_summary = _finding_summary(report)
+    if finding_summary is not None:
+        lines.append(finding_summary)
     return "\n".join(lines)
+
+
+def _finding_summary(report: PullRequestValidationReport) -> str | None:
+    """Return a bounded rule-count summary for failed commit-policy checks."""
+    counts = Counter(
+        diagnostic.code for result in report.results for diagnostic in result.diagnostics
+    )
+    if not counts:
+        return None
+    entries = [
+        f"{safe_text(code, maximum=80)} ({count})"
+        for code, count in counts.most_common(MAX_GITHUB_SUMMARY_CODES)
+    ]
+    omitted = len(counts) - len(entries)
+    if omitted:
+        entries.append(f"{omitted} additional rule(s) omitted")
+    return f"Findings by rule: {safe_text(', '.join(entries), maximum=1000)}"
 
 
 def _workflow_data(value: str) -> str:

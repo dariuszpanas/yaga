@@ -124,6 +124,28 @@ def test_github_report_escapes_commands_and_bounds_annotation_count() -> None:
     assert "additional policy diagnostic(s) omitted" in annotations[-1]
     assert (
         lines[-1]
+        == "Findings by rule: "
+        + ", ".join(f"policy.{index} (1)" for index in range(8))
+        + ", 45 additional rule(s) omitted"
+    )
+
+
+def test_github_report_summarizes_diagnostic_codes() -> None:
+    rendered = render_pull_request_report(
+        _report(
+            diagnostics=(
+                Diagnostic(code="body.line-length", message="too long"),
+                Diagnostic(code="body.line-length", message="too long"),
+                Diagnostic(code="body.required", message="missing"),
+            )
+        ),
+        PullRequestOutputFormat.GITHUB,
+    )
+    lines = rendered.splitlines()
+
+    assert "Findings by rule: body.line-length (2), body.required (1)" in rendered
+    assert (
+        lines[-2]
         == "YAGA checked pull request #17: one title and 1 commit(s); 1 failed, 0 skipped."
     )
 
