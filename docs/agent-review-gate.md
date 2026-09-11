@@ -4,6 +4,11 @@ The write-capable review integration is exposed as `yaga gate agent-review <oper
 `agent-review` composite Action selector. The gate owns the trusted lifecycle around agent review;
 the configured review adapter owns provider-specific request and evidence details.
 
+The provider-neutral Action entrypoint is `yaga.agent_review.runtime`. The current GitHub adapter,
+which recognizes the Codex connector's exact event and evidence contract, is isolated under
+`yaga.agent_review.github`; other integrations can implement the same lifecycle-facing adapter
+boundary without changing the named-lens policy or result receipt.
+
 ## Operations
 
 The closed operations are `invalidate`, `prepare`, `authorize`, `observe`, `request`, and

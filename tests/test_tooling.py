@@ -355,7 +355,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         ROOT / "src" / "yaga" / "github.py",
         ROOT / "src" / "yaga" / "models.py",
         ROOT / "src" / "yaga" / "status.py",
-        *(ROOT / "src" / "yaga" / "codex").glob("*.py"),
+        *(ROOT / "src" / "yaga" / "agent_review" / "github").glob("*.py"),
     ]
 
     for path in paths:
@@ -406,7 +406,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "from yaga.sizes" not in source, path
         assert "from yaga.paths" not in source, path
         assert "from yaga.commands" not in source, path
-        assert "from yaga.codex" not in source, path
+        assert "from yaga.agent_review.github" not in source, path
         assert "from yaga.workflows" not in source, path
         assert "from yaga.github import" not in source, path
         assert "import yaga.changes" not in source, path

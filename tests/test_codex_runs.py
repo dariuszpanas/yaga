@@ -18,7 +18,7 @@ from tests.codex_support import (
     FakeApi,
     _run,
 )
-from yaga.codex.runs import (
+from yaga.agent_review.github.runs import (
     SupersededRunError,
     load_source_from_wake,
     load_source_run,

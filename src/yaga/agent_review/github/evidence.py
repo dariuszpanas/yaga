@@ -7,7 +7,7 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 
-from yaga.codex.constants import (
+from yaga.agent_review.github.constants import (
     CODEX_CONNECTOR_APP_ID,
     CODEX_CONNECTOR_APP_SLUG,
     CODEX_CONNECTOR_LOGIN,

@@ -7,7 +7,7 @@ import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 
-from yaga.codex.constants import (
+from yaga.agent_review.github.constants import (
     CODEX_STATUS_CONTEXT,
     EVENT_ACTIONS,
     GITHUB_ACTIONS_LOGIN,

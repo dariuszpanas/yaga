@@ -19,7 +19,7 @@ from tests.codex_support import (
     _reaction,
     _review,
 )
-from yaga.codex import constants, evidence
+from yaga.agent_review.github import constants, evidence
 from yaga.github import parse_pull_request
 
 

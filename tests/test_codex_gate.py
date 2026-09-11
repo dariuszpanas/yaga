@@ -31,16 +31,23 @@ from tests.codex_support import (
     _run,
     _status,
 )
-from yaga.codex.boundary import ReviewBoundary, boundary_description
-from yaga.codex.constants import (
+from yaga.agent_review.github.boundary import ReviewBoundary, boundary_description
+from yaga.agent_review.github.constants import (
     CI_STATUS_CONTEXT,
     CODEX_STATUS_CONTEXT,
     ERROR_WRITE_REQUEST_RESERVE,
     POLL_ITERATION_REQUEST_RESERVE,
 )
-from yaga.codex.gate import GateResult, authorize, finalize, invalidate, prepare, review
-from yaga.codex.requests import RequestKey
-from yaga.codex.runs import SourceRun, load_source_run
+from yaga.agent_review.github.gate import (
+    GateResult,
+    authorize,
+    finalize,
+    invalidate,
+    prepare,
+    review,
+)
+from yaga.agent_review.github.requests import RequestKey
+from yaga.agent_review.github.runs import SourceRun, load_source_run
 from yaga.errors import GateError
 
 BOUNDARY_RUN_ID = RUN_ID - 100

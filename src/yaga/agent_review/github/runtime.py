@@ -7,8 +7,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
-from yaga.agent_review.policy import AgentReviewPolicy, load_policy
-from yaga.codex.constants import (
+from yaga.agent_review.github.constants import (
     LIFECYCLE_WAIT_SECONDS,
     MAX_AUTHORIZATION_REQUESTS,
     MAX_FINALIZATION_REQUESTS,
@@ -21,9 +20,10 @@ from yaga.codex.constants import (
     SUCCESS_CLEANUP_MARGIN_SECONDS,
     SUCCESS_WRITE_REQUEST_RESERVE,
 )
-from yaga.codex.events import parse_event_boundary
-from yaga.codex.gate import authorize, finalize, invalidate, prepare, review
-from yaga.codex.runs import load_source_from_wake
+from yaga.agent_review.github.events import parse_event_boundary
+from yaga.agent_review.github.gate import authorize, finalize, invalidate, prepare, review
+from yaga.agent_review.github.runs import load_source_from_wake
+from yaga.agent_review.policy import AgentReviewPolicy, load_policy
 from yaga.errors import ConfigurationError, GateError
 from yaga.github import MAX_API_REQUESTS, GitHubRestApi
 from yaga.models import (

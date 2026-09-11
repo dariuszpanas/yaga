@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests.codex_support import BASE_REF, PULL_REQUEST, REPOSITORY, _event, _pull_request
-from yaga.codex.events import CodexEvent, parse_codex_event, parse_event_boundary
+from yaga.agent_review.github.events import CodexEvent, parse_codex_event, parse_event_boundary
 from yaga.errors import GateError
 
 
