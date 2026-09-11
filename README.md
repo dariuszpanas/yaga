@@ -3,8 +3,9 @@
 YAGA is an extensible Python CLI for repository policy that runs the same checks locally and in CI.
 Its first general-purpose feature is a configurable
 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) checker. The Agent
-review gate is an experimental GitHub Action and CLI command for coordinating one or more
-configured review agents through a shared, bounded lifecycle.
+review policy can describe one or more configured review lenses. Its experimental GitHub Action is
+currently a single-lens Codex adapter; multi-lens execution uses the provider-neutral plan and
+receipt commands through an external adapter.
 
 YAGA is pre-release. The CLI and configuration schema may still change. Action consumers must pin
 the exact audited 40-character commit SHA they canaried rather than a branch or mutable tag.
@@ -44,6 +45,9 @@ yaga workflow check                # require immutable workflow references
 yaga workflow security             # enforce a bounded Actions trust policy
 yaga workflow lint                 # lint workflow syntax with pinned actionlint
 yaga gate agent-review <operation> # run the configured review gate
+yaga gate agent-review policy check # validate a named-lens policy
+yaga gate agent-review policy plan  # inspect provider-neutral lens work
+yaga gate agent-review policy evaluate # aggregate an adapter receipt
 ```
 
 ## Conventional Commit checks

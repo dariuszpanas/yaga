@@ -78,6 +78,11 @@ validated before any GitHub API request. Trusted publisher workflows should chec
 repository default branch with credentials disabled before passing a relative policy path; a
 missing, malformed, or workspace-escaping policy fails closed. The policy controls review lenses
 and aggregation only; it never supplies credentials or authorization.
+The current GitHub adapter supports one `codex` lens with `review` outcome and `review` publication.
+It rejects multi-lens, advisory, alternate-preset, or alternate-publication policies before the
+first API request. Use `yaga gate agent-review policy plan --format json` and
+`policy evaluate` with a separate trusted adapter when several agents or publication modes are
+needed.
 
 The write-capable root runtime uses `YAGA_ACTION_RUNTIME=1` and standard-library-only imports.
 The separate read-only commit Action uses `YAGA_COMMIT_ACTION_RUNTIME=1`; it may use commit policy
