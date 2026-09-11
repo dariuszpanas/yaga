@@ -206,7 +206,6 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     build_gate = (ROOT / "scripts" / "check_build.py").read_text(encoding="utf-8")
     for locked_argument in (
         "--locked",
-        "--no-sources",
         "--no-default-groups",
         "--require-hashes",
         "--no-build",

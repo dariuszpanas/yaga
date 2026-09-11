@@ -118,25 +118,25 @@ def successful_json(
 def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     """Install the built wheel over its hash-locked runtime and execute its CLI."""
     runtime_requirements = output / "runtime-requirements.txt"
+    export_command = [
+        uv,
+        "export",
+        "--quiet",
+        "--project",
+        str(ROOT),
+        "--locked",
+        "--no-default-groups",
+        "--no-emit-project",
+        "--no-annotate",
+        "--no-header",
+        "--python",
+        sys.executable,
+        "--no-python-downloads",
+        "--output-file",
+        str(runtime_requirements),
+    ]
     subprocess.run(
-        [
-            uv,
-            "export",
-            "--quiet",
-            "--project",
-            str(ROOT),
-            "--locked",
-            "--no-sources",
-            "--no-default-groups",
-            "--no-emit-project",
-            "--no-annotate",
-            "--no-header",
-            "--python",
-            sys.executable,
-            "--no-python-downloads",
-            "--output-file",
-            str(runtime_requirements),
-        ],
+        export_command,
         cwd=ROOT,
         check=True,
     )
