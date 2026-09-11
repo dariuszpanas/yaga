@@ -86,6 +86,34 @@ without rejecting an intentional one-line paragraph. Wrapped paragraphs and list
 run. Omitted or `0` means unlimited; `1` permits standalone short paragraphs while flagging
 paragraph-splitting. A one-line validation note or justification is valid.
 
+For example, with `body-max-consecutive-single-line-paragraphs = 1`, this passes because the two
+short paragraphs are separate notes and the first ends a sentence:
+
+```text
+fix: clarify parser behavior
+
+The parser accepts the legacy form.
+
+Validation: the compatibility test still passes.
+```
+
+This fails because the blank lines split one sentence into three one-line prose paragraphs:
+
+```text
+fix: clarify parser behavior
+
+The parser accepts the legacy form,
+
+including input received from older clients
+
+when compatibility mode is enabled.
+```
+
+The heuristic looks for a continuation: the previous paragraph does not end in `.`, `!`, or `?`,
+or the next paragraph begins with a lowercase letter. It is deliberately not a general prose
+formatter. Use `0` (or omit the key) when the repository does not want this layout check at all;
+use `body-max-line-length` separately if it also wants to constrain physical line width.
+
 YAGA’s own repository policy sets `body-policy = "required"` with a minimum prose length, so normal
 human commits include a durable explanation. The event-aware commit Action still skips policy
 evaluation for the exact Dependabot bot identity when `dependabot-pull-requests = "skip"`, including

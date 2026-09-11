@@ -74,6 +74,26 @@ set it to `0` for the same unlimited behavior, or set it to `1` to permit standa
 paragraphs while flagging a likely sentence split by blank lines. A one-line paragraph is not an
 error by itself.
 
+The check is continuation-aware: it only extends a run when the previous line does not end in `.`,
+`!`, or `?`, or when the next paragraph starts with a lowercase letter. For example, this is valid
+with a limit of `1` because the paragraphs are complete notes:
+
+```text
+The parser accepts the legacy form.
+
+Validation: the compatibility test still passes.
+```
+
+Whereas this is reported as `body.paragraph-format` because the blank lines interrupt one sentence:
+
+```text
+The parser accepts the legacy form,
+
+including input received from older clients
+
+when compatibility mode is enabled.
+```
+
 The check reports `body.paragraph-format` at the first offending paragraph and is deterministic;
 it does not depend on the optional quality model. This makes it suitable for enforcing repository
 formatting policy when a model would correctly recognize the words but overlook their blank-line
