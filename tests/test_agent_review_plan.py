@@ -62,6 +62,9 @@ def test_text_plan_is_actionable() -> None:
     assert "2 lens(es), aggregation all-required" in rendered
     assert "correctness [required, review] via codex" in rendered
     assert "docs [advisory, advisory] via other-agent" in rendered
+    assert (
+        "Plan digest: 0a6ce521e1f1eff2207afc508bfe38ae1dfc8aa42749dad4924363ad97bd298e" in rendered
+    )
 
 
 def test_text_plan_sanitizes_instruction_controls() -> None:

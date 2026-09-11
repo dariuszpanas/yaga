@@ -75,6 +75,9 @@ the requested publication mode. Its `plan_digest` is a deterministic SHA-256 ide
 version, aggregation, and ordered lens definitions. It does not contact an agent, resolve a preset,
 or read credentials. Adapters can use the JSON document as their input and must copy its digest into
 the result receipt while returning one closed outcome for each named lens.
+Text plan output prints the same digest on a separate `Plan digest:` line; JSON plan output carries
+it as `plan_digest`. Evaluation text, JSON, and GitHub notice output repeat the digest so CI logs
+can be correlated with the exact configuration used.
 The result contract is deliberately small:
 
 ```json

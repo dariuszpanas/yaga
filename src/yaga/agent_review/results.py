@@ -113,7 +113,10 @@ def render_evaluation(
         return _render_github_evaluation(results, aggregate)
     if output_format != "text":
         raise ValueError("output format must be text, json, or github")
-    lines = [f"Agent review result: {aggregate.state.value}."]
+    lines = [
+        f"Agent review result: {aggregate.state.value}.",
+        f"Plan digest: {results.plan_digest}",
+    ]
     for result in results.results:
         detail = "" if result.summary is None else f": {safe_error_text(result.summary)}"
         lines.append(f"- {result.lens}: {result.outcome.value}{detail}")
@@ -145,7 +148,8 @@ def _render_github_evaluation(results: AgentReviewResults, aggregate: ReviewAggr
         f"{len(aggregate.blocking_failures)} blocking failure(s), "
         f"{len(aggregate.blocking_pending)} blocking pending, "
         f"{len(aggregate.advisory_failures)} advisory failure(s), "
-        f"{len(aggregate.advisory_pending)} advisory pending."
+        f"{len(aggregate.advisory_pending)} advisory pending; "
+        f"plan {results.plan_digest}."
     )
     lines.append(
         f"::notice title={_github_property('YAGA Agent review', maximum=MAX_GITHUB_TITLE)}::"

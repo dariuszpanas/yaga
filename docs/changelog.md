@@ -17,6 +17,7 @@
 
 ### Changed
 
+- Agent review plan digests are now visible in text plans and evaluation summaries as well as JSON.
 - Quality reports now state how many body lines were included in each model invocation, making
   title-only and multiline checks distinguishable without printing the full commit message.
 - Documented the classification, seq2seq, and Bedrock quality modes, including Hugging Face cache
