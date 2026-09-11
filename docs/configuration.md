@@ -129,6 +129,11 @@ and a provider-specific `model`. `max-tokens` is bounded from 1 through 256, whi
 The CLI `--max-input-tokens` option overrides it for one invocation. Use `--config` when the quality
 settings should come from one explicit file rather than normal nearest-file discovery.
 
+The development quality extra uses PyTorch's CPU wheel index on Linux because YAGA's quality
+adapters run CPU inference; this avoids installing CUDA libraries in the hosted quality workflow.
+Windows and macOS retain their platform-specific PyTorch wheels. The model cache is separate from
+the Python package cache, so changing or clearing one does not silently make the other complete.
+
 ## Generate and inspect policy
 
 ```bash

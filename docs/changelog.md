@@ -29,6 +29,8 @@
 
 ### Changed
 
+- Resolve Linux quality dependencies from PyTorch's CPU wheel index so CPU-only model checks do not
+  download the CUDA runtime stack.
 - Added `--format github` to standalone `commit check`, producing bounded escaped annotations,
   pass/fail totals, and compact rule-count summaries for ordinary CI ranges.
 - Isolated the GitHub/Codex connector under the Agent review provider namespace and routed the
