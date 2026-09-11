@@ -96,6 +96,15 @@ def test_quality_input_mode_selects_title_or_complete_message() -> None:
     assert _model_input(message, "title") == "fix: parser"
 
 
+def test_quality_model_input_is_bounded_for_both_modes() -> None:
+    from yaga.commits.quality import MAX_MODEL_INPUT_CHARS
+
+    message = "fix: parser\n\n" + ("x" * (MAX_MODEL_INPUT_CHARS + 100))
+
+    assert len(_model_input(message, "message")) == MAX_MODEL_INPUT_CHARS
+    assert len(_model_input(message, "title")) == len("fix: parser")
+
+
 def test_classifier_applies_offline_only_during_model_loading(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

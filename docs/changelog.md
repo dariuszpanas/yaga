@@ -4,6 +4,8 @@
 
 ### Added
 
+- Bound the text submitted to every commit-quality provider mode to the documented 12,000
+  characters, including classification input and title-only mode.
 - Added configurable commit-quality `input-mode` selection between the complete message and title
   only, with the selected mode included in reports.
 - Added `agent-review policy template` to emit a complete, plan-digest-bound pending receipt
