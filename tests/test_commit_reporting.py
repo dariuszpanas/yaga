@@ -54,7 +54,7 @@ def test_breaking_marker_pair_diagnostic_is_stable_in_text_and_json_reports() ->
     document = json.loads(render_report(report, OutputFormat.JSON))
 
     assert (
-        "[breaking.marker-pair] line 1: breaking changes must use both ! and a "
+        "[breaking.marker-pair] line 1, column 1: breaking changes must use both ! and a "
         "BREAKING CHANGE footer"
     ) in rendered
     assert document["commits"][0]["diagnostics"] == [
@@ -77,7 +77,7 @@ def test_body_word_count_diagnostic_is_stable_in_text_and_json_reports() -> None
     rendered = render_report(report, OutputFormat.TEXT)
     document = json.loads(render_report(report, OutputFormat.JSON))
 
-    assert "[body.word-count] line 3: body has 2 words; minimum is 3" in rendered
+    assert "[body.word-count] line 3, column 1: body has 2 words; minimum is 3" in rendered
     assert document["commits"][0]["diagnostics"] == [
         {
             "code": "body.word-count",
@@ -190,8 +190,13 @@ def test_footer_policy_diagnostics_are_stable_in_text_and_json_reports() -> None
     rendered = render_report(report, OutputFormat.TEXT)
     document = json.loads(render_report(report, OutputFormat.JSON))
 
-    assert "[footer.required] line 1: required footer token 'Signed-off-by' is missing" in rendered
-    assert "[footer.forbidden] line 3: footer token 'WIP' is forbidden by policy" in rendered
+    assert (
+        "[footer.required] line 1, column 1: required footer token 'Signed-off-by' is missing"
+        in rendered
+    )
+    assert (
+        "[footer.forbidden] line 3, column 1: footer token 'WIP' is forbidden by policy" in rendered
+    )
     assert document["commits"][0]["diagnostics"] == [
         {
             "code": "footer.required",

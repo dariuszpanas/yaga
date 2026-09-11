@@ -325,7 +325,8 @@ def _render_text_report(report: ValidationReport) -> str:
             lines.append(f"         skipped: {result.skipped_reason}")
         for diagnostic in result.diagnostics:
             lines.append(
-                f"         [{diagnostic.code}] line {diagnostic.line}: "
+                f"         [{diagnostic.code}] line {diagnostic.line}, "
+                f"column {diagnostic.column}: "
                 f"{safe_text(diagnostic.message, maximum=MAX_DIAGNOSTIC_MESSAGE)}"
             )
     lines.append(
