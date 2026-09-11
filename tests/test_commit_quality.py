@@ -380,6 +380,29 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
     assert "(3 lines checked; 1 body line included)" in rendered
 
 
+def test_quality_report_counts_crlf_body_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("pass", 0.1),
+    )
+    report = check_quality(
+        [
+            CommitTarget(
+                label="commit crlf",
+                message="fix: parser\r\n\r\nExplain the parser behavior.",
+            )
+        ],
+        revision=DEFAULT_MODEL_REVISION,
+    )
+
+    document = quality_report_document(report)
+
+    assert document["commits"][0]["message_body_lines"] == 1
+    assert "1 body line included" in render_quality_report(report, OutputFormat.TEXT)
+
+
 def test_quality_report_identifies_title_only_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "yaga.commits.quality._load_predictor",

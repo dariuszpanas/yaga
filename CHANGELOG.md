@@ -67,6 +67,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Fixed
 
+- Count body lines correctly in commit-quality reports when messages use Windows CRLF line
+  endings.
 - Reject unsupported Bedrock quality tasks and model revisions during configuration or invocation,
   and keep Bedrock reports from claiming Hugging Face revision provenance.
 - Allow one intentional one-line prose paragraph while still flagging repeated blank-line sentence
