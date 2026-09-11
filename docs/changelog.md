@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added deterministic Agent review plan digests so adapter result receipts cannot be evaluated
+  against a different lens configuration.
 - Added the opt-in `yaga commit quality` advisory using a pinned local Hugging Face model, with
   offline cache support and versioned text/JSON reports.
 - Extended commit quality with configurable Hugging Face classification/seq2seq tasks and an

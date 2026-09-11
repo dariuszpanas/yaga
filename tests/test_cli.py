@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from yaga.agent_review.plan import build_plan
+from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens
 from yaga.cli import app
 from yaga.commands import gate as gate_commands
 from yaga.commands import workflow as workflow_commands
@@ -23,6 +25,17 @@ from yaga.workflows.models import (
 )
 
 runner = CliRunner()
+
+
+def single_lens_plan_digest() -> str:
+    return build_plan(
+        AgentReviewPolicy(
+            version=1,
+            required=("correctness",),
+            aggregation="all-required",
+            lenses=(ReviewLens("correctness", "codex", "Review behavior.", "review"),),
+        )
+    ).digest()
 
 
 def git(repository: Path, *arguments: str) -> str:
@@ -822,7 +835,8 @@ def test_agent_review_policy_evaluate_uses_result_contract_and_exit_one_for_bloc
     )
     results = tmp_path / "results.json"
     results.write_text(
-        '{"version": 1, "results": [{"lens": "correctness", "outcome": "failed"}]}',
+        '{"version": 1, "plan_digest": "' + single_lens_plan_digest() + '", '
+        '"results": [{"lens": "correctness", "outcome": "failed"}]}',
         encoding="utf-8",
     )
 
@@ -857,7 +871,8 @@ def test_agent_review_policy_evaluate_supports_github_format(tmp_path: Path) -> 
     )
     results = tmp_path / "results.json"
     results.write_text(
-        '{"version": 1, "results": [{"lens": "correctness", "outcome": "failed", '
+        '{"version": 1, "plan_digest": "' + single_lens_plan_digest() + '", '
+        '"results": [{"lens": "correctness", "outcome": "failed", '
         '"summary": "Needs\\nwork."}]}',
         encoding="utf-8",
     )

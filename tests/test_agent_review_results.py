@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from yaga.agent_review.evaluation import LensOutcome
+from yaga.agent_review.plan import build_plan
 from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens
 from yaga.agent_review.results import (
     AgentReviewResults,
@@ -32,6 +33,10 @@ def review_policy() -> AgentReviewPolicy:
     )
 
 
+def review_plan_digest() -> str:
+    return build_plan(review_policy()).digest()
+
+
 def write_results(tmp_path: Path, document: object) -> Path:
     path = tmp_path / "results.json"
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -44,6 +49,7 @@ def test_load_results_preserves_order_and_optional_summaries(tmp_path: Path) -> 
             tmp_path,
             {
                 "version": 1,
+                "plan_digest": review_plan_digest(),
                 "results": [
                     {"lens": "security", "outcome": "pending"},
                     {"lens": "correctness", "outcome": "passed", "summary": "Clear."},
@@ -63,6 +69,7 @@ def test_evaluate_results_keeps_advisory_findings_non_blocking(tmp_path: Path) -
             tmp_path,
             {
                 "version": 1,
+                "plan_digest": review_plan_digest(),
                 "results": [
                     {"lens": "correctness", "outcome": "passed"},
                     {"lens": "security", "outcome": "passed"},
@@ -83,15 +90,33 @@ def test_evaluate_results_keeps_advisory_findings_non_blocking(tmp_path: Path) -
 @pytest.mark.parametrize(
     "document",
     [
-        {"version": 2, "results": []},
+        {"version": 2, "plan_digest": review_plan_digest(), "results": []},
+        {"version": 1, "plan_digest": "not-a-digest", "results": []},
         {
             "version": 1,
+            "plan_digest": review_plan_digest(),
             "results": [{"lens": "x", "outcome": "failed"}, {"lens": "x", "outcome": "passed"}],
         },
-        {"version": 1, "results": [{"lens": "x", "outcome": "unknown"}]},
-        {"version": 1, "results": [{"lens": "x", "outcome": "passed", "summary": ""}]},
-        {"version": 1, "results": [{"lens": "x", "outcome": "passed", "extra": 1}]},
-        {"version": 1, "results": [{"lens": "Bad Lens", "outcome": "passed"}]},
+        {
+            "version": 1,
+            "plan_digest": review_plan_digest(),
+            "results": [{"lens": "x", "outcome": "unknown"}],
+        },
+        {
+            "version": 1,
+            "plan_digest": review_plan_digest(),
+            "results": [{"lens": "x", "outcome": "passed", "summary": ""}],
+        },
+        {
+            "version": 1,
+            "plan_digest": review_plan_digest(),
+            "results": [{"lens": "x", "outcome": "passed", "extra": 1}],
+        },
+        {
+            "version": 1,
+            "plan_digest": review_plan_digest(),
+            "results": [{"lens": "Bad Lens", "outcome": "passed"}],
+        },
     ],
 )
 def test_load_results_rejects_invalid_contract(tmp_path: Path, document: object) -> None:
@@ -101,7 +126,12 @@ def test_load_results_rejects_invalid_contract(tmp_path: Path, document: object)
 
 def test_load_results_rejects_duplicate_json_keys(tmp_path: Path) -> None:
     path = tmp_path / "results.json"
-    path.write_text('{"version": 1, "results": [], "results": []}', encoding="utf-8")
+    path.write_text(
+        '{"version": 1, "plan_digest": "'
+        + review_plan_digest()
+        + '", "results": [], "results": []}',
+        encoding="utf-8",
+    )
 
     with pytest.raises(ConfigurationError, match="valid JSON"):
         load_results(path)
@@ -110,6 +140,7 @@ def test_load_results_rejects_duplicate_json_keys(tmp_path: Path) -> None:
 def test_json_evaluation_is_versioned_and_bounded() -> None:
     results = AgentReviewResults(
         version=1,
+        plan_digest=review_plan_digest(),
         # Constructed directly to exercise rendering independently of file loading.
         results=(LensResult("correctness", LensOutcome.PASSED, "Clear."),),
     )
@@ -118,13 +149,26 @@ def test_json_evaluation_is_versioned_and_bounded() -> None:
     document = json.loads(render_evaluation(results, aggregate, "json"))
 
     assert document["version"] == 1
+    assert document["plan_digest"] == review_plan_digest()
     assert document["state"] == "pending"
     assert document["results"][0]["outcome"] == "passed"
+
+
+def test_evaluate_results_rejects_a_receipt_for_another_plan() -> None:
+    results = AgentReviewResults(
+        version=1,
+        plan_digest="0" * 64,
+        results=(LensResult("correctness", LensOutcome.PASSED),),
+    )
+
+    with pytest.raises(ConfigurationError, match="do not match"):
+        evaluate_results(review_policy(), results)
 
 
 def test_github_evaluation_escapes_lens_summaries_and_reports_missing_results() -> None:
     results = AgentReviewResults(
         version=1,
+        plan_digest=review_plan_digest(),
         results=(LensResult("correctness", LensOutcome.FAILED, "line one\nline two % done"),),
     )
     aggregate = evaluate_results(review_policy(), results)

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from yaga.agent_review.evaluation import LensOutcome, ReviewAggregate, evaluate_policy
+from yaga.agent_review.plan import build_plan
 from yaga.agent_review.policy import AgentReviewPolicy
 from yaga.errors import ConfigurationError, safe_error_text
 from yaga.files import read_file_prefix
@@ -19,9 +20,10 @@ MAX_RESULTS = 32
 MAX_SUMMARY_BYTES = 4096
 MAX_GITHUB_TITLE = 200
 MAX_GITHUB_MESSAGE = 500
-_ROOT_KEYS = frozenset({"version", "results"})
+_ROOT_KEYS = frozenset({"version", "plan_digest", "results"})
 _RESULT_KEYS = frozenset({"lens", "outcome", "summary"})
 _LENS_NAME = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
+_PLAN_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +40,7 @@ class AgentReviewResults:
     """A validated, bounded result document returned by an adapter."""
 
     version: int
+    plan_digest: str
     results: tuple[LensResult, ...]
 
     def outcomes(self) -> dict[str, LensOutcome]:
@@ -76,6 +79,9 @@ def evaluate_results(
         raise TypeError("policy must be an AgentReviewPolicy")
     if not isinstance(results, AgentReviewResults):
         raise TypeError("results must be AgentReviewResults")
+    expected_digest = build_plan(policy).digest()
+    if results.plan_digest != expected_digest:
+        raise ConfigurationError("Agent review results do not match the current policy plan")
     return evaluate_policy(policy, results.outcomes())
 
 
@@ -91,6 +97,7 @@ def render_evaluation(
         raise TypeError("aggregate must be a ReviewAggregate")
     document = {
         "version": results.version,
+        "plan_digest": results.plan_digest,
         "state": aggregate.state.value,
         "blocking_failures": list(aggregate.blocking_failures),
         "blocking_pending": list(aggregate.blocking_pending),
@@ -194,6 +201,9 @@ def _parse_document(document: Any, path: Path) -> AgentReviewResults:
     version = document.get("version")
     if type(version) is not int or version != 1:
         raise ConfigurationError(f"Agent review results.version must be integer 1 in {path}")
+    plan_digest = document.get("plan_digest")
+    if not isinstance(plan_digest, str) or not _PLAN_DIGEST.fullmatch(plan_digest):
+        raise ConfigurationError(f"Agent review results.plan_digest is invalid in {path}")
     raw_results = document.get("results")
     if not isinstance(raw_results, list) or len(raw_results) > MAX_RESULTS:
         raise ConfigurationError(f"Agent review results.results is unbounded or invalid in {path}")
@@ -220,7 +230,7 @@ def _parse_document(document: Any, path: Path) -> AgentReviewResults:
         ):
             raise ConfigurationError(f"Agent review result summary is invalid in {path}")
         parsed.append(LensResult(lens, outcome, summary))
-    return AgentReviewResults(version, tuple(parsed))
+    return AgentReviewResults(version, plan_digest, tuple(parsed))
 
 
 def _reject_unknown(

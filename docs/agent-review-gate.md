@@ -71,13 +71,16 @@ yaga gate agent-review policy evaluate --file .yaga.toml --results review-result
 ```
 
 The plan preserves configuration order, marks every lens as `required` or `advisory`, and carries
-the requested publication mode; it does not contact an agent, resolve a preset, or read credentials.
-Adapters can use the JSON document as their input and return one closed outcome for each named lens.
+the requested publication mode. Its `plan_digest` is a deterministic SHA-256 identity of the
+version, aggregation, and ordered lens definitions. It does not contact an agent, resolve a preset,
+or read credentials. Adapters can use the JSON document as their input and must copy its digest into
+the result receipt while returning one closed outcome for each named lens.
 The result contract is deliberately small:
 
 ```json
 {
   "version": 1,
+  "plan_digest": "8fab465b0b8ea9bf25e0c993387673ddde272405e885573f2094e09611c02cf0",
   "results": [
     {"lens": "correctness", "outcome": "passed", "summary": "No findings."},
     {"lens": "documentation", "outcome": "failed", "summary": "The setup example is stale."}
@@ -85,8 +88,9 @@ The result contract is deliberately small:
 }
 ```
 
-`policy evaluate` rejects malformed, duplicate, unknown, or oversized results, applies the
-configured aggregation, and returns exit `0` only when all blocking policy requirements pass.
+`policy evaluate` rejects malformed, duplicate, unknown, oversized, or plan-mismatched results,
+applies the configured aggregation, and returns exit `0` only when all blocking policy requirements
+pass.
 Advisory failures remain visible without changing that exit state. Use `--format github` when the
 adapter runs in a GitHub Actions step: it emits escaped error annotations for blocking failures and
 pending lenses, warning annotations for advisory findings, and one bounded notice summary. The
@@ -122,7 +126,7 @@ commit, lifecycle boundary, and request before writing the receipt.
 Use a blocking failure to exercise CI behavior:
 
 ```json
-{"version":1,"results":[
+{"version":1,"plan_digest":"8fab465b0b8ea9bf25e0c993387673ddde272405e885573f2094e09611c02cf0","results":[
   {"lens":"correctness","outcome":"failed","summary":"A regression is present."},
   {"lens":"security","outcome":"passed"},
   {"lens":"documentation","outcome":"passed"}
