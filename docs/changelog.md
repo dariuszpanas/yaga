@@ -13,6 +13,21 @@
 - Added configurable `body-max-single-line-paragraphs` enforcement for deterministic detection of
   bodies split into excessive one-line prose paragraphs; list items remain exempt.
 
+### Changed
+
+- Documented the classification, seq2seq, and Bedrock quality modes, including Hugging Face cache
+  reuse, offline replay, credential boundaries, and configuration precedence.
+- Aligned the repository and hosted workflows on uv `0.12.7`, the runtime supported by Dependabot.
+- Kept the public review lifecycle provider-neutral as the Agent review gate while retaining
+  provider-specific adapters behind configurable presets and named lenses.
+
+### Fixed
+
+- Allow one intentional one-line prose paragraph while still flagging repeated blank-line sentence
+  splitting; YAGA's own policy now uses that bound.
+- Added a bounded findings-by-rule summary to GitHub commit-policy output so failed rule codes are
+  visible in workflow logs and step summaries.
+
 YAGA keeps a human-readable [CHANGELOG.md](https://github.com/dariuszpanas/yaga/blob/main/CHANGELOG.md)
 at the repository root. It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html) for releases.

@@ -32,4 +32,19 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 - Detailed documentation for usage modes, configuration, repository checks, GitHub Actions, and
   adoption recipes.
 
+### Changed
+
+- Document classification, seq2seq, and Bedrock quality modes, including Hugging Face cache reuse,
+  offline replay, credential boundaries, and configuration precedence.
+- Align the repository and hosted workflows on uv `0.12.7`, the runtime supported by Dependabot.
+- Keep the public review lifecycle provider-neutral as the Agent review gate while retaining
+  provider-specific adapters behind configurable presets and named lenses.
+
+### Fixed
+
+- Allow one intentional one-line prose paragraph while still flagging repeated blank-line sentence
+  splitting; YAGA's own policy now uses that bound.
+- Add a bounded findings-by-rule summary to GitHub commit-policy output so failed rule codes are
+  visible in workflow logs and step summaries.
+
 <!-- Release links will be added when version tags are published. -->
