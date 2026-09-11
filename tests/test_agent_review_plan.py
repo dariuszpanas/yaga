@@ -14,8 +14,8 @@ def review_policy() -> AgentReviewPolicy:
         required=("correctness",),
         aggregation="all-required",
         lenses=(
-            ReviewLens("correctness", "codex", "Review behavior.", "review"),
-            ReviewLens("docs", "other-agent", "Review docs.", "advisory"),
+            ReviewLens("correctness", "codex", "Review behavior.", "review", "inline"),
+            ReviewLens("docs", "other-agent", "Review docs.", "advisory", "comment"),
         ),
     )
 
@@ -41,6 +41,7 @@ def test_json_plan_is_stable_and_contains_no_provider_credentials() -> None:
                 "instruction": "Review behavior.",
                 "required": True,
                 "outcome": "review",
+                "publication": "inline",
             },
             {
                 "name": "docs",
@@ -48,6 +49,7 @@ def test_json_plan_is_stable_and_contains_no_provider_credentials() -> None:
                 "instruction": "Review docs.",
                 "required": False,
                 "outcome": "advisory",
+                "publication": "comment",
             },
         ],
     }

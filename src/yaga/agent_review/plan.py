@@ -18,6 +18,7 @@ class ReviewPlanItem:
     instruction: str
     required: bool
     outcome: str
+    publication: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +53,7 @@ def build_plan(policy: AgentReviewPolicy) -> ReviewPlan:
                 instruction=lens.instruction,
                 required=lens.name in required,
                 outcome=lens.outcome,
+                publication=lens.publication,
             )
             for lens in policy.lenses
         ),

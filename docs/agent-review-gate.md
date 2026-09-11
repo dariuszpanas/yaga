@@ -30,6 +30,7 @@ aggregation = "all-required"
 preset = "codex"
 instruction = "Review behavior, tests, and compatibility."
 outcome = "review"
+publication = "inline"
 
 [agent-review.agents.security]
 preset = "codex"
@@ -40,10 +41,13 @@ outcome = "review"
 preset = "codex"
 instruction = "Review public documentation and developer ergonomics."
 outcome = "advisory"
+publication = "comment"
 ```
 
 Required lenses participate in the aggregate gate; advisory lenses can publish findings without
-blocking it. Every lens must have a unique name, a bounded instruction, and a known adapter preset.
+blocking it. Every lens must have a unique name, a bounded instruction, a known adapter preset, and
+one publication mode: `comment`, `inline`, `reaction`, `review`, or `check`. The mode describes
+the intended provider output; it does not grant credentials or bypass provider capabilities.
 Credentials, tokens, and provider-specific secrets stay in the trusted workflow environment.
 
 Adapters return only the closed outcomes `passed`, `failed`, or `pending`, keyed by lens name. The
@@ -64,13 +68,13 @@ yaga gate agent-review policy plan --file .yaga.toml
 yaga gate agent-review policy plan --file .yaga.toml --format json
 ```
 
-The plan preserves configuration order and marks every lens as `required` or `advisory`; it does
-not contact an agent, resolve a preset, or read credentials. Adapters can use the JSON document as
-their input and return one closed outcome for each named lens.
+The plan preserves configuration order, marks every lens as `required` or `advisory`, and carries
+the requested publication mode; it does not contact an agent, resolve a preset, or read credentials.
+Adapters can use the JSON document as their input and return one closed outcome for each named lens.
 
 The validator requires schema version `1`, at least one required lens, unique lower-case lens names,
-known outcomes (`review` or `advisory`), bounded instructions, and a bounded preset name. It does
-not contact an agent or read credentials. The trusted publisher will consume this same validated
+known outcomes (`review` or `advisory`), publication modes, bounded instructions, and a bounded
+preset name. It does not contact an agent or read credentials. The trusted publisher will consume this same validated
 model when provider adapters are enabled. The composite Action can validate the same file before
 its first GitHub API request:
 

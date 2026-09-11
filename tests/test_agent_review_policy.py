@@ -36,12 +36,14 @@ instruction = "Review trust boundaries."
 preset = "other-agent"
 instruction = "Review documentation."
 outcome = "advisory"
+publication = "comment"
 """,
         )
     )
     assert policy.required == ("correctness", "security")
     assert [lens.name for lens in policy.lenses] == ["correctness", "security", "docs"]
     assert policy.lens("docs").outcome == "advisory"
+    assert policy.lens("docs").publication == "comment"
 
 
 @pytest.mark.parametrize(
@@ -58,6 +60,10 @@ outcome = "advisory"
         (
             "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'\noutcome='advisory'",
             "must have outcome review",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'\npublication='emoji'",
+            "publication is invalid",
         ),
         (
             "[agent-review]\nversion = 1\nrequired = ['missing']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'",

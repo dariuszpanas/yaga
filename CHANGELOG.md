@@ -15,6 +15,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 - Trusted composite Actions can validate a bounded Agent review policy from the default-branch
   workspace before making their first GitHub API request.
 - Add `agent-review policy plan` to expose deterministic named-lens adapter work in text or JSON.
+- Add closed per-lens publication modes for comments, inline reviews, reactions, native reviews,
+  and check-style provider output.
 - Add a provider-neutral named-lens evaluator with deterministic `all-required` and `any-required`
   aggregation and non-blocking advisory outcomes.
 - An explicit `commit.typos = "check"` mode for bounded commit-message spelling checks through an
