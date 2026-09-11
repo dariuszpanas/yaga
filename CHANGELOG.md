@@ -8,6 +8,9 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Refine `body-paragraph-splitting = "check"` so punctuation-free one-line notes remain valid;
+  only stronger continuation signals such as continuation punctuation or a lowercase next paragraph
+  are reported.
 - An opt-in `yaga commit quality` advisory using a pinned local Hugging Face model, with offline
   cache support and versioned text/JSON reports.
 - Make commit body line length an opt-in policy so longer explanations are accepted by default;

@@ -72,9 +72,10 @@ paragraph appears to continue into the next one-line prose paragraph. List items
 `-`, `*`, `+`, or a numbered marker such as `1.` are ignored. A one-line paragraph is not an error
 by itself: this setting does not require every prose paragraph to wrap onto two physical lines.
 
-The check is continuation-aware: it only extends a run when the previous line does not end in `.`,
-`!`, or `?`, or when the next paragraph starts with a lowercase letter. For example, this is valid
-with `body-paragraph-splitting = "check"` because the paragraphs are complete notes:
+The check is continuation-aware: it reports a boundary when the previous paragraph ends in
+continuation punctuation such as `,`, `;`, `:`, or a dash, or when the next paragraph starts with a
+lowercase letter. A paragraph that simply ends without punctuation remains valid. For example, this
+is valid with `body-paragraph-splitting = "check"` because the paragraphs are complete notes:
 
 ```text
 The parser accepts the legacy form.

@@ -29,6 +29,7 @@ from yaga.commits.parser import (
 from yaga.errors import InputError
 
 _TERMINAL_PUNCTUATION = (".", "!", "?")
+_CONTINUATION_PUNCTUATION = (",", ";", ":", "—", "–", "-")
 _LIST_ITEM = re.compile(r"^(?:[-*+]\s+|\d+[.)]\s+)")
 
 
@@ -292,7 +293,7 @@ def _looks_like_sentence_continuation(previous: str | None, current: str) -> boo
         return False
     previous_end = previous.rstrip()[-1:]
     current_start = current.lstrip()[:1]
-    return previous_end not in ".!?" or current_start.islower()
+    return previous_end in _CONTINUATION_PUNCTUATION or current_start.islower()
 
 
 def _is_prose_paragraph_line(line: str) -> bool:

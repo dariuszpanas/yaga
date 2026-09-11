@@ -348,6 +348,9 @@ def test_body_paragraph_policy_allows_standalone_short_paragraphs_and_list_items
     )
     assert result(separated_short_paragraphs, policy).valid
 
+    one_line_note_without_terminal_punctuation = "fix: document parser behavior\n\nValidation note"
+    assert result(one_line_note_without_terminal_punctuation, policy).valid
+
     message = (
         "fix: document parser behavior\n\n"
         "First sentence continues on the next line.\n"
