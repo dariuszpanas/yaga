@@ -70,8 +70,9 @@ unlimited. `body-max-consecutive-single-line-paragraphs` is a separate optional 
 finds the longest run of prose paragraphs made of exactly one non-empty line after parsing the
 header and final footer block. List items beginning with `-`, `*`, `+`, or a numbered marker such as
 `1.` are not counted, and a wrapped paragraph breaks the run. Omit the setting to allow any layout,
-or set it to `1` to permit standalone one-line paragraphs while flagging a likely sentence split by
-blank lines.
+set it to `0` for the same unlimited behavior, or set it to `1` to permit standalone one-line
+paragraphs while flagging a likely sentence split by blank lines. A one-line paragraph is not an
+error by itself.
 
 The check reports `body.paragraph-format` at the first offending paragraph and is deterministic;
 it does not depend on the optional quality model. This makes it suitable for enforcing repository

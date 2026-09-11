@@ -194,7 +194,8 @@ require one. A recognized final footer block is not prose body and does not cont
 `body-max-consecutive-single-line-paragraphs` optionally limits consecutive prose paragraphs that
 contain only one non-empty line. It catches a blank-line split between sentence-like paragraphs
 while leaving standalone short paragraphs and list items alone. Omit it for unlimited layout, or set
-it to `1` to flag only adjacent one-line prose paragraphs.
+it to `0` for unlimited layout. Set it to `1` to flag only adjacent one-line prose paragraphs; a
+standalone one-line validation note or justification remains valid.
 
 For a new repository, YAGA can create a recommended standalone policy and immediately report its
 effective values:

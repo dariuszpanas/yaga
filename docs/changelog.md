@@ -17,6 +17,9 @@
 
 ### Changed
 
+- The consecutive single-line paragraph policy now accepts `0` as an explicit unlimited setting;
+  one-line validation notes and justifications remain valid when the split-sentence heuristic is
+  enabled.
 - Agent review plan digests are now visible in text plans and evaluation summaries as well as JSON.
 - Quality reports now state how many body lines were included in each model invocation, making
   title-only and multiline checks distinguishable without printing the full commit message.

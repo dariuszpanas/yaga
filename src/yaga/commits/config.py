@@ -355,7 +355,7 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         body_max_consecutive_single_line_paragraphs=_optional_integer(
             raw_commit,
             "body-max-consecutive-single-line-paragraphs",
-            minimum=1,
+            minimum=0,
             maximum=100_000,
             path=path,
         ),

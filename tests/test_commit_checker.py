@@ -358,6 +358,13 @@ def test_body_paragraph_policy_allows_standalone_short_paragraphs_and_list_items
     assert result(message, policy).valid
 
 
+def test_body_paragraph_policy_zero_disables_the_heuristic() -> None:
+    policy = CommitPolicy(body_max_consecutive_single_line_paragraphs=0)
+    message = "fix: keep short paragraphs valid\n\nFirst sentence continues,\n\nwith more detail."
+
+    assert result(message, policy).valid
+
+
 def test_disabled_body_min_words_does_not_call_the_counter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
