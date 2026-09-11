@@ -57,6 +57,17 @@ Validate the policy before wiring it into a workflow:
 yaga gate agent-review policy check --file .yaga.toml
 ```
 
+To inspect the exact provider-neutral work the policy describes, render its execution plan:
+
+```bash
+yaga gate agent-review policy plan --file .yaga.toml
+yaga gate agent-review policy plan --file .yaga.toml --format json
+```
+
+The plan preserves configuration order and marks every lens as `required` or `advisory`; it does
+not contact an agent, resolve a preset, or read credentials. Adapters can use the JSON document as
+their input and return one closed outcome for each named lens.
+
 The validator requires schema version `1`, at least one required lens, unique lower-case lens names,
 known outcomes (`review` or `advisory`), bounded instructions, and a bounded preset name. It does
 not contact an agent or read credentials. The trusted publisher will consume this same validated
