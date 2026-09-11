@@ -383,6 +383,10 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
         value.get("provider", defaults.provider.value), QualityProvider, "quality.provider", path
     )
     task = _enum(value.get("task", defaults.task.value), QualityTask, "quality.task", path)
+    if provider is QualityProvider.BEDROCK and task is QualityTask.SEQ2SEQ:
+        raise ConfigurationError(
+            f"quality.task = 'seq2seq' is supported only by the Hugging Face provider in {path}"
+        )
     model_id = value.get("model", defaults.model_id)
     if (
         not isinstance(model_id, str)

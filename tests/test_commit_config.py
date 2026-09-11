@@ -57,7 +57,7 @@ def test_quality_policy_is_configurable_without_secrets(tmp_path: Path) -> None:
         """
 [tool.yaga.commit.quality]
 provider = "bedrock"
-task = "seq2seq"
+task = "classification"
 model = "amazon.nova-micro-v1:0"
 threshold = 0.4
 region = "us-west-2"
@@ -69,7 +69,7 @@ max-input-tokens = 1024
     loaded = load_config(project, start=tmp_path)
 
     assert loaded.policy.quality.provider is QualityProvider.BEDROCK
-    assert loaded.policy.quality.task is QualityTask.SEQ2SEQ
+    assert loaded.policy.quality.task is QualityTask.CLASSIFICATION
     assert loaded.policy.quality.model_id == "amazon.nova-micro-v1:0"
     assert loaded.policy.quality.revision is None
     assert loaded.policy.quality.threshold == 0.4
@@ -83,6 +83,7 @@ max-input-tokens = 1024
     [
         '[tool.yaga.commit.quality]\nprovider = "unknown"\n',
         '[tool.yaga.commit.quality]\ntask = "unknown"\n',
+        '[tool.yaga.commit.quality]\nprovider = "bedrock"\ntask = "seq2seq"\n',
         '[tool.yaga.commit.quality]\nmodel = "bad\nmodel"\n',
         '[tool.yaga.commit.quality]\nrevision = "main"\n',
         "[tool.yaga.commit.quality]\nthreshold = 0\n",
