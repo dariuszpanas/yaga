@@ -48,6 +48,31 @@ class AgentReviewResults:
         return {result.lens: result.outcome for result in self.results}
 
 
+def build_pending_results(policy: AgentReviewPolicy) -> AgentReviewResults:
+    """Build a complete pending receipt scaffold for every configured lens."""
+    if not isinstance(policy, AgentReviewPolicy):
+        raise TypeError("policy must be an AgentReviewPolicy")
+    plan = build_plan(policy)
+    return AgentReviewResults(
+        version=policy.version,
+        plan_digest=plan.digest(),
+        results=tuple(LensResult(item.name, LensOutcome.PENDING) for item in plan.items),
+    )
+
+
+def render_results_template(policy: AgentReviewPolicy) -> str:
+    """Render a JSON receipt scaffold that adapters can fill without changing its shape."""
+    results = build_pending_results(policy)
+    document = {
+        "version": results.version,
+        "plan_digest": results.plan_digest,
+        "results": [
+            {"lens": result.lens, "outcome": result.outcome.value} for result in results.results
+        ],
+    }
+    return json.dumps(document, ensure_ascii=False, indent=2)
+
+
 def load_results(path: Path) -> AgentReviewResults:
     """Load one explicit JSON result document without contacting a provider."""
     resolved = path.expanduser().resolve()

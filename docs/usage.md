@@ -25,6 +25,8 @@ The same providers, plus `workflow check`, `workflow security`, `workflow lint`,
 support `--format github` for escaped workflow annotations where documented. Configuration reports
 remain text/JSON; `commit quality` also supports GitHub warning/error annotations, while `gate
 agent-review policy evaluate` additionally supports GitHub output for adapter result evaluation.
+For multi-lens adapters, `agent-review policy template` emits a complete pending JSON receipt
+scaffold whose digest and lens entries can be filled as provider work completes.
 
 ## Explicit commit sources
 
