@@ -491,9 +491,11 @@ def test_body_single_line_paragraph_limit_accepts_its_closed_integer_range(
     tmp_path: Path,
     maximum: int,
 ) -> None:
-    project = write_pyproject(tmp_path, f"body-max-single-line-paragraphs = {maximum}\n")
+    project = write_pyproject(
+        tmp_path, f"body-max-consecutive-single-line-paragraphs = {maximum}\n"
+    )
 
-    assert load_config(project).policy.body_max_single_line_paragraphs == maximum
+    assert load_config(project).policy.body_max_consecutive_single_line_paragraphs == maximum
 
 
 @pytest.mark.parametrize("value", ["0", "100001", "true", '"2"', "2.0"])
@@ -501,10 +503,11 @@ def test_body_single_line_paragraph_limit_rejects_invalid_values(
     tmp_path: Path,
     value: str,
 ) -> None:
-    project = write_pyproject(tmp_path, f"body-max-single-line-paragraphs = {value}\n")
+    project = write_pyproject(tmp_path, f"body-max-consecutive-single-line-paragraphs = {value}\n")
 
     with pytest.raises(
-        ConfigurationError, match="body-max-single-line-paragraphs must be an integer"
+        ConfigurationError,
+        match="body-max-consecutive-single-line-paragraphs must be an integer",
     ):
         load_config(project)
 

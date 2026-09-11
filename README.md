@@ -112,8 +112,8 @@ body-policy = "optional"
 body-min-length = 0
 body-min-words = 8
 # Omit body-max-line-length unless this repository wants a wrapping limit.
-# Omit body-max-single-line-paragraphs unless this repository wants to limit
-# one-line prose paragraphs separated by blank lines.
+# Omit body-max-consecutive-single-line-paragraphs unless this repository wants
+# to catch sentence-like prose split by blank lines.
 dependabot-pull-requests = "skip" # check or skip in event-aware PR checks
 merge-commits = "reject"         # ignore, check, or reject
 ignored-headers = ['Revert "*"'] # bounded, case-sensitive glob patterns
@@ -191,10 +191,10 @@ token. The minimum is checked only when a prose body exists, so use `body-policy
 require one. A recognized final footer block is not prose body and does not contribute words. When
 `body-policy = "forbidden"`, both body minima must be zero.
 
-`body-max-single-line-paragraphs` optionally limits prose paragraphs that contain only one
-non-empty line. It catches bodies with a blank line between every sentence while leaving list items
-alone. Omit it for unlimited layout, or set it to `1` to allow one intentional short paragraph while
-flagging repeated paragraph splitting.
+`body-max-consecutive-single-line-paragraphs` optionally limits consecutive prose paragraphs that
+contain only one non-empty line. It catches a blank-line split between sentence-like paragraphs
+while leaving standalone short paragraphs and list items alone. Omit it for unlimited layout, or set
+it to `1` to flag only adjacent one-line prose paragraphs.
 
 For a new repository, YAGA can create a recommended standalone policy and immediately report its
 effective values:

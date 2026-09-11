@@ -239,16 +239,16 @@ def _check_target(
                         )
                     )
                     break
-        if policy.body_max_single_line_paragraphs is not None:
-            count, first_line = _single_line_prose_paragraphs(parsed.body_lines)
-            if count > policy.body_max_single_line_paragraphs:
+        if policy.body_max_consecutive_single_line_paragraphs is not None:
+            count, first_line = _consecutive_single_line_prose_paragraphs(parsed.body_lines)
+            if count > policy.body_max_consecutive_single_line_paragraphs:
                 noun = "paragraph" if count == 1 else "paragraphs"
                 diagnostics.append(
                     Diagnostic(
                         code="body.paragraph-format",
                         message=(
-                            f"body has {count} single-line prose {noun}; maximum is "
-                            f"{policy.body_max_single_line_paragraphs}"
+                            f"body has {count} consecutive single-line prose {noun}; maximum is "
+                            f"{policy.body_max_consecutive_single_line_paragraphs}"
                         ),
                         line=parsed.body_start_line + first_line,
                     )
@@ -267,10 +267,13 @@ def _check_target(
     return CheckResult(target=target, header=header, diagnostics=tuple(diagnostics))
 
 
-def _single_line_prose_paragraphs(body_lines: tuple[str, ...]) -> tuple[int, int]:
-    """Count single-line prose paragraphs and return the first zero-based line offset."""
-    count = 0
-    first_line = 0
+def _consecutive_single_line_prose_paragraphs(body_lines: tuple[str, ...]) -> tuple[int, int]:
+    """Find the longest run that looks like prose was split at a paragraph break."""
+    longest = 0
+    longest_start = 0
+    run = 0
+    run_start = 0
+    previous_line: str | None = None
     paragraph_start = 0
     paragraph: list[str] = []
     for offset, line in enumerate((*body_lines, "")):
@@ -280,11 +283,30 @@ def _single_line_prose_paragraphs(body_lines: tuple[str, ...]) -> tuple[int, int
             paragraph.append(line)
             continue
         if len(paragraph) == 1 and _is_prose_paragraph_line(paragraph[0]):
-            if count == 0:
-                first_line = paragraph_start
-            count += 1
+            line = paragraph[0]
+            if run and _looks_like_sentence_continuation(previous_line, line):
+                run += 1
+            else:
+                run = 1
+                run_start = paragraph_start
+            previous_line = line
+            if run > longest:
+                longest = run
+                longest_start = run_start
+        else:
+            run = 0
+            previous_line = None
         paragraph.clear()
-    return count, first_line
+    return longest, longest_start
+
+
+def _looks_like_sentence_continuation(previous: str | None, current: str) -> bool:
+    """Recognize a blank-line boundary that is likely an accidental sentence split."""
+    if previous is None:
+        return False
+    previous_end = previous.rstrip()[-1:]
+    current_start = current.lstrip()[:1]
+    return previous_end not in ".!?" or current_start.islower()
 
 
 def _is_prose_paragraph_line(line: str) -> bool:
