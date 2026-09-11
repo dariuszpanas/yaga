@@ -35,7 +35,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert build_requirements == ["hatchling==1.32.0"]
     assert "hatchling==1.32.0" in project["dependency-groups"]["dev"]
     assert "pre-commit>=4.6.2,<5" in project["dependency-groups"]["dev"]
-    assert project["tool"]["uv"]["required-version"] == "==0.9.18"
+    assert project["tool"]["uv"]["required-version"] == "==0.12.7"
     commit_policy = project["tool"]["yaga"]["commit"]
     assert commit_policy["breaking-markers"] == "paired"
     assert commit_policy["scope-policy-by-type"] == {
@@ -157,7 +157,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert ci.count('version: "0.9.18"') == 2
+    assert ci.count('version: "0.12.7"') == 2
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
     assert "yaga_message=\"$(printf '%s\\n\\n%s'" in ci
