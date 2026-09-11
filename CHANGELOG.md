@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Add provider, task, model, mode, and aggregate counts to the bounded GitHub notice emitted by
+  `commit quality --format github`.
 - Dogfood `commit quality --format github` in the repository workflow for visible advisory warning
   annotations in both online and offline cache-replay steps.
 - Add `--format github` to `yaga commit quality`, emitting bounded warning annotations for flagged
