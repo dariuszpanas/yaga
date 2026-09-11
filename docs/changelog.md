@@ -4,6 +4,10 @@
 
 ### Added
 
+- Added concrete passing and failing examples for the configurable consecutive single-line
+  paragraph check, including its continuation-aware punctuation heuristic and explicit unlimited
+  setting.
+
 - Added JSON output for `agent-review policy check`, including the validated lens counts, required
   lens order, aggregation mode, and matching plan digest.
 - Added deterministic Agent review plan digests so adapter result receipts cannot be evaluated
