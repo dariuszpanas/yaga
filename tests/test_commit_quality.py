@@ -10,6 +10,8 @@ from yaga.commits.models import CommitTarget, OutputFormat
 from yaga.commits.quality import (
     DEFAULT_MAX_INPUT_TOKENS,
     DEFAULT_MODEL_REVISION,
+    MAX_CLASSIFICATION_LABEL_BYTES,
+    MAX_CLASSIFICATION_SCORES,
     MAX_MODEL_INPUT_CHARS,
     QualityAssessment,
     QualityPrediction,
@@ -53,6 +55,25 @@ def test_quality_extracts_label_zero_probability() -> None:
 def test_quality_rejects_untrusted_model_output(value: object) -> None:
     with pytest.raises(ValueError):
         _low_quality_probability(value)
+
+
+def test_quality_rejects_duplicate_classifier_labels() -> None:
+    with pytest.raises(ValueError, match="duplicate labels"):
+        _low_quality_probability(
+            [{"label": "LABEL_0", "score": 0.2}, {"label": "label_0", "score": 0.8}]
+        )
+
+
+def test_quality_bounds_classifier_output() -> None:
+    scores = [
+        {"label": f"LABEL_{index}", "score": 0.1} for index in range(MAX_CLASSIFICATION_SCORES + 1)
+    ]
+    with pytest.raises(ValueError, match="exceeds"):
+        _low_quality_probability(scores)
+    with pytest.raises(ValueError, match="score objects"):
+        _low_quality_probability(
+            [{"label": "x" * (MAX_CLASSIFICATION_LABEL_BYTES + 1), "score": 0.1}]
+        )
 
 
 def test_quality_uses_injected_predictor_boundary(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -24,6 +24,8 @@ MAX_RESULTS = 256
 MAX_REASON_LENGTH = 500
 MAX_INPUT_TOKENS = 4096
 MAX_MODEL_INPUT_CHARS = 12000
+MAX_CLASSIFICATION_SCORES = 16
+MAX_CLASSIFICATION_LABEL_BYTES = 64
 
 Decision = Literal["pass", "flag"]
 
@@ -370,14 +372,25 @@ def _low_quality_probability(raw: object) -> float:
         raw = raw[0]
     if not isinstance(raw, list) or not raw or not all(isinstance(item, dict) for item in raw):
         raise ValueError("expected a non-empty list of score objects")
+    if len(raw) > MAX_CLASSIFICATION_SCORES:
+        raise ValueError(f"classification output exceeds {MAX_CLASSIFICATION_SCORES} scores")
     scores: dict[str, float] = {}
     for item in raw:
         label, score = item.get("label"), item.get("score")
-        if not isinstance(label, str) or not label or type(score) is not float:
+        if (
+            not isinstance(label, str)
+            or not label
+            or "\x00" in label
+            or len(label.encode("utf-8")) > MAX_CLASSIFICATION_LABEL_BYTES
+            or type(score) is not float
+        ):
             raise ValueError("score objects must contain a label and float score")
         if not 0.0 <= score <= 1.0:
             raise ValueError("scores must be between zero and one")
-        scores[label.casefold()] = score
+        normalized_label = label.casefold()
+        if normalized_label in scores:
+            raise ValueError("classification output contains duplicate labels")
+        scores[normalized_label] = score
     try:
         return scores["label_0"]
     except KeyError as error:
