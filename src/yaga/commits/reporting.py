@@ -147,6 +147,19 @@ def _render_quality_github_report(report: QualityReport) -> str:
         label = safe_text(result.target.label, maximum=MAX_DISPLAY_PATH)
         header = safe_text(result.target.message.splitlines()[0], maximum=MAX_DISPLAY_HEADER)
         detail = f"{label}: {header}"
+        body_lines = _message_body_lines(result.target.message)
+        body_label = "body line" if body_lines == 1 else "body lines"
+        detail += f"; {body_lines} {body_label}"
+        if result.input_characters is not None:
+            detail += f"; input {result.input_characters}/{report.max_input_characters} chars"
+            if result.input_character_truncated:
+                detail += ", character-truncated"
+        if result.input_tokens is not None and report.max_input_tokens is not None:
+            detail += f"; tokens {result.input_tokens}/{report.max_input_tokens}"
+            if result.input_truncated is True:
+                detail += ", truncated"
+            elif result.input_truncated is False:
+                detail += ", complete"
         if result.assessment.score is not None:
             detail += f"; score {result.assessment.score:.3f}"
         if result.assessment.reason:

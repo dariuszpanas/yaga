@@ -453,8 +453,8 @@ def test_quality_github_report_uses_bounded_warning_annotations(
     rendered = render_quality_report(report, QualityOutputFormat.GITHUB)
 
     assert (
-        "::warning title=YAGA commit quality::message: fix: vague change; score 0.910; Needs 100%25?more detail"
-        in rendered
+        "::warning title=YAGA commit quality::message: fix: vague change; 0 body lines; "
+        "input 17/12000 chars; score 0.910; Needs 100%25?more detail" in rendered
     )
     assert "YAGA quality checked 1 commit(s): 0 passed, 1 flagged." in rendered
     assert "Input: message" in rendered
@@ -467,6 +467,34 @@ def test_quality_github_report_uses_bounded_warning_annotations(
         " Provider: huggingface; Task: classification; Model: saridormi/commit-message-quality-codebert"
         in rendered
     )
+
+
+def test_quality_github_warning_shows_body_and_input_coverage() -> None:
+    message = "fix: vague change\n\nExplain the change in the log."
+    report = QualityReport(
+        results=(
+            QualityResult(
+                CommitTarget(label="message", message=message),
+                QualityAssessment("flag", 0.9),
+                0.7,
+                input_truncated=False,
+                input_tokens=9,
+                input_characters=len(message),
+                input_character_truncated=False,
+            ),
+        ),
+        provider="huggingface",
+        task="classification",
+        model_id="model",
+        revision=None,
+        offline=False,
+        region=None,
+        max_input_tokens=512,
+    )
+
+    rendered = render_quality_report(report, QualityOutputFormat.GITHUB)
+
+    assert "; 1 body line; input 49/12000 chars; tokens 9/512, complete; score 0.900" in rendered
 
 
 def test_quality_github_error_is_an_error_annotation() -> None:
