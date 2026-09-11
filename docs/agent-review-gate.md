@@ -55,7 +55,17 @@ yaga gate agent-review policy check --file .yaga.toml
 The validator requires schema version `1`, at least one required lens, unique lower-case lens names,
 known outcomes (`review` or `advisory`), bounded instructions, and a bounded preset name. It does
 not contact an agent or read credentials. The trusted publisher will consume this same validated
-model when provider adapters are enabled.
+model when provider adapters are enabled. The composite Action can validate the same file before
+its first GitHub API request:
+
+```yaml
+with:
+  agent-review-policy-file: .yaga/agent-review.toml
+```
+
+The trusted publisher must check out the default branch with `persist-credentials: false` before
+passing that relative path. YAGA rejects paths outside `GITHUB_WORKSPACE`; PR-controlled checkout
+content must never be used as security authority.
 
 ## Evidence and recovery
 

@@ -72,6 +72,41 @@ def test_operation_name_is_closed() -> None:
         runtime.operation_name("publish")
 
 
+def test_configured_review_policy_is_loaded_inside_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    policy_path = tmp_path / ".yaga" / "agent-review.toml"
+    policy_path.parent.mkdir()
+    policy_path.write_text(
+        "[agent-review]\n"
+        "version = 1\n"
+        "required = ['correctness']\n"
+        "[agent-review.agents.correctness]\n"
+        "preset = 'codex'\n"
+        "instruction = 'Review behavior.'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("YAGA_AGENT_REVIEW_POLICY_FILE", ".yaga/agent-review.toml")
+
+    policy = runtime._configured_review_policy()
+
+    assert policy is not None
+    assert policy.required == ("correctness",)
+
+
+def test_configured_review_policy_rejects_workspace_escape(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("YAGA_AGENT_REVIEW_POLICY_FILE", "../agent-review.toml")
+
+    with pytest.raises(GateError, match="inside the GitHub workspace"):
+        runtime._configured_review_policy()
+
+
 def test_invalidate_dispatches_without_loading_source(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
