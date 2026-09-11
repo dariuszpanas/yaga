@@ -143,6 +143,38 @@ requires `persist-credentials: false` on direct runner-resolved checkout steps, 
 rejects exact `pull-requests: write` and `statuses: write` under `pull_request` triggers. Use an
 exact custom rule selection only when the repository intentionally owns that policy.
 
+## Workflow lint cannot start or clean Docker
+
+`workflow lint` runs the pinned actionlint image in a private, labeled Docker volume. It requires a
+working Docker daemon even though the workflow files themselves are read-only inputs. Check the
+daemon and the active context before changing YAGA policy:
+
+```bash
+docker info
+docker context show
+docker image inspect "rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
+```
+
+YAGA uses that audited digest in its installed runtime. An unavailable daemon or missing image is
+an operational error (`2`), not an actionlint finding. The image is normally pulled or made
+available by the environment before the lint command runs.
+
+Cleanup failures include the exact private workspace name and a bounded, sanitized Docker cause,
+for example `Docker could not remove private actionlint workspace ...: ...`. Inspect only that
+named resource if the message identifies one:
+
+```bash
+docker volume inspect <exact-name-from-the-error>
+docker volume rm --force <exact-name-from-the-error>
+```
+
+Do not use broad `docker system prune` commands to recover a YAGA check: they can remove unrelated
+containers, images, or volumes. YAGA retries exact container and volume cleanup within a hard
+deadline and labels resources so a late-created resource can still be found. If `docker info`
+fails, restart or select the intended Docker engine first and rerun the check; if the exact volume
+remains after a successful daemon check, preserve the error text when reporting the environment
+issue.
+
 ## Preview or publish the docs
 
 Run a clean strict build before committing documentation changes:
