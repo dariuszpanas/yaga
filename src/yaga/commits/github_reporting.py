@@ -64,7 +64,8 @@ def _render_commit_github_report(report: ValidationReport) -> str:
     diagnostics = [
         safe_text(
             f"{result.target.sha[:12] if result.target.sha else result.target.label}: "
-            f"[{diagnostic.code}] line {diagnostic.line}: {diagnostic.message}",
+            f"[{diagnostic.code}] line {diagnostic.line}, column {diagnostic.column}: "
+            f"{diagnostic.message}",
             maximum=MAX_DISPLAY_HEADER + MAX_DIAGNOSTIC_MESSAGE,
         )
         for result in report.results
@@ -203,7 +204,8 @@ def _render_github_report(report: PullRequestValidationReport) -> str:
         identity = result.target.sha[:12] if result.target.sha else result.target.label
         for diagnostic in result.diagnostics:
             message = safe_text(
-                f"{identity}: [{diagnostic.code}] line {diagnostic.line}: {diagnostic.message}",
+                f"{identity}: [{diagnostic.code}] line {diagnostic.line}, "
+                f"column {diagnostic.column}: {diagnostic.message}",
                 maximum=MAX_DISPLAY_HEADER + MAX_DIAGNOSTIC_MESSAGE,
             )
             diagnostics.append(message)

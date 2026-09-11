@@ -129,6 +129,7 @@ Lines output, validates bounded finding fields, and converts each finding into a
 results independent of the tools installed on a developer machine.
 When Typos provides its bounded `byte_offset`, YAGA preserves it as a 1-based diagnostic column;
 older or alternate JSON output without that field falls back to column 1.
+GitHub output includes both the line and column in each escaped policy annotation.
 
 ```toml
 [commit]
