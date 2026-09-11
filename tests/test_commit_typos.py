@@ -49,6 +49,7 @@ def test_typos_json_findings_become_stable_diagnostics(monkeypatch: pytest.Monke
 
     assert diagnostics[0].code == "typos.word"
     assert diagnostics[0].line == 2
+    assert diagnostics[0].column == 4
     assert "teh" in diagnostics[0].message
     assert "the" in diagnostics[0].message
 
@@ -100,3 +101,14 @@ def test_typos_rejects_oversized_finding_fields(
 
     with pytest.raises(InputError, match="malformed JSON"):
         check_typos("feat: add a description")
+
+
+def test_typos_accepts_findings_without_a_byte_offset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    output = b'{"type":"typo","line_num":1,"typo":"teh","corrections":["the"]}\n'
+    monkeypatch.setattr(
+        "yaga.commits.typos.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, output, b""),
+    )
+
+    assert check_typos("teh")[0].column == 1
