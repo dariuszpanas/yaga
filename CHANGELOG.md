@@ -36,12 +36,16 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 - Document classification, seq2seq, and Bedrock quality modes, including Hugging Face cache reuse,
   offline replay, credential boundaries, and configuration precedence.
+- Use CPU-only PyTorch wheels on Linux for the optional quality workflow, avoiding unnecessary CUDA
+  runtime downloads while retaining platform-specific wheels elsewhere.
 - Align the repository and hosted workflows on uv `0.12.7`, the runtime supported by Dependabot.
 - Keep the public review lifecycle provider-neutral as the Agent review gate while retaining
   provider-specific adapters behind configurable presets and named lenses.
 
 ### Fixed
 
+- Reject unsupported Bedrock quality tasks and model revisions during configuration or invocation,
+  and keep Bedrock reports from claiming Hugging Face revision provenance.
 - Allow one intentional one-line prose paragraph while still flagging repeated blank-line sentence
   splitting; YAGA's own policy now uses that bound.
 - Add a bounded findings-by-rule summary to GitHub commit-policy output so failed rule codes are
