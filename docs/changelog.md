@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added a source-mode matrix and copyable examples for direct, file, stdin, single-commit, range,
+  and default-`HEAD` `commit quality` invocations.
 - Added per-message quality coverage metadata so Hugging Face text and JSON reports identify
   the measured input-token count and whether the configured input-token window truncated the model
   input.
