@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added GitHub Actions guidance for installing the pinned Typos CLI when a repository enables
+  commit-message spelling checks.
 - Run the optional Typos commit-message adapter from the selected repository so `--repo` checks
   honor that checkout's `_typos.toml` configuration.
 - Clarified the root README and command index so `commit quality` is described as a provider-neutral

@@ -22,6 +22,17 @@ variables. For example:
     uv run yaga commit check --range "$YAGA_RANGE" --format github
 ```
 
+If the repository policy sets `typos = "check"`, install the pinned Typos CLI before the check:
+
+```yaml
+- name: Install Typos CLI
+  run: cargo install typos-cli --version 1.49.0 --locked
+```
+
+The adapter sends each complete selected commit message through Typos' stdin interface and uses
+its JSON-lines output. Keep the version pinned and install it in the same job as YAGA; otherwise a
+missing executable is an operational failure (exit `2`), not a skipped spelling check.
+
 This workflow is a quota-saving quality heuristic, not a security authority: pull-request code
 controls its own execution.
 
