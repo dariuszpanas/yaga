@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass
 
@@ -29,13 +30,26 @@ class ReviewPlan:
     aggregation: str
     items: tuple[ReviewPlanItem, ...]
 
-    def document(self) -> dict[str, object]:
-        """Return the stable, provider-neutral JSON document."""
+    def digest(self) -> str:
+        """Return the deterministic identity of this exact provider-neutral plan."""
+        canonical = json.dumps(
+            self._base_document(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
+
+    def _base_document(self) -> dict[str, object]:
         return {
             "version": self.version,
             "aggregation": self.aggregation,
             "lenses": [asdict(item) for item in self.items],
         }
+
+    def document(self) -> dict[str, object]:
+        """Return the stable, provider-neutral JSON document."""
+        return self._base_document() | {"plan_digest": self.digest()}
 
 
 def build_plan(policy: AgentReviewPolicy) -> ReviewPlan:

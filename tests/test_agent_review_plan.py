@@ -34,6 +34,7 @@ def test_json_plan_is_stable_and_contains_no_provider_credentials() -> None:
     assert document == {
         "version": 1,
         "aggregation": "all-required",
+        "plan_digest": "0a6ce521e1f1eff2207afc508bfe38ae1dfc8aa42749dad4924363ad97bd298e",
         "lenses": [
             {
                 "name": "correctness",
