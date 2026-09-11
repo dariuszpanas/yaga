@@ -83,9 +83,9 @@ def evaluate_results(
     if results.plan_digest != expected_digest:
         raise ConfigurationError("Agent review results do not match the current policy plan")
     returned = set(results.outcomes())
-    for lens in policy.lenses:
-        if lens.name not in returned:
-            raise ConfigurationError(f"Agent review results are missing lens {lens.name}")
+    missing = tuple(lens.name for lens in policy.lenses if lens.name not in returned)
+    if missing:
+        raise ConfigurationError("Agent review results are missing lens(es): " + ", ".join(missing))
     return evaluate_policy(policy, results.outcomes())
 
 
