@@ -54,7 +54,7 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 | `body-paragraph-splitting` | `skip` (default) or `check` for likely sentence splits across blank lines. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
-| `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, max-tokens, and max-input-tokens. |
+| `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, max-tokens, max-input-tokens, and input-mode. |
 | `merge-commits` | `ignore`, `check`, or `reject`, based on Git parent identity. |
 | `ignored-headers` | Bounded case-sensitive glob patterns for intentional headers. |
 | `max-commits` | Positive bound for a selected commit range. |
