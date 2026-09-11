@@ -114,9 +114,10 @@ The result contract is deliberately small:
 }
 ```
 
-`policy evaluate` rejects malformed, duplicate, unknown, oversized, or plan-mismatched results,
-applies the configured aggregation, and returns exit `0` only when all blocking policy requirements
-pass.
+`policy evaluate` rejects malformed, duplicate, unknown, incomplete, oversized, or plan-mismatched
+results. An adapter must explicitly return `pending` when a lens has not completed; omission is an
+invalid handoff rather than an implicit pending state. Evaluation applies the configured
+aggregation and returns exit `0` only when all blocking policy requirements pass.
 Advisory failures remain visible without changing that exit state. Use `--format github` when the
 adapter runs in a GitHub Actions step: it emits escaped error annotations for blocking failures and
 pending lenses, warning annotations for advisory findings, and one bounded notice summary. The

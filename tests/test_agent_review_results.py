@@ -142,7 +142,11 @@ def test_json_evaluation_is_versioned_and_bounded() -> None:
         version=1,
         plan_digest=review_plan_digest(),
         # Constructed directly to exercise rendering independently of file loading.
-        results=(LensResult("correctness", LensOutcome.PASSED, "Clear."),),
+        results=(
+            LensResult("correctness", LensOutcome.PASSED, "Clear."),
+            LensResult("security", LensOutcome.PENDING),
+            LensResult("docs", LensOutcome.PENDING),
+        ),
     )
     aggregate = evaluate_results(review_policy(), results)
 
@@ -165,11 +169,29 @@ def test_evaluate_results_rejects_a_receipt_for_another_plan() -> None:
         evaluate_results(review_policy(), results)
 
 
-def test_github_evaluation_escapes_lens_summaries_and_reports_missing_results() -> None:
+def test_evaluate_results_rejects_an_incomplete_receipt() -> None:
     results = AgentReviewResults(
         version=1,
         plan_digest=review_plan_digest(),
-        results=(LensResult("correctness", LensOutcome.FAILED, "line one\nline two % done"),),
+        results=(
+            LensResult("correctness", LensOutcome.PASSED),
+            LensResult("security", LensOutcome.PENDING),
+        ),
+    )
+
+    with pytest.raises(ConfigurationError, match="missing lens docs"):
+        evaluate_results(review_policy(), results)
+
+
+def test_github_evaluation_escapes_lens_summaries_and_reports_pending_results() -> None:
+    results = AgentReviewResults(
+        version=1,
+        plan_digest=review_plan_digest(),
+        results=(
+            LensResult("correctness", LensOutcome.FAILED, "line one\nline two % done"),
+            LensResult("security", LensOutcome.PENDING),
+            LensResult("docs", LensOutcome.PENDING),
+        ),
     )
     aggregate = evaluate_results(review_policy(), results)
 
