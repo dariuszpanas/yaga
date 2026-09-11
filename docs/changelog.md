@@ -4,6 +4,8 @@
 
 ### Added
 
+- Document Docker and actionlint troubleshooting, including bounded cleanup errors and safe
+  inspection of the exact named workspace without broad Docker pruning.
 - Count only parsed prose-body lines in quality coverage output, excluding recognized footer blocks.
 - Include per-message body-line and model-input coverage in flagged GitHub quality annotations so
   complete-message versus title-only and truncation behavior is visible in CI output.
