@@ -66,11 +66,27 @@ To inspect the exact provider-neutral work the policy describes, render its exec
 ```bash
 yaga gate agent-review policy plan --file .yaga.toml
 yaga gate agent-review policy plan --file .yaga.toml --format json
+yaga gate agent-review policy evaluate --file .yaga.toml --results review-results.json
 ```
 
 The plan preserves configuration order, marks every lens as `required` or `advisory`, and carries
 the requested publication mode; it does not contact an agent, resolve a preset, or read credentials.
 Adapters can use the JSON document as their input and return one closed outcome for each named lens.
+The result contract is deliberately small:
+
+```json
+{
+  "version": 1,
+  "results": [
+    {"lens": "correctness", "outcome": "passed", "summary": "No findings."},
+    {"lens": "documentation", "outcome": "failed", "summary": "The setup example is stale."}
+  ]
+}
+```
+
+`policy evaluate` rejects malformed, duplicate, unknown, or oversized results, applies the
+configured aggregation, and returns exit `0` only when all blocking policy requirements pass.
+Advisory failures remain visible without changing that exit state.
 
 The validator requires schema version `1`, at least one required lens, unique lower-case lens names,
 known outcomes (`review` or `advisory`), publication modes, bounded instructions, and a bounded

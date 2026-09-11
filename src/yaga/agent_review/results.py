@@ -1,0 +1,173 @@
+"""Strict, provider-neutral result documents for named Agent review lenses."""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
+
+from yaga.agent_review.evaluation import LensOutcome, ReviewAggregate, evaluate_policy
+from yaga.agent_review.policy import AgentReviewPolicy
+from yaga.errors import ConfigurationError, safe_error_text
+from yaga.files import read_file_prefix
+
+MAX_RESULT_BYTES = 1024 * 1024
+MAX_RESULTS = 32
+MAX_SUMMARY_BYTES = 4096
+_ROOT_KEYS = frozenset({"version", "results"})
+_RESULT_KEYS = frozenset({"lens", "outcome", "summary"})
+_LENS_NAME = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
+
+
+@dataclass(frozen=True, slots=True)
+class LensResult:
+    """One adapter result for one configured lens."""
+
+    lens: str
+    outcome: LensOutcome
+    summary: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AgentReviewResults:
+    """A validated, bounded result document returned by an adapter."""
+
+    version: int
+    results: tuple[LensResult, ...]
+
+    def outcomes(self) -> dict[str, LensOutcome]:
+        """Return the named outcomes expected by the policy evaluator."""
+        return {result.lens: result.outcome for result in self.results}
+
+
+def load_results(path: Path) -> AgentReviewResults:
+    """Load one explicit JSON result document without contacting a provider."""
+    resolved = path.expanduser().resolve()
+    try:
+        raw = read_file_prefix(resolved, maximum=MAX_RESULT_BYTES)
+    except OSError as error:
+        raise ConfigurationError(f"cannot read Agent review results {resolved}: {error}") from error
+    if len(raw) > MAX_RESULT_BYTES:
+        raise ConfigurationError(
+            f"Agent review results exceed {MAX_RESULT_BYTES} bytes: {resolved}"
+        )
+    try:
+        document = json.loads(
+            raw.decode("utf-8-sig"),
+            object_pairs_hook=_object,
+            parse_constant=_reject_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise ConfigurationError(f"Agent review results are not valid JSON: {resolved}") from error
+    return _parse_document(document, resolved)
+
+
+def evaluate_results(
+    policy: AgentReviewPolicy,
+    results: AgentReviewResults,
+) -> ReviewAggregate:
+    """Apply a validated policy to one validated adapter result document."""
+    if not isinstance(policy, AgentReviewPolicy):
+        raise TypeError("policy must be an AgentReviewPolicy")
+    if not isinstance(results, AgentReviewResults):
+        raise TypeError("results must be AgentReviewResults")
+    return evaluate_policy(policy, results.outcomes())
+
+
+def render_evaluation(
+    results: AgentReviewResults,
+    aggregate: ReviewAggregate,
+    output_format: str = "text",
+) -> str:
+    """Render result details and aggregate state for humans or automation."""
+    if not isinstance(results, AgentReviewResults):
+        raise TypeError("results must be AgentReviewResults")
+    if not isinstance(aggregate, ReviewAggregate):
+        raise TypeError("aggregate must be a ReviewAggregate")
+    document = {
+        "version": results.version,
+        "state": aggregate.state.value,
+        "blocking_failures": list(aggregate.blocking_failures),
+        "blocking_pending": list(aggregate.blocking_pending),
+        "advisory_failures": list(aggregate.advisory_failures),
+        "advisory_pending": list(aggregate.advisory_pending),
+        "results": [
+            asdict(result) | {"outcome": result.outcome.value} for result in results.results
+        ],
+    }
+    if output_format == "json":
+        return json.dumps(document, ensure_ascii=False, indent=2)
+    if output_format != "text":
+        raise ValueError("output format must be text or json")
+    lines = [f"Agent review result: {aggregate.state.value}."]
+    for result in results.results:
+        detail = "" if result.summary is None else f": {safe_error_text(result.summary)}"
+        lines.append(f"- {result.lens}: {result.outcome.value}{detail}")
+    if aggregate.blocking_failures:
+        lines.append(f"Blocking failures: {', '.join(aggregate.blocking_failures)}")
+    if aggregate.blocking_pending:
+        lines.append(f"Blocking pending: {', '.join(aggregate.blocking_pending)}")
+    if aggregate.advisory_failures:
+        lines.append(f"Advisory failures: {', '.join(aggregate.advisory_failures)}")
+    if aggregate.advisory_pending:
+        lines.append(f"Advisory pending: {', '.join(aggregate.advisory_pending)}")
+    return "\n".join(lines)
+
+
+def _parse_document(document: Any, path: Path) -> AgentReviewResults:
+    if not isinstance(document, dict):
+        raise ConfigurationError(f"Agent review results must be an object in {path}")
+    _reject_unknown(document, _ROOT_KEYS, "Agent review results", path)
+    version = document.get("version")
+    if type(version) is not int or version != 1:
+        raise ConfigurationError(f"Agent review results.version must be integer 1 in {path}")
+    raw_results = document.get("results")
+    if not isinstance(raw_results, list) or len(raw_results) > MAX_RESULTS:
+        raise ConfigurationError(f"Agent review results.results is unbounded or invalid in {path}")
+    parsed: list[LensResult] = []
+    seen: set[str] = set()
+    for raw_result in raw_results:
+        if not isinstance(raw_result, dict):
+            raise ConfigurationError(f"Agent review result entries must be objects in {path}")
+        _reject_unknown(raw_result, _RESULT_KEYS, "Agent review result", path)
+        lens = raw_result.get("lens")
+        if not isinstance(lens, str) or not _LENS_NAME.fullmatch(lens) or lens in seen:
+            raise ConfigurationError(f"Agent review result lens is invalid or repeated in {path}")
+        seen.add(lens)
+        try:
+            outcome = LensOutcome(raw_result.get("outcome"))
+        except (TypeError, ValueError) as error:
+            raise ConfigurationError(f"Agent review result outcome is invalid in {path}") from error
+        summary = raw_result.get("summary")
+        if summary is not None and (
+            not isinstance(summary, str)
+            or not summary.strip()
+            or "\x00" in summary
+            or len(summary.encode("utf-8")) > MAX_SUMMARY_BYTES
+        ):
+            raise ConfigurationError(f"Agent review result summary is invalid in {path}")
+        parsed.append(LensResult(lens, outcome, summary))
+    return AgentReviewResults(version, tuple(parsed))
+
+
+def _reject_unknown(
+    mapping: dict[str, Any], allowed: frozenset[str], label: str, path: Path
+) -> None:
+    unknown = sorted(set(mapping) - allowed)
+    if unknown:
+        raise ConfigurationError(f"{label} has unknown key {unknown[0]} in {path}")
+
+
+def _object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
+def _reject_constant(value: str) -> None:
+    raise ValueError(value)
