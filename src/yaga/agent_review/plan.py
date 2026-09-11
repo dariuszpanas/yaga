@@ -89,3 +89,28 @@ def render_plan(plan: ReviewPlan, output_format: str = "text") -> str:
         lines.append(f"- {item.name} [{role}, {item.outcome}] via {item.preset}")
         lines.append(f"  {safe_error_text(item.instruction, maximum=4096)}")
     return "\n".join(lines)
+
+
+def render_policy_check(policy: AgentReviewPolicy, output_format: str = "text") -> str:
+    """Render a successful policy validation for humans or automation."""
+    if not isinstance(policy, AgentReviewPolicy):
+        raise TypeError("policy must be an AgentReviewPolicy")
+    if output_format == "json":
+        plan = build_plan(policy)
+        document = {
+            "version": policy.version,
+            "status": "passed",
+            "aggregation": policy.aggregation,
+            "lens_count": len(policy.lenses),
+            "required_count": len(policy.required),
+            "required": list(policy.required),
+            "plan_digest": plan.digest(),
+        }
+        return json.dumps(document, ensure_ascii=False, indent=2)
+    if output_format != "text":
+        raise ValueError("output format must be text or json")
+    required = ", ".join(policy.required)
+    return (
+        f"Agent review policy passed: {len(policy.lenses)} lens(es), "
+        f"{len(policy.required)} required ({required}), aggregation {policy.aggregation}."
+    )

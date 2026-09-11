@@ -790,6 +790,45 @@ instruction = "Review behavior."
     assert "1 lens(es), 1 required (correctness)" in result.stdout
 
 
+def test_agent_review_policy_check_reports_a_digest_bound_json_summary(tmp_path: Path) -> None:
+    policy = tmp_path / ".yaga.toml"
+    policy.write_text(
+        "[agent-review]\n"
+        "version = 1\n"
+        "required = ['correctness']\n"
+        "[agent-review.agents.correctness]\n"
+        "preset = 'codex'\n"
+        "instruction = 'Review behavior.'\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "gate",
+            "agent-review",
+            "policy",
+            "check",
+            "--file",
+            str(policy),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    document = json.loads(result.stdout)
+    assert document == {
+        "version": 1,
+        "status": "passed",
+        "aggregation": "all-required",
+        "lens_count": 1,
+        "required_count": 1,
+        "required": ["correctness"],
+        "plan_digest": single_lens_plan_digest(),
+    }
+
+
 def test_agent_review_policy_plan_reports_json(tmp_path: Path) -> None:
     policy = tmp_path / ".yaga.toml"
     policy.write_text(

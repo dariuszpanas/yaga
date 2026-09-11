@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from yaga.action import run_gate
-from yaga.agent_review.plan import build_plan, render_plan
+from yaga.agent_review.plan import build_plan, render_plan, render_policy_check
 from yaga.agent_review.policy import load_policy
 from yaga.agent_review.results import evaluate_results, load_results, render_evaluation
 from yaga.errors import ConfigurationError, GateError, safe_error_text
@@ -72,18 +72,21 @@ def policy_check(
         Path,
         typer.Option("--file", help="Explicit TOML policy file to validate."),
     ],
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Validation format: text or json."),
+    ] = "text",
 ) -> None:
     """Validate named review lenses without contacting a provider."""
     try:
         policy = load_policy(policy_file)
+        typer.echo(render_policy_check(policy, output_format.lower()))
     except ConfigurationError as error:
         typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
         raise typer.Exit(code=2) from error
-    required = ", ".join(policy.required)
-    typer.echo(
-        f"Agent review policy passed: {len(policy.lenses)} lens(es), "
-        f"{len(policy.required)} required ({required}), aggregation {policy.aggregation}."
-    )
+    except (TypeError, ValueError) as error:
+        typer.echo(f"YAGA failed: {safe_error_text(error)}", err=True)
+        raise typer.Exit(code=2) from error
 
 
 @policy_app.command("plan")
