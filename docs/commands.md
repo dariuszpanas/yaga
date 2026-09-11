@@ -43,7 +43,9 @@ identity contract also need to be validated.
 
 `commit quality` accepts the same source selection and defaults to `HEAD`. It is deliberately
 separate from `commit check`: the deterministic Conventional Commit policy remains authoritative,
-while a model is an optional advisory signal. The provider is explicit and bounded:
+while a model is an optional advisory signal. See the dedicated [commit quality guide](commit-quality.md)
+for the full source, provider, cache, configuration, and reporting contract. The provider is explicit
+and bounded:
 
 Use `--provider huggingface` for local classification or seq2seq inference, or
 `--provider bedrock` for AWS-hosted classification. The default provider is Hugging Face; the
