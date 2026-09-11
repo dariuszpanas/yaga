@@ -119,7 +119,10 @@ text selected for inference. This makes it possible to compare online and offlin
 a body was included without printing commit text. Hugging Face results also expose measured token
 count and token truncation; unsupported measurements are `null`. GitHub output emits warning
 annotations for flagged messages and one bounded notice with counts, model revision, input limits,
-threshold, and provider metadata; provider failures emit an error annotation and exit `2`.
+threshold, provider metadata, and an ordered report-level fingerprint of all selected inputs;
+provider failures emit an error annotation and exit `2`. The report-level fingerprint lets a compact
+GitHub notice prove that online and offline runs covered the same message set even when every message
+passed.
 
 Use `commit check` for exact body, footer, paragraph, scope, and Typos enforcement. Keep quality
 advisory checks separate from the dependency-free Agent review runtime and required security gates.
