@@ -104,6 +104,29 @@ def test_git_executable_must_be_absolute_regular_and_present(
             open_repository(tmp_path)
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows command-script dispatch boundary")
+@pytest.mark.parametrize("suffix", [".cmd", ".bat", ".CMD", ".BAT"])
+def test_windows_command_script_git_is_rejected_before_launch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    suffix: str,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    executable = tmp_path / f"git{suffix}"
+    executable.write_bytes(b"placeholder")
+    monkeypatch.setattr(runtime.shutil, "which", lambda _name: str(executable))
+
+    def reject_launch(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("command scripts must be rejected before process launch")
+
+    monkeypatch.setattr(runtime, "_run_bounded", reject_launch)
+    with pytest.raises(GitError, match="Windows command script"):
+        open_repository(repository)
+    with pytest.raises(GitError, match="Windows command script"):
+        run_git(GitRepository(repository, str(executable)), ["version"], stdout_limit=256)
+
+
 def test_git_executable_inside_enclosing_worktree_is_rejected_from_subdirectory(
     repository: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -501,6 +524,41 @@ def test_bounded_process_capture_enforces_both_stream_limits_and_timeout() -> No
         timeout_seconds=0.1,
     )
     assert timed_out.timed_out
+
+
+def test_bounded_process_feeds_stdin_and_preserves_selected_cwd(tmp_path: Path) -> None:
+    result = runtime.run_bounded_process(
+        [
+            sys.executable,
+            "-c",
+            "import pathlib,sys; print(pathlib.Path.cwd()); "
+            "sys.stdout.flush(); sys.stdout.buffer.write(sys.stdin.buffer.read())",
+        ],
+        stdin_data=b"message input\n",
+        cwd=tmp_path,
+        stdout_limit=4096,
+        stderr_limit=1024,
+        timeout_seconds=5,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [str(tmp_path).encode(), b"message input"]
+    assert result.stderr == b""
+    assert result.timed_out is False
+
+
+def test_blocked_input_writer_shares_process_timeout() -> None:
+    before = time.monotonic()
+    result = runtime.run_bounded_process(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        stdin_data=b"x" * (1024 * 1024),
+        stdout_limit=1024,
+        stderr_limit=1024,
+        timeout_seconds=0.2,
+    )
+
+    assert result.timed_out
+    assert time.monotonic() - before < 2
 
 
 def test_timeout_terminates_pipe_holding_descendants_within_a_bounded_cleanup(

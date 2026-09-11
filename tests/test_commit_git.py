@@ -71,6 +71,21 @@ def test_read_range_returns_complete_messages_oldest_first(
     assert selected[0].message.startswith("fix(cli):")
 
 
+@pytest.mark.parametrize("selector", ["HEAD:vendor", ":README.md"])
+def test_commit_and_range_endpoints_reject_path_selectors(
+    repository: tuple[Path, list[str]],
+    selector: str,
+) -> None:
+    path, _ = repository
+
+    with pytest.raises(GitError, match="exactly one commit-ish"):
+        commit_git.read_commit(path, selector)
+    with pytest.raises(GitError, match="exactly one commit-ish"):
+        commit_git.read_range(path, f"{selector}..HEAD", max_commits=10)
+    with pytest.raises(GitError, match="exactly one commit-ish"):
+        commit_git.read_range(path, f"HEAD..{selector}", max_commits=10)
+
+
 def test_git_log_output_is_forced_to_utf8(
     repository: tuple[Path, list[str]],
 ) -> None:

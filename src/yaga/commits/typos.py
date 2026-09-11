@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
 from yaga.commits.models import Diagnostic
+from yaga.commits.parser import MAX_MESSAGE_BYTES, normalize_message
 from yaga.errors import InputError, safe_error_text
+from yaga.git.runtime import run_bounded_process
 
 MAX_OUTPUT_BYTES = 64 * 1024
 TIMEOUT_SECONDS = 5
@@ -25,19 +26,25 @@ def check_typos(message: str, *, repository: Path | None = None) -> tuple[Diagno
     if executable is None:
         raise InputError("commit policy requires the typos executable, but it is not installed")
     try:
-        completed = subprocess.run(
+        message_bytes = normalize_message(message).encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise InputError("commit message is not valid UTF-8") from error
+    if len(message_bytes) > MAX_MESSAGE_BYTES:
+        raise InputError("commit message exceeds the hard byte limit for Typos input")
+    try:
+        completed = run_bounded_process(
             [executable, "-", "--format", "json"],
-            cwd=str(repository) if repository is not None else None,
-            input=message.encode("utf-8"),
-            capture_output=True,
-            check=False,
-            timeout=TIMEOUT_SECONDS,
+            cwd=repository,
+            stdin_data=message_bytes,
+            stdout_limit=MAX_OUTPUT_BYTES,
+            stderr_limit=MAX_OUTPUT_BYTES,
+            timeout_seconds=TIMEOUT_SECONDS,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise InputError(
-            "typos did not complete within its bounded commit-message check"
-        ) from error
-    if len(completed.stdout) > MAX_OUTPUT_BYTES or len(completed.stderr) > MAX_OUTPUT_BYTES:
+    except (OSError, ValueError) as error:
+        raise InputError("typos could not complete its bounded commit-message check") from error
+    if completed.timed_out:
+        raise InputError("typos did not complete within its bounded commit-message check")
+    if completed.stdout_overflow or completed.stderr_overflow:
         raise InputError("typos exceeded its bounded commit-message output limit")
     if completed.returncode == 0:
         if completed.stderr:
@@ -58,7 +65,7 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
     for _line_number, line in enumerate(text.splitlines(), start=1):
         try:
             value: Any = json.loads(line)
-        except json.JSONDecodeError as error:
+        except (ValueError, RecursionError) as error:
             raise InputError("typos returned malformed JSON output") from error
         if not isinstance(value, dict) or value.get("type") != "typo":
             raise InputError("typos returned an unexpected JSON diagnostic")
@@ -78,11 +85,11 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
             )
             or not isinstance(typo, str)
             or not typo
-            or len(typo.encode("utf-8")) > MAX_CORRECTION_BYTES
+            or _utf8_length(typo) > MAX_CORRECTION_BYTES
             or not isinstance(corrections, list)
             or len(corrections) > MAX_CORRECTIONS
             or any(not isinstance(item, str) or not item for item in corrections)
-            or any(len(item.encode("utf-8")) > MAX_CORRECTION_BYTES for item in corrections)
+            or any(_utf8_length(item) > MAX_CORRECTION_BYTES for item in corrections)
         ):
             raise InputError("typos returned a malformed JSON diagnostic")
         suggestion = _bounded_text(", ".join(corrections[:8]), MAX_SUGGESTION_BYTES)
@@ -102,6 +109,14 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
     if not diagnostics:
         raise InputError("typos reported findings without JSON diagnostics")
     return tuple(diagnostics)
+
+
+def _utf8_length(value: str) -> int:
+    """Reject JSON's escaped surrogate strings at the diagnostic boundary."""
+    try:
+        return len(value.encode("utf-8"))
+    except UnicodeEncodeError as error:
+        raise InputError("typos returned a malformed JSON diagnostic") from error
 
 
 def _bounded_text(value: str, maximum_bytes: int) -> str:

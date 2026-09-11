@@ -3,20 +3,20 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from yaga.commits.typos import MAX_CORRECTION_BYTES, MAX_CORRECTIONS, check_typos
 from yaga.errors import InputError
+from yaga.git.runtime import ProcessResult
 
 
 def test_typos_pass_has_no_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
     monkeypatch.setattr(
-        "yaga.commits.typos.subprocess.run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, b"", b""),
+        "yaga.commits.typos.run_bounded_process",
+        lambda *args, **kwargs: ProcessResult(0, b"", b"", False, False, False),
     )
 
     assert check_typos("feat: add a clear description") == ()
@@ -26,23 +26,26 @@ def test_typos_runs_from_the_selected_repository(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
     calls: list[dict[str, object]] = []
 
-    def run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+    def run(*_args: object, **kwargs: object) -> ProcessResult:
         calls.append(kwargs)
-        return subprocess.CompletedProcess(["typos"], 0, b"", b"")
+        return ProcessResult(0, b"", b"", False, False, False)
 
-    monkeypatch.setattr("yaga.commits.typos.subprocess.run", run)
+    monkeypatch.setattr("yaga.commits.typos.run_bounded_process", run)
     repository = Path("C:/checked-out/repository")
 
     assert check_typos("feat: add a clear description", repository=repository) == ()
-    assert calls[0]["cwd"] == str(repository)
+    assert calls[0]["cwd"] == repository
+    assert calls[0]["stdin_data"] == b"feat: add a clear description"
+    assert calls[0]["stdout_limit"] == calls[0]["stderr_limit"] == 64 * 1024
+    assert calls[0]["timeout_seconds"] == 5
 
 
 def test_typos_json_findings_become_stable_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
     output = b'{"type":"typo","path":"-","line_num":2,"byte_offset":3,"typo":"teh","corrections":["the"]}\n'
     monkeypatch.setattr(
-        "yaga.commits.typos.subprocess.run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, output, b""),
+        "yaga.commits.typos.run_bounded_process",
+        lambda *args, **kwargs: ProcessResult(2, output, b"", False, False, False),
     )
 
     diagnostics = check_typos("feat: add a description\n\nteh")
@@ -64,10 +67,51 @@ def test_typos_is_required_when_not_installed(monkeypatch: pytest.MonkeyPatch) -
 def test_typos_rejects_malformed_findings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
     monkeypatch.setattr(
-        "yaga.commits.typos.subprocess.run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, b"not-json\n", b""),
+        "yaga.commits.typos.run_bounded_process",
+        lambda *args, **kwargs: ProcessResult(2, b"not-json\n", b"", False, False, False),
     )
 
+    with pytest.raises(InputError, match="JSON"):
+        check_typos("feat: add a description")
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        b"[" * 2000 + b"0" + b"]" * 2000,
+        b'{"type":"typo","line_num":' + b"9" * 5000 + b"}",
+        b'{"type":"typo","line_num":1,"typo":"\\ud800","corrections":["the"]}',
+        b'{"type":"typo","line_num":1,"typo":"teh","corrections":["\\ud800"]}',
+    ],
+    ids=["nested-json", "large-integer", "surrogate-typo", "surrogate-correction"],
+)
+def test_typos_normalizes_unrepresentable_json_findings_to_input_error(
+    monkeypatch: pytest.MonkeyPatch,
+    output: bytes,
+) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process",
+        lambda *_args, **_kwargs: ProcessResult(2, output, b"", False, False, False),
+    )
+
+    with pytest.raises(InputError, match="JSON"):
+        check_typos("feat: add a description")
+
+
+def test_typos_normalizes_json_decoder_recursion_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process",
+        lambda *_args, **_kwargs: ProcessResult(2, b"{}", b"", False, False, False),
+    )
+
+    def reject_recursion(_line: str) -> object:
+        raise RecursionError("decoder nesting limit")
+
+    monkeypatch.setattr("yaga.commits.typos.json.loads", reject_recursion)
     with pytest.raises(InputError, match="malformed JSON"):
         check_typos("feat: add a description")
 
@@ -95,8 +139,8 @@ def test_typos_rejects_oversized_finding_fields(
     monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
     output = (json.dumps(finding) + "\n").encode()
     monkeypatch.setattr(
-        "yaga.commits.typos.subprocess.run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, output, b""),
+        "yaga.commits.typos.run_bounded_process",
+        lambda *args, **kwargs: ProcessResult(2, output, b"", False, False, False),
     )
 
     with pytest.raises(InputError, match="malformed JSON"):
@@ -107,8 +151,64 @@ def test_typos_accepts_findings_without_a_byte_offset(monkeypatch: pytest.Monkey
     monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
     output = b'{"type":"typo","line_num":1,"typo":"teh","corrections":["the"]}\n'
     monkeypatch.setattr(
-        "yaga.commits.typos.subprocess.run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, output, b""),
+        "yaga.commits.typos.run_bounded_process",
+        lambda *args, **kwargs: ProcessResult(2, output, b"", False, False, False),
     )
 
     assert check_typos("teh")[0].column == 1
+
+
+@pytest.mark.parametrize(
+    ("result", "message"),
+    [
+        (ProcessResult(0, b"", b"", True, False, False), "output limit"),
+        (ProcessResult(0, b"", b"", False, True, False), "output limit"),
+        (ProcessResult(0, b"", b"", False, False, True), "did not complete within"),
+    ],
+)
+def test_typos_process_limits_are_operational_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    result: ProcessResult,
+    message: str,
+) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    monkeypatch.setattr("yaga.commits.typos.run_bounded_process", lambda *_args, **_kwargs: result)
+
+    with pytest.raises(InputError, match=message):
+        check_typos("feat: add a description")
+
+
+def test_typos_normalizes_line_endings_before_spelling_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+
+    def run(*_args: object, **kwargs: object) -> ProcessResult:
+        assert kwargs["stdin_data"] == b"feat: add behavior\n\nteh issue"
+        output = (
+            b'{"type":"typo","line_num":3,"byte_offset":0,"typo":"teh","corrections":["the"]}\n'
+        )
+        return ProcessResult(2, output, b"", False, False, False)
+
+    monkeypatch.setattr("yaga.commits.typos.run_bounded_process", run)
+
+    assert check_typos("feat: add behavior\r\rteh issue")[0].line == 3
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["\ud800", "x" * (1024 * 1024 + 1)],
+    ids=["surrogate", "oversized"],
+)
+def test_typos_rejects_invalid_or_oversized_input_before_launch(
+    monkeypatch: pytest.MonkeyPatch,
+    message: str,
+) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process",
+        lambda *_args, **_kwargs: pytest.fail("invalid input must not start a process"),
+    )
+
+    with pytest.raises(InputError, match="commit message"):
+        check_typos(message)

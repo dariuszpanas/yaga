@@ -8,7 +8,7 @@ import stat
 import subprocess
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
@@ -84,6 +84,8 @@ def open_repository(repository: Path) -> GitRepository:
         raise GitError("git executable is not a regular file")
     if any(_is_within(resolved_git, boundary) for boundary in trust_boundaries):
         raise GitError("git executable must not resolve inside the repository")
+    _require_no_windows_command_script(git_path)
+    _require_no_windows_command_script(resolved_git)
     return GitRepository(directory=directory, executable=str(resolved_git))
 
 
@@ -102,6 +104,7 @@ def run_git(
         raise TypeError("git arguments must be a sequence of strings")
     if any("\0" in argument for argument in arguments):
         raise GitError("git arguments must not contain NUL bytes")
+    _require_no_windows_command_script(Path(repository.executable))
     command = [
         repository.executable,
         "--no-pager",
@@ -127,6 +130,18 @@ def run_git(
     if result.stderr_overflow:
         raise GitError(f"git error output exceeds the hard {MAX_GIT_ERROR_BYTES}-byte limit")
     return result
+
+
+def _require_no_windows_command_script(executable: Path) -> None:
+    """Keep Windows batch dispatch outside the shell-free Git boundary."""
+    if os.name != "nt":
+        return
+    try:
+        paths = (executable, executable.resolve())
+    except (OSError, RuntimeError, ValueError) as error:
+        raise GitError("git executable path cannot be resolved safely") from error
+    if any(path.name.rstrip(" .").casefold().endswith((".bat", ".cmd")) for path in paths):
+        raise GitError("git executable must not be a Windows command script (.bat or .cmd)")
 
 
 def safe_git_error(value: bytes) -> str:
@@ -440,6 +455,26 @@ def _run_bounded(
     stderr_limit: int,
     timeout_seconds: float = MAX_GIT_SECONDS,
 ) -> ProcessResult:
+    """Run Git with no input and its isolated process environment."""
+    return run_bounded_process(
+        command,
+        stdout_limit=stdout_limit,
+        stderr_limit=stderr_limit,
+        timeout_seconds=timeout_seconds,
+        environment=_git_environment(),
+    )
+
+
+def run_bounded_process(
+    command: Sequence[str],
+    *,
+    stdout_limit: int,
+    stderr_limit: int,
+    timeout_seconds: float,
+    stdin_data: bytes | None = None,
+    cwd: Path | None = None,
+    environment: Mapping[str, str] | None = None,
+) -> ProcessResult:
     """Run one process while retaining at most the configured pipe bytes."""
     if stdout_limit < 1 or stderr_limit < 1 or timeout_seconds <= 0:
         raise ValueError("process output limits must be positive")
@@ -447,10 +482,11 @@ def _run_bounded(
     try:
         process: subprocess.Popen[bytes] = subprocess.Popen(  # noqa: S603
             command,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.PIPE if stdin_data is not None else subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=_git_environment(),
+            cwd=cwd,
+            env=environment,
             shell=False,
             text=False,
             creationflags=containment.creation_flags(),
@@ -473,7 +509,15 @@ def _run_bounded(
                 0
             ]
         raise OSError("bounded process did not expose both output pipes")
-    process_streams = (process.stdout, process.stderr)
+    input_stream = process.stdin if stdin_data is not None else None
+    if stdin_data is not None and input_stream is None:
+        _abort_unstarted_process(process, containment)
+        raise OSError("bounded process did not expose its input pipe")
+    process_streams = (
+        (process.stdout, process.stderr, input_stream)
+        if input_stream is not None
+        else (process.stdout, process.stderr)
+    )
 
     stdout = bytearray()
     stderr = bytearray()
@@ -520,6 +564,17 @@ def _run_bounded(
             thread.start()
             threads.append(thread)
             started_stream_ids.add(id(stream))
+
+        if input_stream is not None:
+            assert stdin_data is not None
+            writer = threading.Thread(
+                target=_write_stdin,
+                args=(input_stream, stdin_data, terminate_process_tree, reader_errors),
+                daemon=True,
+            )
+            writer.start()
+            threads.append(writer)
+            started_stream_ids.add(id(input_stream))
 
         try:
             returncode = process.wait(timeout=_remaining_seconds(operation_deadline))
@@ -603,6 +658,9 @@ def _abort_unstarted_process(
         process.stdout.close()
     if process.stderr is not None:
         process.stderr.close()
+    if getattr(process, "stdin", None) is not None:
+        assert process.stdin is not None
+        process.stdin.close()
     return errors
 
 
@@ -668,6 +726,31 @@ def _capture_stream(
             stream.close()
         except OSError as error:
             reader_errors.append(error)
+            kill_process()
+
+
+def _write_stdin(
+    stream: IO[bytes],
+    data: bytes,
+    kill_process: Callable[[], None],
+    errors: list[OSError],
+) -> None:
+    """Feed fixed input concurrently so backpressure shares the process deadline."""
+    try:
+        stream.write(data)
+        stream.flush()
+    except BrokenPipeError:
+        pass
+    except OSError as error:
+        errors.append(error)
+        kill_process()
+    finally:
+        try:
+            stream.close()
+        except BrokenPipeError:
+            pass
+        except OSError as error:
+            errors.append(error)
             kill_process()
 
 
