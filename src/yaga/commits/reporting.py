@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unicodedata
+from enum import StrEnum
 from typing import Any
 
 from yaga.commits.models import (
@@ -20,6 +21,15 @@ SCHEMA_VERSION = 1
 MAX_DISPLAY_HEADER = 160
 MAX_DISPLAY_PATH = 1000
 MAX_DIAGNOSTIC_MESSAGE = 500
+MAX_QUALITY_GITHUB_ANNOTATIONS = 50
+
+
+class QualityOutputFormat(StrEnum):
+    """Supported commit-quality report formats."""
+
+    TEXT = "text"
+    JSON = "json"
+    GITHUB = "github"
 
 
 def render_report(report: ValidationReport, output_format: OutputFormat) -> str:
@@ -44,10 +54,14 @@ def render_error(error: YagaError, output_format: OutputFormat) -> str:
     return f"YAGA {error.kind} error: {message}"
 
 
-def render_quality_report(report: QualityReport, output_format: OutputFormat) -> str:
+def render_quality_report(
+    report: QualityReport, output_format: QualityOutputFormat | OutputFormat
+) -> str:
     """Render the bounded advisory model report."""
+    if output_format is QualityOutputFormat.GITHUB:
+        return _render_quality_github_report(report)
     document = quality_report_document(report)
-    if output_format is OutputFormat.JSON:
+    if output_format.value == OutputFormat.JSON.value:
         return json.dumps(document, ensure_ascii=False, indent=2)
     lines: list[str] = []
     for result in report.results:
@@ -101,6 +115,46 @@ def render_quality_report(report: QualityReport, output_format: OutputFormat) ->
     if report.max_input_tokens is not None:
         lines.append(f"Max input tokens: {report.max_input_tokens}")
     return "\n".join(lines)
+
+
+def render_quality_error(
+    error: YagaError, output_format: QualityOutputFormat | OutputFormat
+) -> str:
+    """Render a quality-provider failure in the requested format."""
+    if output_format is QualityOutputFormat.GITHUB:
+        return f"::error title=YAGA commit quality::{_workflow_data(safe_error_text(error))}"
+    return render_error(error, OutputFormat(output_format.value))
+
+
+def _render_quality_github_report(report: QualityReport) -> str:
+    """Render advisory findings as bounded GitHub warning annotations."""
+    findings = [result for result in report.results if result.flagged]
+    visible = findings[:MAX_QUALITY_GITHUB_ANNOTATIONS]
+    lines = []
+    for result in visible:
+        label = safe_text(result.target.label, maximum=MAX_DISPLAY_PATH)
+        header = safe_text(result.target.message.splitlines()[0], maximum=MAX_DISPLAY_HEADER)
+        detail = f"{label}: {header}"
+        if result.assessment.score is not None:
+            detail += f"; score {result.assessment.score:.3f}"
+        if result.assessment.reason:
+            detail += f"; {safe_text(result.assessment.reason, maximum=MAX_DIAGNOSTIC_MESSAGE)}"
+        lines.append(f"::warning title=YAGA commit quality::{_workflow_data(detail)}")
+    omitted = len(findings) - len(visible)
+    if omitted:
+        lines.append(
+            f"::warning title=YAGA commit quality::{_workflow_data(f'{omitted} additional finding(s) omitted')}"
+        )
+    lines.append(
+        f"YAGA quality checked {len(report.results)} commit(s): "
+        f"{len(report.results) - report.flagged} passed, {report.flagged} flagged."
+    )
+    return "\n".join(lines)
+
+
+def _workflow_data(value: str) -> str:
+    """Escape workflow-command data according to the GitHub runner protocol."""
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
 def quality_report_document(report: QualityReport) -> dict[str, Any]:

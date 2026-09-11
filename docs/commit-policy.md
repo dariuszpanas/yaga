@@ -190,8 +190,9 @@ configured commit policy. It may misunderstand project-specific context and shou
 reject automated commits without review. The model and its Python runtime are not imported by
 either composite Action runtime, and the default package installation remains dependency-light.
 The first online run may download roughly 500 MB of model weights; subsequent `--offline` runs use
-the local Hugging Face cache. Use `--format json` for automation and retain the model revision in
-the report for reproducibility.
+the local Hugging Face cache. Use `--format json` for automation, or `--format github` in Actions
+for escaped warning annotations for flagged advisory results. Provider failures use an error
+annotation and exit `2`; retain the model revision in JSON reports for reproducibility.
 
 ## Git selection and hooks
 

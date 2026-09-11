@@ -2,9 +2,9 @@
 
 The installed command groups are deliberately separated. Commands have bounded inputs, stable
 reports, and exit codes `0` for pass, `1` for policy findings, and `2` for operational errors.
-Report formats are command-specific: provider checks and standalone `commit check` support
-text/JSON/GitHub reporting where documented, while configuration and quality reports use
-text/JSON. Use `yaga <group> --help` for the exact current option surface.
+Report formats are command-specific: provider checks, standalone `commit check`, and `commit quality`
+support text/JSON/GitHub reporting where documented. Configuration reports remain text/JSON. Use
+`yaga <group> --help` for the exact current option surface.
 
 | Command | Purpose | Typical source |
 | --- | --- | --- |
@@ -48,7 +48,9 @@ Use `--provider huggingface` for local classification or seq2seq inference, or
 `--provider bedrock` for AWS-hosted classification. The default provider is Hugging Face; the
 Bedrock adapter does not use `--offline`, `--revision`, or Hugging Face input-token settings.
 These modes inspect the complete selected message subject to the provider's bounded input window;
-the report exposes the selected message shape and any measured truncation. For exact structure,
+the report exposes the selected message shape and any measured truncation. Use `--format github` in
+Actions to emit escaped warning annotations for flagged advisory results; provider failures emit an
+error annotation and exit `2`. For exact structure,
 scope, body, footer, paragraph, or Typos enforcement, run `commit check` as well.
 
 ### Quality input modes

@@ -22,9 +22,9 @@ The standalone policy-check commands `commit check`, `branch check`, `change che
 status. Quiet mode suppresses policy findings on standard output; operational errors still use
 standard error and exit `2`. Use `--format json` when another program needs the versioned document.
 The same providers, plus `workflow check`, `workflow security`, `workflow lint`, and `repo check`,
-support `--format github` for escaped workflow annotations where documented. Configuration and
-quality reports remain text/JSON, while `gate agent-review policy evaluate` additionally supports
-GitHub output for adapter result evaluation.
+support `--format github` for escaped workflow annotations where documented. Configuration reports
+remain text/JSON; `commit quality` also supports GitHub warning/error annotations, while `gate
+agent-review policy evaluate` additionally supports GitHub output for adapter result evaluation.
 
 ## Explicit commit sources
 
