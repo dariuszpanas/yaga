@@ -46,6 +46,11 @@ Required lenses participate in the aggregate gate; advisory lenses can publish f
 blocking it. Every lens must have a unique name, a bounded instruction, and a known adapter preset.
 Credentials, tokens, and provider-specific secrets stay in the trusted workflow environment.
 
+Adapters return only the closed outcomes `passed`, `failed`, or `pending`, keyed by lens name. The
+provider-neutral evaluator applies `all-required` or `any-required` to required lenses, preserves
+advisory failures and pending work for reporting, and never lets an advisory lens block the gate.
+Unknown lens names and outcome values are configuration errors.
+
 Validate the policy before wiring it into a workflow:
 
 ```bash
