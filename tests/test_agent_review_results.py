@@ -120,3 +120,22 @@ def test_json_evaluation_is_versioned_and_bounded() -> None:
     assert document["version"] == 1
     assert document["state"] == "pending"
     assert document["results"][0]["outcome"] == "passed"
+
+
+def test_github_evaluation_escapes_lens_summaries_and_reports_missing_results() -> None:
+    results = AgentReviewResults(
+        version=1,
+        results=(LensResult("correctness", LensOutcome.FAILED, "line one\nline two % done"),),
+    )
+    aggregate = evaluate_results(review_policy(), results)
+
+    rendered = render_evaluation(results, aggregate, "github")
+
+    assert (
+        "::error title=YAGA Agent review%3A correctness::failed: line one%0Aline two %25 done"
+        in rendered
+    )
+    assert (
+        "::error title=YAGA Agent review%3A security::pending: no result was returned" in rendered
+    )
+    assert "::notice title=YAGA Agent review::Agent review result: failed;" in rendered

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,8 @@ from yaga.files import read_file_prefix
 MAX_RESULT_BYTES = 1024 * 1024
 MAX_RESULTS = 32
 MAX_SUMMARY_BYTES = 4096
+MAX_GITHUB_TITLE = 200
+MAX_GITHUB_MESSAGE = 500
 _ROOT_KEYS = frozenset({"version", "results"})
 _RESULT_KEYS = frozenset({"lens", "outcome", "summary"})
 _LENS_NAME = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
@@ -99,8 +102,10 @@ def render_evaluation(
     }
     if output_format == "json":
         return json.dumps(document, ensure_ascii=False, indent=2)
+    if output_format == "github":
+        return _render_github_evaluation(results, aggregate)
     if output_format != "text":
-        raise ValueError("output format must be text or json")
+        raise ValueError("output format must be text, json, or github")
     lines = [f"Agent review result: {aggregate.state.value}."]
     for result in results.results:
         detail = "" if result.summary is None else f": {safe_error_text(result.summary)}"
@@ -114,6 +119,72 @@ def render_evaluation(
     if aggregate.advisory_pending:
         lines.append(f"Advisory pending: {', '.join(aggregate.advisory_pending)}")
     return "\n".join(lines)
+
+
+def _render_github_evaluation(results: AgentReviewResults, aggregate: ReviewAggregate) -> str:
+    """Render bounded workflow commands for adapter-oriented CI jobs."""
+    by_lens = {result.lens: result for result in results.results}
+    lines: list[str] = []
+    for lens in aggregate.blocking_failures:
+        lines.append(_github_annotation(by_lens.get(lens), lens, "error"))
+    for lens in aggregate.blocking_pending:
+        lines.append(_github_annotation(by_lens.get(lens), lens, "error"))
+    for lens in aggregate.advisory_failures:
+        lines.append(_github_annotation(by_lens.get(lens), lens, "warning"))
+    for lens in aggregate.advisory_pending:
+        lines.append(_github_annotation(by_lens.get(lens), lens, "warning"))
+    summary = (
+        f"Agent review result: {aggregate.state.value}; "
+        f"{len(aggregate.blocking_failures)} blocking failure(s), "
+        f"{len(aggregate.blocking_pending)} blocking pending, "
+        f"{len(aggregate.advisory_failures)} advisory failure(s), "
+        f"{len(aggregate.advisory_pending)} advisory pending."
+    )
+    lines.append(
+        f"::notice title={_github_property('YAGA Agent review', maximum=MAX_GITHUB_TITLE)}::"
+        f"{_github_data(summary, maximum=MAX_GITHUB_MESSAGE)}"
+    )
+    return "\n".join(lines)
+
+
+def _github_annotation(result: LensResult | None, lens: str, level: str) -> str:
+    """Render one escaped failure or pending lens annotation."""
+    outcome = "pending" if result is None else result.outcome.value
+    detail = (
+        "no result was returned" if result is None or result.summary is None else result.summary
+    )
+    message = f"{outcome}: {detail}"
+    title = _github_property(f"YAGA Agent review: {lens}", maximum=MAX_GITHUB_TITLE)
+    return f"::{level} title={title}::{_github_data(message, maximum=MAX_GITHUB_MESSAGE)}"
+
+
+def _github_property(value: str, *, maximum: int) -> str:
+    escaped = _github_escape(value).replace(":", "%3A").replace(",", "%2C")
+    return _bounded_github_escape(escaped, maximum=maximum)
+
+
+def _github_data(value: str, *, maximum: int) -> str:
+    return _bounded_github_escape(_github_escape(value), maximum=maximum)
+
+
+def _github_escape(value: str) -> str:
+    cleaned = "".join(
+        "?"
+        if unicodedata.category(character) in {"Cc", "Cf", "Cs"} and character not in {"\r", "\n"}
+        else character
+        for character in value
+    )
+    return cleaned.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _bounded_github_escape(value: str, *, maximum: int) -> str:
+    if len(value) <= maximum:
+        return value
+    cutoff = maximum - 1
+    last_escape = value.rfind("%", 0, cutoff)
+    if last_escape >= 0 and cutoff - last_escape < 3:
+        cutoff = last_escape
+    return f"{value[:cutoff]}…"
 
 
 def _parse_document(document: Any, path: Path) -> AgentReviewResults:
