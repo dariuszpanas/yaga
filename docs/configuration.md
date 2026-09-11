@@ -157,7 +157,8 @@ yaga config show --repo . --format json
 prints the created path and effective values. `config show` is useful for diagnosing discovery,
 normalization, and default values before running a check. Add `--dry-run` to perform the same
 directory, discovery, target, and policy validation without publishing the file; its report names
-the `.yaga.toml` path that would be created.
+the `.yaga.toml` path that would be created and marks the result as `dry_run` in JSON (or
+`mode: dry-run (no file created)` in text).
 
 ## Standalone provider policies
 

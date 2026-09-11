@@ -4,6 +4,7 @@
 
 ### Added
 
+- Mark `config init --dry-run` explicitly in text and JSON reports for automation consumers.
 - Add `config init --dry-run` to validate and report the generated policy without creating a file.
 - Add regression coverage proving event-aware Dependabot skips remain valid for multiline commits.
 - Clarify that `config init` requires lowercase commit types while keeping scopes optional and
