@@ -43,7 +43,7 @@ def init_config(
     except YagaError as error:
         typer.echo(render_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
-    typer.echo(render_config(loaded, output_format))
+    typer.echo(render_config(loaded, output_format, dry_run=dry_run))
 
 
 @app.command("show")

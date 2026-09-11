@@ -685,7 +685,17 @@ def test_config_init_dry_run_reports_without_creating_policy(tmp_path: Path) -> 
 
     assert result.exit_code == 0
     assert "source: " in result.stdout
+    assert "mode: dry-run (no file created)" in result.stdout
     assert str(tmp_path / ".yaga.toml") in result.stdout
+    assert not (tmp_path / ".yaga.toml").exists()
+
+    json_result = runner.invoke(
+        app,
+        ["config", "init", "--repo", str(tmp_path), "--dry-run", "--format", "json"],
+    )
+
+    assert json_result.exit_code == 0
+    assert json.loads(json_result.stdout)["dry_run"] is True
     assert not (tmp_path / ".yaga.toml").exists()
 
 

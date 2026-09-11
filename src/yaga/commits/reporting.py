@@ -271,7 +271,12 @@ def _message_body_lines(message: str) -> int:
     return len(lines[separator + 1 :])
 
 
-def render_config(config: LoadedConfig, output_format: OutputFormat) -> str:
+def render_config(
+    config: LoadedConfig,
+    output_format: OutputFormat,
+    *,
+    dry_run: bool = False,
+) -> str:
     """Render the effective configuration and its source."""
     policy = policy_document(config.policy)
     document: dict[str, Any] = {
@@ -281,6 +286,8 @@ def render_config(config: LoadedConfig, output_format: OutputFormat) -> str:
         else None,
         "config": policy,
     }
+    if dry_run:
+        document["dry_run"] = True
     if output_format is OutputFormat.JSON:
         return json.dumps(document, ensure_ascii=False, indent=2)
     source = (
@@ -289,6 +296,8 @@ def render_config(config: LoadedConfig, output_format: OutputFormat) -> str:
         else "built-in defaults"
     )
     lines = [f"source: {source}"]
+    if dry_run:
+        lines.append("mode: dry-run (no file created)")
     for key, value in policy.items():
         display = "any" if value is None and key.startswith("allowed_") else value
         lines.append(f"{key.replace('_', '-')}: {_text_value(display)}")
