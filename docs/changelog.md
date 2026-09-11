@@ -4,6 +4,8 @@
 
 ### Added
 
+- Include per-message body-line and model-input coverage in flagged GitHub quality annotations so
+  complete-message versus title-only and truncation behavior is visible in CI output.
 - Allow `commit quality` classification thresholds from `0` through `1` inclusively, including
   `0` for intentionally flagging every nonnegative classifier score.
 - Added diagnostic line and column locations to standalone and pull-request text reports so local

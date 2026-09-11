@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- Include per-message body-line and model-input coverage in flagged GitHub quality annotations so
+  complete-message versus title-only and truncation behavior is visible in CI output.
 - Allow a quality classification threshold of `0`, matching the CLI's inclusive `0`-through-`1`
   option range for intentionally flagging every nonnegative score.
 - Preserve diagnostic line and column locations in standalone and pull-request text reports,
