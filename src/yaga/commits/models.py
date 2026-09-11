@@ -61,11 +61,38 @@ class TyposPolicy(StrEnum):
     CHECK = "check"
 
 
+class QualityProvider(StrEnum):
+    """Optional provider used for advisory commit quality checks."""
+
+    HUGGINGFACE = "huggingface"
+    BEDROCK = "bedrock"
+
+
+class QualityTask(StrEnum):
+    """Optional local task used by a quality provider."""
+
+    CLASSIFICATION = "classification"
+    SEQ2SEQ = "seq2seq"
+
+
 class OutputFormat(StrEnum):
     """Supported stable report formats."""
 
     TEXT = "text"
     JSON = "json"
+
+
+@dataclass(frozen=True, slots=True)
+class QualityPolicy:
+    """Non-secret defaults for the optional quality advisory."""
+
+    provider: QualityProvider = QualityProvider.HUGGINGFACE
+    task: QualityTask = QualityTask.CLASSIFICATION
+    model_id: str = "saridormi/commit-message-quality-codebert"
+    revision: str | None = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
+    threshold: float = 0.70
+    region: str | None = None
+    max_tokens: int = 32
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +122,7 @@ class CommitPolicy:
     scope_policy_by_type: tuple[tuple[str, PresencePolicy], ...] = ()
     dependabot_pull_requests: DependabotPullRequestPolicy = DependabotPullRequestPolicy.CHECK
     typos: TyposPolicy = TyposPolicy.SKIP
+    quality: QualityPolicy = QualityPolicy()
 
 
 @dataclass(frozen=True, slots=True)

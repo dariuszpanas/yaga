@@ -16,9 +16,6 @@ from yaga.commits.models import (
     ValidationReport,
 )
 from yaga.commits.quality import (
-    DEFAULT_LOW_QUALITY_THRESHOLD,
-    DEFAULT_MODEL_ID,
-    DEFAULT_MODEL_REVISION,
     QualityReport,
     check_quality,
 )
@@ -87,19 +84,20 @@ def check_git_commits(
 def check_commit_quality(
     repository: Path,
     *,
+    config: Path | None = None,
     message: str | None = None,
     file: Path | None = None,
     stdin: bool = False,
     commit: str | None = None,
     revision_range: str | None = None,
-    provider: str = "huggingface",
-    task: str = "classification",
-    model_id: str = DEFAULT_MODEL_ID,
-    revision: str | None = DEFAULT_MODEL_REVISION,
-    threshold: float = DEFAULT_LOW_QUALITY_THRESHOLD,
+    provider: str | None = None,
+    task: str | None = None,
+    model_id: str | None = None,
+    revision: str | None = None,
+    threshold: float | None = None,
     offline: bool = False,
     region: str | None = None,
-    max_tokens: int = 32,
+    max_tokens: int | None = None,
 ) -> QualityReport:
     """Run the opt-in quality model against one explicit source selection."""
     selected = [
@@ -112,6 +110,7 @@ def check_commit_quality(
     if sum(selected) > 1:
         raise InputError("choose only one of --message, --file, --stdin, --commit, or --range")
     repo = _resolve_repository(repository)
+    settings = load_config(config, start=repo).policy.quality
     targets = _select_targets(
         message=message,
         file=file,
@@ -123,14 +122,14 @@ def check_commit_quality(
     )
     return check_quality(
         targets,
-        provider=provider,
-        task=task,
-        model_id=model_id,
-        revision=revision,
-        threshold=threshold,
+        provider=provider or settings.provider.value,
+        task=task or settings.task.value,
+        model_id=model_id or settings.model_id,
+        revision=revision if revision is not None else settings.revision,
+        threshold=threshold if threshold is not None else settings.threshold,
         offline=offline,
-        region=region,
-        max_tokens=max_tokens,
+        region=region if region is not None else settings.region,
+        max_tokens=max_tokens if max_tokens is not None else settings.max_tokens,
     )
 
 

@@ -146,13 +146,18 @@ def _load_huggingface(
         ) from error
     try:
         if task == "classification":
+            tokenizer = transformers.AutoTokenizer.from_pretrained(
+                model_id, revision=revision, local_files_only=offline
+            )
+            model = transformers.AutoModelForSequenceClassification.from_pretrained(
+                model_id, revision=revision, local_files_only=offline
+            )
             classifier = transformers.pipeline(
                 "text-classification",
-                model=model_id,
-                revision=revision,
+                model=model,
+                tokenizer=tokenizer,
                 truncation=True,
                 max_length=512,
-                local_files_only=offline,
                 top_k=None,
             )
 
@@ -235,6 +240,8 @@ def _classification_assessment(raw: object, threshold: float) -> QualityAssessme
 
 def _low_quality_probability(raw: object) -> float:
     """Extract the LABEL_0 probability from a transformers classifier result."""
+    if isinstance(raw, list) and len(raw) == 1 and isinstance(raw[0], list):
+        raw = raw[0]
     if not isinstance(raw, list) or not raw or not all(isinstance(item, dict) for item in raw):
         raise ValueError("expected a non-empty list of score objects")
     scores: dict[str, float] = {}

@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
-from yaga.commits.models import CommitTarget
+from yaga.commits.models import CommitTarget, OutputFormat
 from yaga.commits.quality import (
     DEFAULT_MODEL_REVISION,
     QualityAssessment,
+    _load_huggingface,
     _low_quality_probability,
     _parse_decision,
     check_quality,
 )
+from yaga.commits.reporting import quality_report_document, render_quality_report
 from yaga.errors import InputError
 
 
@@ -19,6 +23,12 @@ def test_quality_extracts_label_zero_probability() -> None:
     assert (
         _low_quality_probability(
             [{"label": "LABEL_1", "score": 0.2}, {"label": "LABEL_0", "score": 0.8}]
+        )
+        == 0.8
+    )
+    assert (
+        _low_quality_probability(
+            [[{"label": "LABEL_1", "score": 0.2}, {"label": "LABEL_0", "score": 0.8}]]
         )
         == 0.8
     )
@@ -61,6 +71,70 @@ def test_quality_rejects_untrusted_provider_decision() -> None:
         _parse_decision("maybe")
 
 
+def test_classifier_applies_offline_only_during_model_loading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class Loader:
+        @staticmethod
+        def from_pretrained(*args: object, **kwargs: object) -> object:
+            calls.append(("load", dict(kwargs)))
+            return object()
+
+    def pipeline(*args: object, **kwargs: object):
+        calls.append(("pipeline", dict(kwargs)))
+        return lambda _message: [
+            {"label": "LABEL_0", "score": 0.8},
+            {"label": "LABEL_1", "score": 0.2},
+        ]
+
+    monkeypatch.setattr(
+        "yaga.commits.quality.import_module",
+        lambda _name: SimpleNamespace(
+            AutoTokenizer=Loader,
+            AutoModelForSequenceClassification=Loader,
+            pipeline=pipeline,
+        ),
+    )
+
+    predictor = _load_huggingface(
+        "classification",
+        "model",
+        DEFAULT_MODEL_REVISION,
+        0.7,
+        True,
+        32,
+    )
+
+    assert predictor("feat: message").flagged
+    assert [kwargs["local_files_only"] for kind, kwargs in calls if kind == "load"] == [True, True]
+    assert "local_files_only" not in next(kwargs for kind, kwargs in calls if kind == "pipeline")
+
+
 def test_quality_rejects_unpinned_revision() -> None:
     with pytest.raises(InputError, match="lowercase hexadecimal"):
         check_quality([], revision="main")
+
+
+def test_quality_reports_that_the_complete_multiline_message_was_checked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("pass", 0.1),
+    )
+    report = check_quality(
+        [
+            CommitTarget(
+                label="commit abc123",
+                sha="abc123",
+                message="fix: parser\n\nExplain the parser behavior.",
+            )
+        ],
+        revision=DEFAULT_MODEL_REVISION,
+    )
+    document = quality_report_document(report)
+    assert document["commits"][0]["message_lines"] == 3
+    rendered = render_quality_report(report, OutputFormat.TEXT)
+    assert "(3 lines checked)" in rendered

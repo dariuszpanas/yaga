@@ -59,6 +59,11 @@ yaga commit check --range origin/main..HEAD
 yaga commit quality --commit HEAD --offline
 ```
 
+`commit quality` also reads non-secret defaults from `[tool.yaga.commit.quality]` in
+`pyproject.toml` (or `[commit.quality]` in `.yaga.toml`); use `--config` for an explicit file and
+override individual settings with CLI flags. Provider credentials are always supplied through the
+provider's normal environment/SDK credential chain, never through YAGA configuration.
+
 Git commit and range sources read complete messages without fetching or invoking a shell. Exact
 commit checks select one commit; range checks preserve oldest-first order. Both require complete,
 non-shallow history because Git's shallow boundary can hide stored parents. Commit, change, mode,
