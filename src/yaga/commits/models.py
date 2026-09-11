@@ -82,6 +82,13 @@ class QualityTask(StrEnum):
     SEQ2SEQ = "seq2seq"
 
 
+class QualityInputMode(StrEnum):
+    """Which part of a commit message the optional quality model receives."""
+
+    MESSAGE = "message"
+    TITLE = "title"
+
+
 class OutputFormat(StrEnum):
     """Supported stable report formats."""
 
@@ -101,6 +108,7 @@ class QualityPolicy:
     region: str | None = None
     max_tokens: int = 32
     max_input_tokens: int = 512
+    input_mode: QualityInputMode = QualityInputMode.MESSAGE
 
 
 @dataclass(frozen=True, slots=True)

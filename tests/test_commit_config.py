@@ -17,6 +17,7 @@ from yaga.commits.models import (
     EndingPolicy,
     MergePolicy,
     PresencePolicy,
+    QualityInputMode,
     QualityProvider,
     QualityTask,
     TyposPolicy,
@@ -63,6 +64,7 @@ threshold = 0.4
 region = "us-west-2"
 max-tokens = 12
 max-input-tokens = 1024
+input-mode = "title"
 """,
     )
 
@@ -76,6 +78,7 @@ max-input-tokens = 1024
     assert loaded.policy.quality.region == "us-west-2"
     assert loaded.policy.quality.max_tokens == 12
     assert loaded.policy.quality.max_input_tokens == 1024
+    assert loaded.policy.quality.input_mode is QualityInputMode.TITLE
 
 
 @pytest.mark.parametrize(
@@ -90,6 +93,7 @@ max-input-tokens = 1024
         "[tool.yaga.commit.quality]\nthreshold = 0\n",
         "[tool.yaga.commit.quality]\nmax-tokens = 0\n",
         "[tool.yaga.commit.quality]\nmax-input-tokens = 0\n",
+        '[tool.yaga.commit.quality]\ninput-mode = "body"\n',
         "[tool.yaga.commit.quality]\nextra = true\n",
     ],
 )

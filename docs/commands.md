@@ -84,6 +84,11 @@ The source options are mutually exclusive. `--message`, `--file`, and `--stdin` 
 Range results preserve oldest-first order, and a missing ref, empty range, shallow boundary, or
 selection above the configured commit limit is an operational error with exit `2`.
 
+Quality checks send the complete commit message to the provider by default. Use
+`--input-mode title` when a repository deliberately wants title-only advisory scoring; use
+`--input-mode message` to make the full-message behavior explicit. The selected mode is included
+in text and JSON reports, while the original message and its body-line counts remain visible.
+
 The command also reads non-secret defaults from `[tool.yaga.commit.quality]` or `[commit.quality]`
 in the discovered configuration. Use `--config` to select one explicit file; CLI options override
 the configured provider, task, model, revision, threshold, region, generation bound, and Hugging
@@ -170,6 +175,7 @@ revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553d"
 threshold = 0.70
 max-tokens = 32
 max-input-tokens = 512
+input-mode = "message"
 ```
 
 The precedence is CLI option, then the selected configuration file, then the provider default.

@@ -76,7 +76,9 @@ Use `--max-input-tokens` or `max-input-tokens` in the quality table to tune the 
 tokenizer window; it defaults to 512 and accepts values through 4096. Reports identify the
 effective bound alongside the selected message and body-line counts. Hugging Face reports also show
 the measured input-token count and state whether each message was actually truncated at the model
-window. Use `--format github` in Actions for escaped warning annotations when the advisory flags a
+window. Quality sends the complete message, including the body, by default; use `--input-mode title`
+or `input-mode = "title"` when title-only scoring is intentional. Reports identify the selected
+mode. Use `--format github` in Actions for escaped warning annotations when the advisory flags a
 message; provider failures remain error annotations with exit `2`.
 
 See the [commit policy guide](docs/commit-policy.md#optional-model-quality-advisory) for source

@@ -72,6 +72,7 @@ def render_quality_report(
         line_label = "line" if message_lines == 1 else "lines"
         body_label = "body line" if body_lines == 1 else "body lines"
         message_shape = f"{body_lines} {body_label} included" if body_lines else "no body included"
+        model_input_label = "title only" if report.input_mode == "title" else "full message"
         if result.input_tokens is not None and report.max_input_tokens is not None:
             coverage = f"{result.input_tokens}/{report.max_input_tokens} tokens"
             message_shape += f"; model input {coverage}"
@@ -86,6 +87,7 @@ def render_quality_report(
         lines.append(
             f"{status:7} {safe_text(identity, maximum=80)}  "
             f"({message_lines} {line_label} checked; {message_shape}) "
+            f"[model input: {model_input_label}] "
             f"{safe_text(result.target.message.splitlines()[0])}"
         )
         details = []
@@ -114,6 +116,7 @@ def render_quality_report(
         lines.append("Mode: offline")
     if report.max_input_tokens is not None:
         lines.append(f"Max input tokens: {report.max_input_tokens}")
+    lines.append(f"Input mode: {safe_text(report.input_mode, maximum=32)}")
     return "\n".join(lines)
 
 
@@ -178,6 +181,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
         "region": report.region,
         "offline": report.offline,
         "max_input_tokens": report.max_input_tokens,
+        "input_mode": report.input_mode,
         "commits": [
             {
                 "source": json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
@@ -267,6 +271,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
             "region": policy.quality.region,
             "max_tokens": policy.quality.max_tokens,
             "max_input_tokens": policy.quality.max_input_tokens,
+            "input_mode": policy.quality.input_mode.value,
         },
         "merge_commits": policy.merge_commits.value,
         "ignored_headers": _json_values(policy.ignored_headers, maximum=256),
