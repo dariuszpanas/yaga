@@ -14,6 +14,7 @@ from yaga.commits.models import (
     OutputFormat,
     ValidationReport,
 )
+from yaga.commits.parser import parse_message
 from yaga.commits.quality import MAX_REASON_LENGTH, QualityReport
 from yaga.errors import YagaError, safe_error_text
 
@@ -240,7 +241,10 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
 
 
 def _message_body_lines(message: str) -> int:
-    """Count body lines after the first commit-message separator."""
+    """Count parsed prose-body lines, excluding a recognized footer block."""
+    parsed = parse_message(message)
+    if parsed is not None:
+        return len(parsed.body_lines)
     lines = message.splitlines()
     try:
         separator = lines.index("")
