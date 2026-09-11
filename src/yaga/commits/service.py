@@ -15,6 +15,13 @@ from yaga.commits.models import (
     TyposPolicy,
     ValidationReport,
 )
+from yaga.commits.quality import (
+    DEFAULT_LOW_QUALITY_THRESHOLD,
+    DEFAULT_MODEL_ID,
+    DEFAULT_MODEL_REVISION,
+    QualityReport,
+    check_quality,
+)
 from yaga.commits.sources import from_file, from_message, from_stdin
 from yaga.commits.typos import check_typos
 from yaga.errors import InputError
@@ -75,6 +82,48 @@ def check_git_commits(
         max_commits=loaded.policy.max_commits,
     )
     return _check_targets(targets, config_path=loaded.path, policy=loaded.policy)
+
+
+def check_commit_quality(
+    repository: Path,
+    *,
+    message: str | None = None,
+    file: Path | None = None,
+    stdin: bool = False,
+    commit: str | None = None,
+    revision_range: str | None = None,
+    model_id: str = DEFAULT_MODEL_ID,
+    revision: str = DEFAULT_MODEL_REVISION,
+    threshold: float = DEFAULT_LOW_QUALITY_THRESHOLD,
+    offline: bool = False,
+) -> QualityReport:
+    """Run the opt-in quality model against one explicit source selection."""
+    selected = [
+        message is not None,
+        file is not None,
+        stdin,
+        commit is not None,
+        revision_range is not None,
+    ]
+    if sum(selected) > 1:
+        raise InputError("choose only one of --message, --file, --stdin, --commit, or --range")
+    repo = _resolve_repository(repository)
+    targets = _select_targets(
+        message=message,
+        file=file,
+        stdin=stdin,
+        commit=commit,
+        revision_range=revision_range,
+        repository=repo,
+        max_commits=256,
+    )
+    return check_quality(
+        targets,
+        model_id=model_id,
+        revision=revision,
+        threshold=threshold,
+        offline=offline,
+    )
 
 
 def _resolve_repository(repository: Path) -> Path:

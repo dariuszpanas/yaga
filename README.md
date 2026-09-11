@@ -31,6 +31,7 @@ The command tree uses deliberately separated groups:
 yaga branch check                  # validate one explicit short branch name
 yaga change check                  # enforce changed-path coupling for one Git range
 yaga commit check                  # validate one message, commit, or range
+yaga commit quality                # optional local model advisory
 yaga config init                   # create a safe standalone starter policy
 yaga config show                   # explain the effective policy and its source
 yaga github pull-request check     # validate one exact GitHub PR event
@@ -55,6 +56,7 @@ yaga commit check --file .git/COMMIT_EDITMSG
 printf 'fix: preserve stdin\n' | yaga commit check --stdin
 yaga commit check --commit HEAD~1
 yaga commit check --range origin/main..HEAD
+yaga commit quality --commit HEAD --offline
 ```
 
 Git commit and range sources read complete messages without fetching or invoking a shell. Exact

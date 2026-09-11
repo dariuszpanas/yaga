@@ -13,6 +13,7 @@ from yaga.commits.models import (
     OutputFormat,
     ValidationReport,
 )
+from yaga.commits.quality import QualityReport
 from yaga.errors import YagaError, safe_error_text
 
 SCHEMA_VERSION = 1
@@ -41,6 +42,56 @@ def render_error(error: YagaError, output_format: OutputFormat) -> str:
             indent=2,
         )
     return f"YAGA {error.kind} error: {message}"
+
+
+def render_quality_report(report: QualityReport, output_format: OutputFormat) -> str:
+    """Render the bounded advisory model report."""
+    document = quality_report_document(report)
+    if output_format is OutputFormat.JSON:
+        return json.dumps(document, ensure_ascii=False, indent=2)
+    lines: list[str] = []
+    for result in report.results:
+        status = "FLAGGED" if result.flagged else "PASSED"
+        probability = f"{result.prediction.low_quality_probability:.3f}"
+        identity = result.target.sha[:12] if result.target.sha else result.target.label
+        lines.append(
+            f"{status:7} {safe_text(identity, maximum=80)}  {safe_text(result.target.message.splitlines()[0])}"
+        )
+        lines.append(
+            f"         low-quality probability: {probability}; threshold: {result.threshold:.3f}"
+        )
+    lines.append(
+        f"Checked {len(report.results)} commit(s): {len(report.results) - report.flagged} passed, "
+        f"{report.flagged} flagged."
+    )
+    lines.append(f"Model: {safe_text(report.model_id, maximum=MAX_DISPLAY_PATH)}")
+    lines.append(f"Revision: {safe_text(report.revision, maximum=MAX_DISPLAY_PATH)}")
+    if report.offline:
+        lines.append("Mode: offline")
+    return "\n".join(lines)
+
+
+def quality_report_document(report: QualityReport) -> dict[str, Any]:
+    """Return the versioned JSON-ready model report."""
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "valid": report.valid,
+        "checked": len(report.results),
+        "flagged": report.flagged,
+        "model": {"id": json_text(report.model_id, maximum=256), "revision": report.revision},
+        "offline": report.offline,
+        "commits": [
+            {
+                "source": json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
+                "sha": json_text(result.target.sha, maximum=64) if result.target.sha else None,
+                "message": json_text(result.target.message, maximum=MAX_DISPLAY_HEADER),
+                "status": "flagged" if result.flagged else "passed",
+                "low_quality_probability": result.prediction.low_quality_probability,
+                "threshold": result.threshold,
+            }
+            for result in report.results
+        ],
+    }
 
 
 def render_config(config: LoadedConfig, output_format: OutputFormat) -> str:

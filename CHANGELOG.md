@@ -8,6 +8,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
 
 ### Added
 
+- An opt-in `yaga commit quality` advisory using a pinned local Hugging Face model, with offline
+  cache support and versioned text/JSON reports.
 - Make commit body line length an opt-in policy so longer explanations are accepted by default;
   repositories can still configure `body-max-line-length` when wrapping is part of their style.
 - A direct `agent-review` gate contract with a provider-neutral public name, renamed workflow
