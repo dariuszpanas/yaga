@@ -13,7 +13,6 @@ nav = [
   { "Commands" = "commands.md" },
   { "Usage modes" = "usage.md" },
   { "Adoption recipes" = "recipes.md" },
-  { "Changelog" = "changelog.md" },
   { "Configuration" = "configuration.md" },
   { "Commit policy" = "commit-policy.md" },
   { "Repository checks" = "repository-checks.md" },
@@ -22,6 +21,7 @@ nav = [
   { "Troubleshooting" = "troubleshooting.md" },
   { "Security model" = "security.md" },
   { "Contributing" = "contributing.md" },
+  { "Changelog" = "changelog.md" },
 ]
 
 [project.theme]
