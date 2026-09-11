@@ -136,5 +136,23 @@ def test_quality_reports_that_the_complete_multiline_message_was_checked(
     )
     document = quality_report_document(report)
     assert document["commits"][0]["message_lines"] == 3
+    assert document["commits"][0]["message_body_lines"] == 1
     rendered = render_quality_report(report, OutputFormat.TEXT)
-    assert "(3 lines checked)" in rendered
+    assert "(3 lines checked; 1 body line included)" in rendered
+
+
+def test_quality_report_makes_title_only_input_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "yaga.commits.quality._load_predictor",
+        lambda *_args, **_kwargs: lambda _message: QualityAssessment("pass", 0.1),
+    )
+    report = check_quality(
+        [CommitTarget(label="message", message="fix: parser")],
+        revision=DEFAULT_MODEL_REVISION,
+    )
+
+    document = quality_report_document(report)
+    assert document["commits"][0]["message_body_lines"] == 0
+    assert "no body included" in render_quality_report(report, OutputFormat.TEXT)
