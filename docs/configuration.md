@@ -54,7 +54,7 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 | `body-max-consecutive-single-line-paragraphs` | Optional maximum run length of one-line prose paragraphs; omitted means unlimited. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
-| `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, and max-tokens. |
+| `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, max-tokens, and max-input-tokens. |
 | `merge-commits` | `ignore`, `check`, or `reject`, based on Git parent identity. |
 | `ignored-headers` | Bounded case-sensitive glob patterns for intentional headers. |
 | `max-commits` | Positive bound for a selected commit range. |
@@ -120,12 +120,15 @@ model = "saridormi/commit-message-quality-codebert"
 revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
 threshold = 0.70
 max-tokens = 32
+max-input-tokens = 512
 ```
 
 `provider` is `huggingface` or `bedrock`; `task` is `classification` or `seq2seq`. Hugging Face
 requires a lowercase hexadecimal revision. Bedrock may omit `revision` and can set `region` and a
-provider-specific `model`. `max-tokens` is bounded from 1 through 256. Use `--config` when the
-quality settings should come from one explicit file rather than normal nearest-file discovery.
+provider-specific `model`. `max-tokens` is bounded from 1 through 256, while
+`max-input-tokens` defaults to 512 and is bounded from 1 through 4096 for Hugging Face models.
+The CLI `--max-input-tokens` option overrides it for one invocation. Use `--config` when the quality
+settings should come from one explicit file rather than normal nearest-file discovery.
 
 ## Generate and inspect policy
 

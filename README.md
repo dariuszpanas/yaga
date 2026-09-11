@@ -63,6 +63,9 @@ yaga commit quality --commit HEAD --offline
 `pyproject.toml` (or `[commit.quality]` in `.yaga.toml`); use `--config` for an explicit file and
 override individual settings with CLI flags. Provider credentials are always supplied through the
 provider's normal environment/SDK credential chain, never through YAGA configuration.
+Use `--max-input-tokens` or `max-input-tokens` in the quality table to tune the Hugging Face
+tokenizer window; it defaults to 512 and accepts values through 4096. Reports identify the
+effective bound alongside the selected message and body-line counts.
 
 Git commit and range sources read complete messages without fetching or invoking a shell. Exact
 commit checks select one commit; range checks preserve oldest-first order. Both require complete,

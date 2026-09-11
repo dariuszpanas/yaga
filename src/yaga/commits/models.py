@@ -93,6 +93,7 @@ class QualityPolicy:
     threshold: float = 0.70
     region: str | None = None
     max_tokens: int = 32
+    max_input_tokens: int = 512
 
 
 @dataclass(frozen=True, slots=True)

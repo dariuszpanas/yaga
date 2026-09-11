@@ -87,6 +87,8 @@ def render_quality_report(report: QualityReport, output_format: OutputFormat) ->
         lines.append(f"Region: {safe_text(report.region, maximum=MAX_DISPLAY_PATH)}")
     if report.offline:
         lines.append("Mode: offline")
+    if report.max_input_tokens is not None:
+        lines.append(f"Max input tokens: {report.max_input_tokens}")
     return "\n".join(lines)
 
 
@@ -102,6 +104,7 @@ def quality_report_document(report: QualityReport) -> dict[str, Any]:
         "model": {"id": json_text(report.model_id, maximum=256), "revision": report.revision},
         "region": report.region,
         "offline": report.offline,
+        "max_input_tokens": report.max_input_tokens,
         "commits": [
             {
                 "source": json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
@@ -188,6 +191,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
             "threshold": policy.quality.threshold,
             "region": policy.quality.region,
             "max_tokens": policy.quality.max_tokens,
+            "max_input_tokens": policy.quality.max_input_tokens,
         },
         "merge_commits": policy.merge_commits.value,
         "ignored_headers": _json_values(policy.ignored_headers, maximum=256),

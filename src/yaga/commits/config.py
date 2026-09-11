@@ -366,7 +366,16 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
     if not isinstance(value, dict):
         raise ConfigurationError(f"quality must be a table in {path}")
     allowed = frozenset(
-        {"provider", "task", "model", "revision", "threshold", "region", "max-tokens"}
+        {
+            "provider",
+            "task",
+            "model",
+            "revision",
+            "threshold",
+            "region",
+            "max-tokens",
+            "max-input-tokens",
+        }
     )
     _reject_unknown(value, allowed, label="commit.quality", path=path)
     defaults = QualityPolicy()
@@ -410,11 +419,27 @@ def _quality_policy(value: object, path: Path) -> QualityPolicy:
     max_tokens = _integer(
         value.get("max-tokens", defaults.max_tokens), "quality.max-tokens", 1, 256, path
     )
+    max_input_tokens = _integer(
+        value.get("max-input-tokens", defaults.max_input_tokens),
+        "quality.max-input-tokens",
+        1,
+        4096,
+        path,
+    )
     if provider is QualityProvider.HUGGINGFACE and revision is None:
         raise ConfigurationError(
             f"quality.revision is required for the Hugging Face provider in {path}"
         )
-    return QualityPolicy(provider, task, model_id, revision, float(threshold), region, max_tokens)
+    return QualityPolicy(
+        provider,
+        task,
+        model_id,
+        revision,
+        float(threshold),
+        region,
+        max_tokens,
+        max_input_tokens,
+    )
 
 
 def _reject_unknown(

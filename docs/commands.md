@@ -38,7 +38,8 @@ while a model is an optional advisory signal. The provider is explicit and bound
 
 The command also reads non-secret defaults from `[tool.yaga.commit.quality]` or `[commit.quality]`
 in the discovered configuration. Use `--config` to select one explicit file; CLI options override
-the configured provider, task, model, revision, threshold, region, and generation bound.
+the configured provider, task, model, revision, threshold, region, generation bound, and Hugging
+Face input-token bound.
 
 ```bash
 # Pinned local classifier (default)
@@ -83,6 +84,9 @@ reports both the selected line count and the number of body lines included in te
 This makes title-only versus multiline model runs visible in CI logs without printing the full
 message. The model can therefore notice a vague body, but exact rules such as paragraph layout,
 footer presence, or configured scopes remain the responsibility of `commit check`.
+The default Hugging Face input window is 512 tokens; configure it with `--max-input-tokens` or
+`max-input-tokens` when the selected model supports a different context size. The effective value
+is included in text and JSON reports.
 
 ### Hugging Face cache and offline replay
 
@@ -113,6 +117,7 @@ model = "saridormi/commit-message-quality-codebert"
 revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553d"
 threshold = 0.70
 max-tokens = 32
+max-input-tokens = 512
 ```
 
 The precedence is CLI option, then the selected configuration file, then the provider default.

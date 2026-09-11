@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added configurable Hugging Face quality input windows through `max-input-tokens` and
+  `--max-input-tokens`, with the effective bound included in text and JSON reports.
 - Added concrete passing and failing examples for the configurable consecutive single-line
   paragraph check, including its continuation-aware punctuation heuristic and explicit unlimited
   setting.

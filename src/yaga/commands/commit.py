@@ -125,6 +125,15 @@ def quality_check(
         int | None,
         typer.Option("--max-tokens", min=1, max=256, help="Bound generated response tokens."),
     ] = None,
+    max_input_tokens: Annotated[
+        int | None,
+        typer.Option(
+            "--max-input-tokens",
+            min=1,
+            max=4096,
+            help="Bound Hugging Face model input tokens.",
+        ),
+    ] = None,
     output_format: Annotated[
         OutputFormat, typer.Option("--format", case_sensitive=False, help="Report format.")
     ] = OutputFormat.TEXT,
@@ -150,6 +159,7 @@ def quality_check(
             offline=offline,
             region=region,
             max_tokens=max_tokens,
+            max_input_tokens=max_input_tokens,
         )
     except YagaError as error:
         typer.echo(render_error(error, output_format), err=True)

@@ -62,6 +62,7 @@ model = "amazon.nova-micro-v1:0"
 threshold = 0.4
 region = "us-west-2"
 max-tokens = 12
+max-input-tokens = 1024
 """,
     )
 
@@ -74,6 +75,7 @@ max-tokens = 12
     assert loaded.policy.quality.threshold == 0.4
     assert loaded.policy.quality.region == "us-west-2"
     assert loaded.policy.quality.max_tokens == 12
+    assert loaded.policy.quality.max_input_tokens == 1024
 
 
 @pytest.mark.parametrize(
@@ -85,6 +87,7 @@ max-tokens = 12
         '[tool.yaga.commit.quality]\nrevision = "main"\n',
         "[tool.yaga.commit.quality]\nthreshold = 0\n",
         "[tool.yaga.commit.quality]\nmax-tokens = 0\n",
+        "[tool.yaga.commit.quality]\nmax-input-tokens = 0\n",
         "[tool.yaga.commit.quality]\nextra = true\n",
     ],
 )
