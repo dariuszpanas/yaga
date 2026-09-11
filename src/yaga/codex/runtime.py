@@ -7,6 +7,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
+from yaga.agent_review.policy import AgentReviewPolicy, load_policy
 from yaga.codex.constants import (
     LIFECYCLE_WAIT_SECONDS,
     MAX_AUTHORIZATION_REQUESTS,
@@ -23,7 +24,7 @@ from yaga.codex.constants import (
 from yaga.codex.events import parse_event_boundary
 from yaga.codex.gate import authorize, finalize, invalidate, prepare, review
 from yaga.codex.runs import load_source_from_wake
-from yaga.errors import GateError
+from yaga.errors import ConfigurationError, GateError
 from yaga.github import MAX_API_REQUESTS, GitHubRestApi
 from yaga.models import (
     bounded_text,
@@ -127,6 +128,30 @@ def _trusted_workflow_path(repository: str, default_branch: str) -> str:
     return workflow
 
 
+def _configured_review_policy() -> AgentReviewPolicy | None:
+    """Load an explicitly configured policy from the trusted workspace."""
+    raw_path = os.environ.get("YAGA_AGENT_REVIEW_POLICY_FILE", "")
+    if not raw_path:
+        return None
+    policy_path = Path(bounded_text(raw_path, "Agent review policy path", max_bytes=512))
+    workspace = Path(
+        bounded_text(
+            _required_environment("GITHUB_WORKSPACE"),
+            "GitHub workspace",
+            max_bytes=4_096,
+        )
+    ).resolve()
+    resolved = (workspace / policy_path if not policy_path.is_absolute() else policy_path).resolve()
+    try:
+        resolved.relative_to(workspace)
+    except ValueError as error:
+        raise GateError("Agent review policy must stay inside the GitHub workspace") from error
+    try:
+        return load_policy(resolved)
+    except ConfigurationError as error:
+        raise GateError(f"Agent review policy is invalid: {error}") from error
+
+
 def _write_outputs(route: str, *, pull_request_number: int | None = None) -> None:
     if route not in {"approved", "done", "external", "observe", "owner", "skip"}:
         raise GateError("YAGA route is invalid")
@@ -159,6 +184,12 @@ def run_action(selected_operation: str) -> int:
     )
     default_branch = _default_branch(event)
     _trusted_workflow_path(repository, default_branch)
+    policy = _configured_review_policy()
+    if policy is not None:
+        print(
+            f"YAGA {operation}: loaded Agent review policy with "
+            f"{len(policy.lenses)} lens(es) and {len(policy.required)} required"
+        )
     server_url = _server_url()
     run_id = _environment_positive_int("GITHUB_RUN_ID", "YAGA workflow run ID")
     run_attempt = _environment_positive_int("GITHUB_RUN_ATTEMPT", "YAGA workflow run attempt")

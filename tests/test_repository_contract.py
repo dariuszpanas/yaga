@@ -70,6 +70,7 @@ def test_action_has_one_closed_direct_publisher_interface() -> None:
     assert section_keys(action, "inputs") == {
         "gate",
         "approval-marker",
+        "agent-review-policy-file",
         "github-token",
         "job-timeout-minutes",
         "lifecycle-workflow",

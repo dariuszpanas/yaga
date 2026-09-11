@@ -12,6 +12,8 @@ Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and releases use
   example, and initial named-lens configuration documentation.
 - A bounded named-lens policy model and `yaga gate agent-review policy check` validator for local
   configuration feedback without contacting a review provider.
+- Trusted composite Actions can validate a bounded Agent review policy from the default-branch
+  workspace before making their first GitHub API request.
 - An explicit `commit.typos = "check"` mode for bounded commit-message spelling checks through an
   installed Typos CLI, with stable `typos.word` diagnostics.
 - Status-only `--quiet`/`-q` output for the standalone branch, change, mode, path, size, and tree

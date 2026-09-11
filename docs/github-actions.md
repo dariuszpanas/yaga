@@ -52,8 +52,14 @@ into shell source.
 
 The root Action accepts only the closed inputs `gate`, `operation`, `github-token`,
 `prerequisite-workflow`, `lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`,
-and `job-timeout-minutes`. The token is passed through the environment and never appears in
+`job-timeout-minutes`, and the optional `agent-review-policy-file`. The token is passed through the environment and never appears in
 arguments, outputs, logs, or exceptions.
+
+For Agent review, `agent-review-policy-file` is resolved inside `GITHUB_WORKSPACE` and is
+validated before any GitHub API request. Trusted publisher workflows should check out the
+repository default branch with credentials disabled before passing a relative policy path; a
+missing, malformed, or workspace-escaping policy fails closed. The policy controls review lenses
+and aggregation only; it never supplies credentials or authorization.
 
 The write-capable root runtime uses `YAGA_ACTION_RUNTIME=1` and standard-library-only imports.
 The separate read-only commit Action uses `YAGA_COMMIT_ACTION_RUNTIME=1`; it may use commit policy

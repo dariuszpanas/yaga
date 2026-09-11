@@ -41,6 +41,12 @@ inputs:
       Usable YAGA polling and finalization window, from 15 through 360;
       set it equal to the action-only job's timeout-minutes
     required: true
+  agent-review-policy-file:
+    description: >-
+      Optional path, relative to the trusted default-branch workspace, to the
+      Agent review TOML policy
+    required: false
+    default: ""
 
 outputs:
   route:
@@ -61,6 +67,7 @@ runs:
         YAGA_ACTION_RUNTIME: "1"
         YAGA_GATE: ${{ inputs.gate }}
         YAGA_APPROVAL_MARKER: ${{ inputs.approval-marker }}
+        YAGA_AGENT_REVIEW_POLICY_FILE: ${{ inputs.agent-review-policy-file }}
         YAGA_LIFECYCLE_WORKFLOW: ${{ inputs.lifecycle-workflow }}
         YAGA_JOB_TIMEOUT_MINUTES: ${{ inputs.job-timeout-minutes }}
         YAGA_OPERATION: ${{ inputs.operation }}
