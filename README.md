@@ -1072,7 +1072,7 @@ The environment protects only YAGA's token. OpenAI's public GitHub documentation
 a repository control that prevents a person or another app from directly posting an agent-review request.
 Such a comment may still consume provider quota. If its activity is already visible, YAGA fails
 closed rather than spending quota on a second request. A direct request can still race YAGA's final
-read and comment POST, however, and Codex outcomes do not identify the triggering comment. The
+read and comment POST, however, and provider outcomes do not identify the triggering comment. The
 current request marker therefore supplies temporal correlation, not a native provider binding.
 Only that protected route's exact YAGA marker authorizes an external-author request. Repository
 permissions and provider-side access controls remain necessary.
@@ -1192,7 +1192,7 @@ Before rollout:
    `workflows` trigger, keep their file paths synchronized with `prerequisite-workflow` and
    `lifecycle-workflow`, and install both templates at their configured paths. For a default branch
    other than `main`, replace `branches: [main]` in the lifecycle workflow.
-4. Freeze new PRs, reach zero open PRs, disable automatic reviews, and drain every existing Codex
+4. Freeze new PRs, reach zero open PRs, disable automatic reviews, and drain every existing agent-review
    task before enabling the publisher. Pin the audited YAGA SHA, then open fresh canaries for failed
    CI, the owner request, protected-external approval plus request, timeout/rerun, metadata and
    lifecycle transitions, close, and merge. Confirm the post-merge publisher run skips every job.
