@@ -1,23 +1,35 @@
 # YAGA
 
-YAGA is an extensible Python CLI for repository policy that runs the same checks locally and in CI.
-Its first general-purpose feature is a configurable
-[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) checker. The Agent
-review policy can describe one or more configured review lenses. Its experimental GitHub Action is
-a fixed Codex request/completion adapter; configured lens execution uses the provider-neutral plan
-and receipt commands through an external adapter.
+<img src="https://raw.githubusercontent.com/dariuszpanas/yaga/main/docs/assets/branding/isometric_terminal_y_logo_transparent.png" alt="YAGA terminal Y logo" width="128" height="128">
 
-YAGA is pre-release. The CLI and configuration schema may still change. Action consumers must pin
+YAGA is a Python CLI for explicit repository policy checks that run locally and in CI. Check
+Conventional Commit messages, branch names, changed-path relationships, committed files, and GitHub
+Actions workflows. Adopt individual checks or combine providers in a versioned repository plan.
+
+Start with the [getting-started guide](https://dariuszpanas.github.io/yaga/getting-started.html),
+choose an [adoption recipe](https://dariuszpanas.github.io/yaga/recipes.html), or browse the
+[command reference](https://dariuszpanas.github.io/yaga/commands.html).
+
+Optional model-backed commit-quality advice and Agent review tools complement deterministic
+policy checks. The experimental GitHub review Action is a fixed Codex request/completion adapter;
+configured review lenses use provider-neutral plans and receipts through an external adapter.
+
+YAGA 0.1.0 is beta. The CLI and configuration schema may still change. Action consumers must pin
 the exact audited 40-character commit SHA they canaried rather than a branch or mutable tag.
 
 ## Install and explore
 
-Python 3.12 or newer is required. From a checkout:
+Python 3.12 or newer is required. Install from PyPI as a user-wide tool:
 
 ```bash
-uv sync --group dev
-uv run yaga --help
+uv tool install --python 3.12 yaga-cli
+uv tool update-shell
 ```
+
+Open a new terminal, then run `yaga --help`. The
+[installation guide](docs/getting-started.md#install-as-a-global-tool) also covers pipx, pip,
+PATH setup, updates, and uninstalling. Contributors and users trying unreleased code can
+[install from a checkout](docs/getting-started.md#install-from-a-checkout).
 
 The full operator and security reference is available in the
 [Zensical documentation](https://dariuszpanas.github.io/yaga/). The source lives in `docs/` and
