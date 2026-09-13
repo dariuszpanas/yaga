@@ -8,6 +8,8 @@ Initial release candidate; publication date will be recorded when the release is
 
 ### Added
 
+- Add a tag-triggered PyPI trusted-publishing workflow and a manual build-only release rehearsal.
+  Publish the exact validated distributions with upload permissions isolated from source execution.
 - Make PyPI installation the default onboarding path with uv, pipx, and pip instructions, PATH
   setup, updates, and uninstalling; keep source installs separate for development and unreleased code.
 - Add the original YAGA logo to the README and documentation, and preserve the branding concept
@@ -191,6 +193,8 @@ entries concise, linkable, and in reverse chronological release order. Use ISO 8
 (`YYYY-MM-DD`) when a version is released.
 
 ## YAGA release workflow
+
+See [Releasing YAGA](releasing.md) for trusted-publisher setup, rehearsals, and publication checks.
 
 Before a release:
 

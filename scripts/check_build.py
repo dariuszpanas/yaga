@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -930,6 +931,11 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
 
 def main() -> int:
     """Require one wheel and sdist containing both supported execution surfaces."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, help="Retain the validated release artifacts")
+    args = parser.parse_args()
+    if args.output_dir is not None and args.output_dir.exists():
+        raise SystemExit("release output directory must not already exist")
     uv = shutil.which("uv")
     if uv is None:
         raise SystemExit("uv is required for the package build gate")
@@ -1075,6 +1081,10 @@ def main() -> int:
                 if not any(name.endswith(suffix) for name in names):
                     raise SystemExit(f"source distribution does not contain {label}")
         exercise_installed_wheel(uv, output, wheels[0])
+        if args.output_dir is not None:
+            args.output_dir.mkdir(parents=True)
+            for artifact in (wheels[0], source_distributions[0]):
+                shutil.copyfile(artifact, args.output_dir / artifact.name)
     return 0
 
 
