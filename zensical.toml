@@ -30,6 +30,7 @@ nav = [
     { "Troubleshooting" = "troubleshooting.md" },
     { "Security model" = "security.md" },
     { "Contributing" = "contributing.md" },
+    { "Releasing" = "releasing.md" },
   ] },
   { "Changelog" = "changelog.md" },
 ]
