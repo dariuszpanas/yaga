@@ -142,7 +142,7 @@ def test_commit_action_is_a_separate_read_only_closed_interface() -> None:
     assert "persist-credentials: false" in workflow
     assert "uses: ./actions/commit-check" in workflow
     assert "cargo install typos-cli --version 1.49.0 --locked" in workflow
-    assert "uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684" in workflow
+    assert "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" in workflow
     assert "path: ~/.cargo/registry" in workflow
 
 
@@ -150,7 +150,7 @@ def test_ci_installs_the_pinned_typos_cli_for_the_repository_policy() -> None:
     workflow = read(".github/workflows/ci.yml")
 
     assert "cargo install typos-cli --version 1.49.0 --locked" in workflow
-    assert "uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684" in workflow
+    assert "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" in workflow
     assert "path: ~/.cargo/registry" in workflow
 
 
@@ -162,7 +162,7 @@ def test_commit_quality_action_publishes_advisory_annotations() -> None:
     assert workflow.count('--model "$YAGA_QUALITY_MODEL_ID"') == 2
     assert workflow.count("--input-mode message") == 2
     assert "--offline" in workflow
-    assert "actions/cache@5a3ec84eff668545956fd18022155c47e93e2684" in workflow
+    assert "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" in workflow
     assert "id: model-cache" in workflow
     assert "YAGA_QUALITY_TASK: classification" in workflow
     assert "YAGA_QUALITY_MODEL_ID: saridormi/commit-message-quality-codebert" in workflow
