@@ -1,0 +1,54 @@
+/* Follow the system palette, with explicit light and dark overrides. */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #397344;
+  --md-primary-fg-color--light: #589863;
+  --md-primary-fg-color--dark: #2c5935;
+  --md-accent-fg-color: #397344;
+  --md-accent-fg-color--transparent: rgb(57 115 68 / 12%);
+  --md-typeset-a-color: #397344;
+}
+
+[data-md-color-scheme="slate"] {
+  --color-backdrop: 11 17 19;
+  --color-background: 20 28 31;
+  --color-background-subtle: 29 40 44;
+  --md-primary-fg-color: #83bc8c;
+  --md-primary-fg-color--light: #b3d6b9;
+  --md-primary-fg-color--dark: #589863;
+  --md-primary-bg-color: #0b1113;
+  --md-accent-fg-color: #83bc8c;
+  --md-accent-fg-color--transparent: rgb(131 188 140 / 12%);
+  --md-default-bg-color: #141c1f;
+  --md-default-fg-color: #e2e8ea;
+  --md-default-fg-color--light: #a7b8bd;
+  --md-default-fg-color--lighter: #789097;
+  --md-default-fg-color--lightest: #34474e;
+  --md-code-bg-color: #1d282c;
+  --md-code-fg-color: #e2e8ea;
+  --md-typeset-color: #e2e8ea;
+  --md-typeset-a-color: #83bc8c;
+  --md-typeset-table-color: #34474e;
+  --md-footer-bg-color: #0b1113;
+  --md-footer-bg-color--dark: #0b1113;
+}
+
+.md-typeset h1 {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset .md-button {
+  border-radius: 0.4rem;
+  margin: 0 0.4rem 0.4rem 0;
+}
+
+.md-typeset .yaga-facts {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.72rem;
+  margin: 0.8rem 0 1.8rem;
+}
+
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.5rem;
+}

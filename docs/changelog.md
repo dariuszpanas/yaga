@@ -2,8 +2,18 @@
 
 ## [Unreleased]
 
+## 0.1.0 — Beta
+
+Initial release candidate; publication date will be recorded when the release is published.
+
 ### Added
 
+- Make PyPI installation the default onboarding path with uv, pipx, and pip instructions, PATH
+  setup, updates, and uninstalling; keep source installs separate for development and unreleased code.
+- Add the original YAGA logo to the README and documentation, and preserve the branding concept
+  board alongside it.
+- Add a light, dark, and system documentation theme with grouped navigation and a guided landing
+  page for adopting repository checks.
 - Include an ordered report-level SHA-256 fingerprint in quality JSON, text, and GitHub notices so
   online and offline runs can prove that they covered the same selected message set.
 - Include a per-message SHA-256 fingerprint of the exact bounded quality-model input in text, JSON,

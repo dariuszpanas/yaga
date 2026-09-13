@@ -5,3 +5,8 @@ max-total-blob-bytes = 8388608
 [[path-limits]]
 pattern = "uv.lock"
 max-blob-bytes = 1048576
+
+# Preserve original branding PNGs and the transparent web logo.
+[[path-limits]]
+pattern = "docs/assets/branding/*.png"
+max-blob-bytes = 2097152

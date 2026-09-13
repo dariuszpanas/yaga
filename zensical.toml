@@ -7,37 +7,68 @@ repo_url = "https://github.com/dariuszpanas/yaga"
 repo_name = "dariuszpanas/yaga"
 docs_dir = "docs"
 site_dir = "site"
+extra_css = ["stylesheets/extra.css"]
 nav = [
   { "Home" = "index.md" },
-  { "Get started" = "getting-started.md" },
-  { "Commands" = "commands.md" },
-  { "Usage modes" = "usage.md" },
-  { "Adoption recipes" = "recipes.md" },
-  { "Configuration" = "configuration.md" },
-  { "Commit policy" = "commit-policy.md" },
-  { "Commit quality" = "commit-quality.md" },
-  { "Repository checks" = "repository-checks.md" },
-  { "GitHub Actions" = "github-actions.md" },
-  { "Agent review gate" = "agent-review-gate.md" },
-  { "Troubleshooting" = "troubleshooting.md" },
-  { "Security model" = "security.md" },
-  { "Contributing" = "contributing.md" },
+  { "Start here" = [
+    { "Get started" = "getting-started.md" },
+    { "Usage modes" = "usage.md" },
+    { "Adoption recipes" = "recipes.md" },
+  ] },
+  { "Policy reference" = [
+    { "Commands" = "commands.md" },
+    { "Configuration" = "configuration.md" },
+    { "Commit policy" = "commit-policy.md" },
+    { "Repository checks" = "repository-checks.md" },
+    { "GitHub Actions" = "github-actions.md" },
+  ] },
+  { "Optional review tools" = [
+    { "Commit quality" = "commit-quality.md" },
+    { "Agent review gate" = "agent-review-gate.md" },
+  ] },
+  { "Project" = [
+    { "Troubleshooting" = "troubleshooting.md" },
+    { "Security model" = "security.md" },
+    { "Contributing" = "contributing.md" },
+  ] },
   { "Changelog" = "changelog.md" },
 ]
 
 [project.theme]
+logo = "assets/branding/isometric_terminal_y_logo_transparent.png"
+favicon = "assets/branding/isometric_terminal_y_logo_transparent.png"
 language = "en"
 features = [
   "navigation.instant",
   "navigation.tracking",
   "navigation.sections",
+  "navigation.path",
   "navigation.top",
   "navigation.footer",
   "content.code.copy",
+  "toc.follow",
 ]
 font = false
 
-[project.theme.icon]
-logo = "lucide/shield-check"
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
 
 [project.plugins.offline]
