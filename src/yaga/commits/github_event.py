@@ -15,6 +15,7 @@ from yaga.commits.git import read_commit, read_range
 from yaga.commits.models import CheckResult, CommitTarget, DependabotPullRequestPolicy
 from yaga.commits.parser import header_from
 from yaga.commits.trusted_policy import load_trusted_policy
+from yaga.commits.typos import apply_typos
 from yaga.errors import GitError, InputError
 from yaga.files import read_file_prefix
 
@@ -179,8 +180,21 @@ def check_pull_request(
         title = _dependabot_skip_result(title_target)
         commits = tuple(_dependabot_skip_result(target) for target in targets)
     else:
-        title = check_header(title_target, loaded.policy)
-        commits = tuple(check_target(target, loaded.policy) for target in targets)
+        title = apply_typos(
+            check_header(title_target, loaded.policy),
+            loaded.policy,
+            repository=repo,
+            isolated=trusted,
+        )
+        commits = tuple(
+            apply_typos(
+                check_target(target, loaded.policy),
+                loaded.policy,
+                repository=repo,
+                isolated=trusted,
+            )
+            for target in targets
+        )
     return PullRequestValidationReport(
         event=event,
         title=title,

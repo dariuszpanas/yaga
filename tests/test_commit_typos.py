@@ -212,3 +212,35 @@ def test_typos_rejects_invalid_or_oversized_input_before_launch(
 
     with pytest.raises(InputError, match="commit message"):
         check_typos(message)
+
+
+@pytest.mark.parametrize("isolated", [False, True])
+def test_typos_isolation_is_explicit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, isolated: bool
+) -> None:
+    executable = tmp_path / "typos"
+    executable.touch()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: str(executable))
+
+    def run(command, **kwargs):
+        assert ("--isolated" in command) is isolated
+        assert kwargs["cwd"] == repo
+        return ProcessResult(0, b"", b"", False, False, False)
+
+    monkeypatch.setattr("yaga.commits.typos.run_bounded_process", run)
+    assert check_typos("fix: correct spelling", repository=repo, isolated=isolated) == ()
+
+
+def test_trusted_typos_rejects_repository_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = tmp_path / "typos"
+    executable.touch()
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: str(executable))
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process", lambda *a, **kw: pytest.fail("must not execute")
+    )
+    with pytest.raises(InputError, match="outside the repository"):
+        check_typos("fix: correct spelling", repository=tmp_path, isolated=True)

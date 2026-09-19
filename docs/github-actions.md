@@ -123,4 +123,7 @@ If your commit policy enables Typos, install the executable in the same job befo
 cargo install typos-cli --version 1.49.0 --locked
 ```
 
+The commit Action checks both PR titles and full messages when `typos = "check"`.
+Install Typos before the Action; it does not install optional tools automatically.
+Trusted mode uses an isolated built-in dictionary and requires the executable outside the checkout.
 See [commit policy](commit-policy.md#optional-typos-integration) for errors and configuration.

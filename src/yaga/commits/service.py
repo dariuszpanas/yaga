@@ -14,7 +14,6 @@ from yaga.commits.models import (
     CommitTarget,
     QualityPolicy,
     QualityProvider,
-    TyposPolicy,
     ValidationReport,
 )
 from yaga.commits.quality import (
@@ -22,7 +21,7 @@ from yaga.commits.quality import (
     check_quality,
 )
 from yaga.commits.sources import from_file, from_message, from_stdin
-from yaga.commits.typos import check_typos
+from yaga.commits.typos import apply_typos
 from yaga.errors import InputError
 
 
@@ -219,10 +218,4 @@ def _check_targets(
 
 
 def _check_target(target: CommitTarget, policy: CommitPolicy, *, repository: Path) -> CheckResult:
-    result = check_target(target, policy)
-    if policy.typos is not TyposPolicy.CHECK or result.skipped_reason is not None:
-        return result
-    diagnostics = check_typos(target.message, repository=repository)
-    if not diagnostics:
-        return result
-    return replace(result, diagnostics=(*result.diagnostics, *diagnostics))
+    return apply_typos(check_target(target, policy), policy, repository=repository)

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from yaga.commits.models import Diagnostic
+from yaga.commits.models import CheckResult, CommitPolicy, Diagnostic, TyposPolicy
 from yaga.commits.parser import MAX_MESSAGE_BYTES, normalize_message
 from yaga.errors import InputError, safe_error_text
 from yaga.git.runtime import run_bounded_process
@@ -20,11 +21,34 @@ MAX_SUGGESTION_BYTES = 256
 MAX_BYTE_OFFSET = 100_000
 
 
-def check_typos(message: str, *, repository: Path | None = None) -> tuple[Diagnostic, ...]:
+def apply_typos(
+    result: CheckResult, policy: CommitPolicy, *, repository: Path, isolated: bool = False
+) -> CheckResult:
+    """Apply optional spelling checks after structural checks and skip decisions."""
+    if policy.typos is not TyposPolicy.CHECK or result.skipped_reason is not None:
+        return result
+    diagnostics = check_typos(result.target.message, repository=repository, isolated=isolated)
+    return replace(result, diagnostics=(*result.diagnostics, *diagnostics))
+
+
+def check_typos(
+    message: str, *, repository: Path | None = None, isolated: bool = False
+) -> tuple[Diagnostic, ...]:
     """Check one commit message through an installed ``typos`` executable."""
     executable = shutil.which("typos")
     if executable is None:
         raise InputError("commit policy requires the typos executable, but it is not installed")
+    if isolated and repository is not None:
+        try:
+            resolved = Path(executable).resolve(strict=True)
+            inside_repository = resolved.is_relative_to(repository.resolve())
+        except (OSError, RuntimeError) as error:
+            raise InputError("trusted typos executable could not be resolved") from error
+        if inside_repository:
+            raise InputError(
+                "trusted spelling checks require typos installed outside the repository"
+            )
+        executable = str(resolved)
     try:
         message_bytes = normalize_message(message).encode("utf-8")
     except UnicodeEncodeError as error:
@@ -33,7 +57,7 @@ def check_typos(message: str, *, repository: Path | None = None) -> tuple[Diagno
         raise InputError("commit message exceeds the hard byte limit for Typos input")
     try:
         completed = run_bounded_process(
-            [executable, "-", "--format", "json"],
+            [executable, "-", "--format", "json", *(["--isolated"] if isolated else [])],
             cwd=repository,
             stdin_data=message_bytes,
             stdout_limit=MAX_OUTPUT_BYTES,

@@ -21,9 +21,25 @@ ROOT = Path(__file__).resolve().parents[1]
         ("nondefault", 0),
         ("nondefault-invalid", 1),
         ("advanced-main", 0),
+        ("typos-valid", 0),
+        ("typos-message", 1),
+        ("typos-title", 1),
+        ("typos-missing", 2),
+        ("typos-broken", 2),
+        ("typos-bot", 0),
+        ("typos-bot-lookalike", 1),
+        ("typos-bot-fork", 1),
+        ("typos-bot-branch", 1),
+        ("typos-bot-stale", 2),
     ],
 )
 def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -> None:
+    if (
+        scenario.startswith("typos-")
+        and scenario not in {"typos-missing", "typos-broken", "typos-bot", "typos-bot-stale"}
+        and not shutil.which("typos")
+    ):
+        pytest.skip("Typos is unavailable")
     bash = "C:/Program Files/Git/bin/bash.exe" if sys.platform == "win32" else shutil.which("bash")
     if not bash or not Path(bash).is_file():
         pytest.skip("Bash is unavailable")
@@ -66,3 +82,10 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
     )
     assert result.returncode == expected, result.stdout + result.stderr
     assert f"exit-code={expected}" in output.read_text("utf-8")
+
+    if scenario in {"typos-message", "typos-title"}:
+        assert "typos.word" in result.stdout
+    if scenario == "typos-missing":
+        assert "not installed" in result.stdout + result.stderr
+    if scenario == "typos-bot":
+        assert "2 skipped" in result.stdout
