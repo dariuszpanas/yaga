@@ -570,3 +570,25 @@ def test_action_context_is_bound_to_event_repository_and_refs(tmp_path: Path) ->
             base_ref="main",
             head_ref="other",
         )
+
+
+def test_explicit_author_skip_applies_in_default_event_mode(tmp_path: Path) -> None:
+    repo, base, head = _repository(tmp_path, head_message="invalid teh message")
+    (repo / ".yaga.toml").write_text(
+        '[commit]\nskip-pull-request-authors = ["renovate[bot]"]\ntypos = "check"\n',
+        encoding="utf-8",
+    )
+    event = _write_event(
+        tmp_path / "event.json",
+        _event_document(
+            base,
+            head,
+            title="invalid teh title",
+            author={"login": "renovate[bot]", "type": "Bot", "id": 42},
+        ),
+    )
+    report = check_pull_request(event, repo)
+    assert report.skipped == 2
+    assert all(
+        result.skipped_reason == "Configured pull request author" for result in report.results
+    )

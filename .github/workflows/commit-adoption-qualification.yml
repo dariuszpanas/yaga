@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [valid, invalid, stale, nondefault, nondefault-invalid, advanced-main, typos-valid, typos-message, typos-title, typos-missing, typos-broken, typos-bot]
+        scenario: [valid, invalid, stale, nondefault, nondefault-invalid, advanced-main, typos-valid, typos-message, typos-title, typos-missing, typos-broken, typos-bot, typos-author-bot, typos-author-unlisted, typos-author-stale]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,12 +50,12 @@ jobs:
           OUTCOME: ${{ steps.control.outcome }}
           EXIT_CODE: ${{ steps.control.outputs.exit-code }}
         run: |
-          if [ "$SCENARIO" = valid ] || [ "$SCENARIO" = nondefault ] || [ "$SCENARIO" = advanced-main ] || [ "$SCENARIO" = typos-valid ] || [ "$SCENARIO" = typos-bot ]; then
+          if [ "$SCENARIO" = valid ] || [ "$SCENARIO" = nondefault ] || [ "$SCENARIO" = advanced-main ] || [ "$SCENARIO" = typos-valid ] || [ "$SCENARIO" = typos-bot ] || [ "$SCENARIO" = typos-author-bot ]; then
             test "$OUTCOME" = success
             test "$EXIT_CODE" = 0
           else
             test "$OUTCOME" = failure
-            if [ "$SCENARIO" = invalid ] || [ "$SCENARIO" = nondefault-invalid ] || [ "$SCENARIO" = typos-message ] || [ "$SCENARIO" = typos-title ]; then
+            if [ "$SCENARIO" = invalid ] || [ "$SCENARIO" = nondefault-invalid ] || [ "$SCENARIO" = typos-message ] || [ "$SCENARIO" = typos-title ] || [ "$SCENARIO" = typos-author-unlisted ]; then
               test "$EXIT_CODE" = 1
             else
               test "$EXIT_CODE" = 2

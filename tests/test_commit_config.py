@@ -706,3 +706,48 @@ def test_invalid_utf8_and_oversized_files_are_rejected(tmp_path: Path) -> None:
     oversized.write_bytes(b"x" * (MAX_CONFIG_BYTES + 1))
     with pytest.raises(ConfigurationError, match="exceeds"):
         load_config(oversized)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        '"renovate[bot]"',
+        "[1]",
+        '["*"]',
+        '["a/b"]',
+        '[""]',
+        '["é"]',
+        '["Renovate[bot]", "renovate[bot]"]',
+        '["' + "x" * 129 + '"]',
+        str([f"user{i}" for i in range(129)]),
+    ],
+)
+def test_skip_pull_request_authors_rejects_invalid_values(tmp_path: Path, value: str) -> None:
+    project = write_pyproject(tmp_path, f"skip-pull-request-authors = {value}\n")
+    with pytest.raises(ConfigurationError, match="skip-pull-request-authors"):
+        load_config(project)
+
+
+def test_skip_pull_request_authors_defaults_and_reporting(tmp_path: Path) -> None:
+    from yaga.commits.reporting import policy_document
+
+    assert load_config(write_pyproject(tmp_path)).policy.skip_pull_request_authors == ()
+    project = write_pyproject(
+        tmp_path, 'skip-pull-request-authors = ["renovate[bot]", "release-service"]\n'
+    )
+    policy = load_config(project).policy
+    assert policy.skip_pull_request_authors == ("renovate[bot]", "release-service")
+    assert policy_document(policy)["skip_pull_request_authors"] == [
+        "renovate[bot]",
+        "release-service",
+    ]
+    assert (
+        check_target(CommitTarget(label="renovate[bot]", message="invalid"), policy).status
+        == "failed"
+    )
+
+
+@pytest.mark.parametrize("logins", [[], ["x" * 128], [f"user{i}" for i in range(128)]])
+def test_skip_pull_request_authors_accepts_bounds(tmp_path: Path, logins: list[str]) -> None:
+    project = write_pyproject(tmp_path, f"skip-pull-request-authors = {logins!r}\n")
+    assert load_config(project).policy.skip_pull_request_authors == tuple(logins)

@@ -31,6 +31,13 @@ ROOT = Path(__file__).resolve().parents[1]
         ("typos-bot-fork", 1),
         ("typos-bot-branch", 1),
         ("typos-bot-stale", 2),
+        ("typos-author-bot", 0),
+        ("typos-author-user", 0),
+        ("typos-author-case", 0),
+        ("typos-author-unlisted", 1),
+        ("typos-author-stale", 2),
+        ("typos-author-malformed", 2),
+        ("typos-author-pr-policy", 1),
     ],
 )
 def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -> None:
@@ -89,3 +96,8 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
         assert "not installed" in result.stdout + result.stderr
     if scenario == "typos-bot":
         assert "2 skipped" in result.stdout
+
+    if scenario in {"typos-author-bot", "typos-author-user", "typos-author-case"}:
+        assert "2 skipped" in result.stdout
+    if scenario in {"typos-author-unlisted", "typos-author-pr-policy"}:
+        assert "typos.word" in result.stdout

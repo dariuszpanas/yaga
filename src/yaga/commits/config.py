@@ -70,6 +70,7 @@ _COMMIT_KEYS = frozenset(
         "body-paragraph-splitting",
         "breaking-markers",
         "dependabot-pull-requests",
+        "skip-pull-request-authors",
         "typos",
         "quality",
         "required-footer-tokens",
@@ -401,6 +402,14 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         required_footer_tokens=required_footer_tokens,
         forbidden_footer_tokens=forbidden_footer_tokens,
         scope_policy_by_type=scope_policy_by_type,
+        skip_pull_request_authors=_optional_tokens(
+            raw_commit,
+            "skip-pull-request-authors",
+            token_pattern=re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?"),
+            allow_empty=True,
+            path=path,
+        )
+        or (),
         dependabot_pull_requests=_enum(
             raw_commit.get(
                 "dependabot-pull-requests",

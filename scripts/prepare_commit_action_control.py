@@ -30,6 +30,13 @@ def main() -> None:
         "typos-bot-fork",
         "typos-bot-branch",
         "typos-bot-stale",
+        "typos-author-bot",
+        "typos-author-user",
+        "typos-author-case",
+        "typos-author-unlisted",
+        "typos-author-stale",
+        "typos-author-malformed",
+        "typos-author-pr-policy",
     }:
         raise ValueError("unknown control")
     repo = Path(os.environ["RUNNER_TEMP"]) / f"yaga-control-{scenario}"
@@ -48,6 +55,9 @@ def main() -> None:
     if scenario.startswith("typos-"):
         with (repo / ".yaga.toml").open("a", encoding="utf-8") as policy:
             policy.write('typos = "check"\ndependabot-pull-requests = "skip"\n')
+    if scenario.startswith("typos-author-"):
+        with (repo / ".yaga.toml").open("a", encoding="utf-8") as policy:
+            policy.write('skip-pull-request-authors = ["renovate[bot]", "release-service"]\n')
     git("add", ".yaga.toml")
     git("commit", "-m", "chore: establish trusted policy")
     base = git("rev-parse", "HEAD")
@@ -64,17 +74,24 @@ def main() -> None:
     # The PR attempts to weaken policy in every control; it must not be loaded.
     (repo / ".yaga.toml").write_text("[commit]\n", encoding="utf-8")
     git("add", ".yaga.toml")
+    if scenario == "typos-author-pr-policy":
+        (repo / ".yaga.toml").write_text(
+            '[commit]\nskip-pull-request-authors = ["octocat"]\n', encoding="utf-8"
+        )
+        git("add", ".yaga.toml")
     message = "fix: validate the consumer contract"
     if scenario not in {"invalid", "nondefault-invalid"}:
         message += "\n\nExercise the actual dependency-free composite runtime.\n\nValidation: hosted control."
     if scenario == "typos-message":
         message += "\n\nFix teh spelling."
+    if scenario.startswith("typos-author-"):
+        message = "invalid teh message"
     git("commit", "--allow-empty", "-m", message)
     head = git("rev-parse", "HEAD")
     git(
         "update-ref",
         "refs/remotes/pull/17/head",
-        base if scenario in {"stale", "typos-bot-stale"} else head,
+        base if scenario in {"stale", "typos-bot-stale", "typos-author-stale"} else head,
     )
     git("checkout", "--detach", policy_revision)
     if scenario == "advanced-main":
@@ -110,6 +127,17 @@ def main() -> None:
         event["pull_request"]["head"]["repo"] = {"id": 200, "full_name": "other/repository"}
     if scenario == "typos-bot-branch":
         event["pull_request"]["head"]["ref"] = "feature"
+    if scenario.startswith("typos-author-"):
+        event["pull_request"]["title"] = "invalid teh title"
+        event["pull_request"]["user"] = {"login": "renovate[bot]", "id": 42, "type": "Bot"}
+        if scenario == "typos-author-user":
+            event["pull_request"]["user"] = {"login": "release-service", "id": 43, "type": "User"}
+        if scenario == "typos-author-case":
+            event["pull_request"]["user"]["login"] = "Renovate[bot]"
+        if scenario in {"typos-author-unlisted", "typos-author-pr-policy"}:
+            event["pull_request"]["user"] = {"login": "octocat", "id": 1, "type": "User"}
+        if scenario == "typos-author-malformed":
+            event["pull_request"]["user"]["id"] = True
     # Ambient spelling settings must not weaken trusted checks.
     (repo / "_typos.toml").write_text("[default]\ncheck-file = false\n", encoding="utf-8")
     event_path = repo.parent / f"yaga-control-{scenario}.json"
