@@ -6,7 +6,7 @@ import re
 import unicodedata
 from collections.abc import Iterable, Iterator
 
-from yaga.commits.models import CommitFooter, ParsedCommit
+from yaga.commits.models import CommitFooter, FooterSyntax, ParsedCommit
 
 MAX_MESSAGE_BYTES = 1024 * 1024
 
@@ -19,6 +19,9 @@ _FOOTER_START = re.compile(
     r"(?P<separator>: | #)\S"
 )
 _BREAKING_TOKENS = frozenset({"BREAKING CHANGE", "BREAKING-CHANGE"})
+_COLON_WHITESPACE_START = re.compile(
+    r"^(?P<token>BREAKING CHANGE|[A-Za-z0-9-]+)(?P<separator>:\s+| #)\S"
+)
 
 
 def normalize_message(message: str) -> str:
@@ -32,7 +35,9 @@ def header_from(message: str) -> str:
     return normalized.split("\n", 1)[0] if normalized else ""
 
 
-def parse_message(message: str) -> ParsedCommit | None:
+def parse_message(
+    message: str, *, footer_syntax: FooterSyntax = FooterSyntax.CONVENTIONAL
+) -> ParsedCommit | None:
     """Parse a message, returning ``None`` when its header is malformed."""
     normalized = normalize_message(message)
     lines = normalized.split("\n") if normalized else [""]
@@ -52,13 +57,16 @@ def parse_message(message: str) -> ParsedCommit | None:
     content = lines[content_start:]
     while content and content[-1] == "":
         content.pop()
-    body_lines, footer_lines, footer_start = _split_body_and_footers(content)
+    body_lines, footer_lines, footer_start = _split_body_and_footers(
+        content, footer_syntax=footer_syntax
+    )
     footer_start_line = content_start + footer_start + 1 if footer_start is not None else None
     breaking_footer = footer_start_line is not None and any(
         footer.token in _BREAKING_TOKENS and footer.separator == ":"
         for footer in iter_footer_starts(
             footer_lines,
             start_line=footer_start_line,
+            footer_syntax=footer_syntax,
         )
     )
     breaking_header = match.group("breaking") == "!"
@@ -83,12 +91,15 @@ def parse_message(message: str) -> ParsedCommit | None:
 
 def _split_body_and_footers(
     lines: list[str],
+    *,
+    footer_syntax: FooterSyntax = FooterSyntax.CONVENTIONAL,
 ) -> tuple[list[str], list[str], int | None]:
     """Split the first boundary-delimited footer token and its complete suffix."""
     footer_start: int | None = None
+    pattern = _footer_pattern(footer_syntax)
     at_paragraph_start = True
     for index, line in enumerate(lines):
-        if at_paragraph_start and _FOOTER_START.match(line) is not None:
+        if at_paragraph_start and pattern.match(line) is not None:
             footer_start = index
             break
         at_paragraph_start = line == ""
@@ -109,18 +120,23 @@ def iter_footer_starts(
     lines: Iterable[str],
     *,
     start_line: int,
+    footer_syntax: FooterSyntax = FooterSyntax.CONVENTIONAL,
 ) -> Iterator[CommitFooter]:
     """Yield exact footer token starts with absolute one-based source lines."""
     for offset, line in enumerate(lines):
-        match = _FOOTER_START.match(line)
+        match = _footer_pattern(footer_syntax).match(line)
         if match is None:
             continue
-        separator = ":" if match.group("separator") == ": " else "#"
+        separator = ":" if match.group("separator").startswith(":") else "#"
         yield CommitFooter(
             token=match.group("token"),
             separator=separator,
             line=start_line + offset,
         )
+
+
+def _footer_pattern(syntax: FooterSyntax) -> re.Pattern[str]:
+    return _COLON_WHITESPACE_START if syntax is FooterSyntax.COLON_WHITESPACE else _FOOTER_START
 
 
 def _is_component_token(value: str) -> bool:

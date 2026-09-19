@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable
 from fnmatch import fnmatchcase
 
@@ -13,8 +14,11 @@ from yaga.commits.models import (
     CommitFooter,
     CommitPolicy,
     CommitTarget,
+    DescriptionCasePolicy,
     Diagnostic,
     EndingPolicy,
+    LengthUnit,
+    LineLengthURLPolicy,
     MergePolicy,
     ParagraphSplittingPolicy,
     PresencePolicy,
@@ -31,6 +35,7 @@ from yaga.errors import InputError
 _TERMINAL_PUNCTUATION = (".", "!", "?")
 _CONTINUATION_PUNCTUATION = (",", ";", ":", "—", "–", "-")
 _LIST_ITEM = re.compile(r"^(?:[-*+]\s+|\d+[.)]\s+)")
+_HTTP_URL = re.compile(r"(?<![A-Za-z0-9_])https?://[^\s]+")
 
 
 def check_target(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
@@ -77,7 +82,7 @@ def _check_target(
     if any(fnmatchcase(header, pattern) for pattern in policy.ignored_headers):
         return CheckResult(target=target, header=header, skipped_reason="ignored header")
 
-    parsed = parse_message(normalized)
+    parsed = parse_message(normalized, footer_syntax=policy.footer_syntax)
     if parsed is None:
         return _failure(
             target,
@@ -128,17 +133,20 @@ def _check_target(
                 )
             )
 
-    if policy.header_max_length is not None and len(parsed.header) > policy.header_max_length:
+    if (
+        policy.header_max_length is not None
+        and _text_length(parsed.header, policy) > policy.header_max_length
+    ):
         diagnostics.append(
             Diagnostic(
                 code="header.length",
                 message=(
-                    f"header has {len(parsed.header)} characters; maximum is "
+                    f"header has {_text_length(parsed.header, policy)} characters; maximum is "
                     f"{policy.header_max_length}"
                 ),
             )
         )
-    description_length = len(parsed.description)
+    description_length = _text_length(parsed.description, policy)
     if description_length < policy.description_min_length:
         diagnostics.append(
             Diagnostic(
@@ -163,6 +171,20 @@ def _check_target(
             )
         )
     ends_with_punctuation = parsed.description.endswith(_TERMINAL_PUNCTUATION)
+    if (
+        policy.description_case is DescriptionCasePolicy.FORBID_INITIAL_UPPER
+        and unicodedata.category(parsed.description[0]) == "Lu"
+    ):
+        diagnostics.append(
+            Diagnostic(
+                code="description.case",
+                message="description must not start with an uppercase letter",
+            )
+        )
+    if policy.description_ending is EndingPolicy.FORBID_PERIOD and parsed.description.endswith("."):
+        diagnostics.append(
+            Diagnostic(code="description.ending", message="description must not end with '.'")
+        )
     if policy.description_ending is EndingPolicy.FORBID and ends_with_punctuation:
         diagnostics.append(
             Diagnostic(
@@ -202,12 +224,12 @@ def _check_target(
                     line=parsed.body_start_line,
                 )
             )
-        if has_body and len(parsed.body.strip()) < policy.body_min_length:
+        if has_body and _text_length(parsed.body.strip(), policy) < policy.body_min_length:
             diagnostics.append(
                 Diagnostic(
                     code="body.length",
                     message=(
-                        f"body has {len(parsed.body.strip())} characters; minimum is "
+                        f"body has {_text_length(parsed.body.strip(), policy)} characters; minimum is "
                         f"{policy.body_min_length}"
                     ),
                     line=parsed.body_start_line,
@@ -229,12 +251,14 @@ def _check_target(
                 )
         if policy.body_max_line_length is not None:
             for offset, line in enumerate(parsed.body_lines):
-                if len(line) > policy.body_max_line_length:
+                if _text_length(
+                    line, policy
+                ) > policy.body_max_line_length and not _exempt_url_line(line, policy):
                     diagnostics.append(
                         Diagnostic(
                             code="body.line-length",
                             message=(
-                                f"body line has {len(line)} characters; maximum is "
+                                f"body line has {_text_length(line, policy)} characters; maximum is "
                                 f"{policy.body_max_line_length}"
                             ),
                             line=parsed.body_start_line + offset,
@@ -251,11 +275,35 @@ def _check_target(
                         line=parsed.body_start_line + first_line,
                     )
                 )
+        if policy.footer_max_line_length is not None:
+            for offset, line in enumerate(parsed.footer_lines):
+                if _text_length(
+                    line, policy
+                ) > policy.footer_max_line_length and not _exempt_url_line(line, policy):
+                    diagnostics.append(
+                        Diagnostic(
+                            code="footer.line-length",
+                            message=f"footer line has {_text_length(line, policy)} characters; maximum is {policy.footer_max_line_length}",
+                            line=(parsed.footer_start_line or 1) + offset,
+                        )
+                    )
+                    break
+        for token in policy.required_colon_footer_tokens:
+            if not any(
+                re.match(re.escape(token) + r":\s+\S", line) for line in parsed.footer_lines
+            ):
+                diagnostics.append(
+                    Diagnostic(
+                        code="footer.required-colon",
+                        message=f"a nonempty case-sensitive {token!r} colon footer is required",
+                    )
+                )
         if policy.required_footer_tokens or policy.forbidden_footer_tokens:
             footers = (
                 iter_footer_starts(
                     parsed.footer_lines,
                     start_line=parsed.footer_start_line,
+                    footer_syntax=policy.footer_syntax,
                 )
                 if parsed.footer_start_line is not None
                 else ()
@@ -263,6 +311,12 @@ def _check_target(
             _check_footer_tokens(diagnostics, footers, policy)
 
     return CheckResult(target=target, header=header, diagnostics=tuple(diagnostics))
+
+
+def _exempt_url_line(line: str, policy: CommitPolicy) -> bool:
+    return (
+        policy.line_length_urls is LineLengthURLPolicy.EXEMPT and _HTTP_URL.search(line) is not None
+    )
 
 
 def _sentence_split_line(body_lines: tuple[str, ...]) -> int | None:
@@ -399,4 +453,10 @@ def _failure(target: CommitTarget, header: str, code: str, message: str) -> Chec
         target=target,
         header=header,
         diagnostics=(Diagnostic(code=code, message=message),),
+    )
+
+
+def _text_length(text: str, policy: CommitPolicy) -> int:
+    return (
+        len(text.encode("utf-16-le")) // 2 if policy.length_unit is LengthUnit.UTF16 else len(text)
     )

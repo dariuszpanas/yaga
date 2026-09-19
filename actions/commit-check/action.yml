@@ -2,6 +2,17 @@ name: YAGA Commit Check
 description: Check a pull request title and exact commit range with repository-local YAGA policy
 author: Dariusz Panas
 
+inputs:
+  trusted-config:
+    description: Literal committed policy path; opt into default-branch pull_request_target validation
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: Commit check exit code (0 success, 1 findings, 2 input error)
+    value: ${{ steps.policy.outputs.exit-code }}
+
 runs:
   using: composite
   steps:
@@ -11,10 +22,12 @@ runs:
         python-version: "3.12"
         token: ""
     - name: Check pull request commit policy
+      id: policy
       shell: bash
       env:
         PYTHONUTF8: "1"
         YAGA_COMMIT_ACTION_RUNTIME: "1"
+        YAGA_COMMIT_TRUSTED_CONFIG: ${{ inputs.trusted-config }}
       run: |
         set -euo pipefail
         unset PYTHONHOME
@@ -32,6 +45,7 @@ runs:
           --format github > "$YAGA_REPORT" 2> "$YAGA_ERROR"
         YAGA_STATUS=$?
         set -e
+        printf 'exit-code=%s\n' "$YAGA_STATUS" >> "$GITHUB_OUTPUT"
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then

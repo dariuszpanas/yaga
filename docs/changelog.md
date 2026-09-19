@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add opt-in initial-uppercase, final-period, URL wrapping, footer line-length, and exact colon
+  trailer constraints for commit-policy consumers.
+- Add a read-only trusted-default-branch commit-check Action mode with committed policy loading,
+  exact fetched-head verification, and a same-repository Dependabot branch skip boundary.
+
 ## [0.1.1] - 2026-09-19
 
 ### Fixed

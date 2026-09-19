@@ -22,6 +22,9 @@ def run_pull_request_action(
     repository_id: int,
     base_ref: str,
     head_ref: str,
+    trusted_config: str | None = None,
+    trusted_revision: str | None = None,
+    trusted_ref: str | None = None,
 ) -> int:
     """Run the fixed GitHub annotation path used by the composite Action."""
     output_format = PullRequestOutputFormat.GITHUB
@@ -34,6 +37,9 @@ def run_pull_request_action(
             expected_repository_id=repository_id,
             expected_base_ref=base_ref,
             expected_head_ref=head_ref,
+            trusted_config=trusted_config,
+            trusted_revision=trusted_revision,
+            trusted_ref=trusted_ref,
         )
     except YagaError as error:
         print(render_pull_request_error(error, output_format))

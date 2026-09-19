@@ -1,0 +1,53 @@
+name: Commit adoption qualification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  controls:
+    name: Commit Action ${{ matrix.scenario }} control
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [valid, invalid, stale, nondefault, nondefault-invalid, advanced-main]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Prepare disposable control
+        id: fixture
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: python scripts/prepare_commit_action_control.py "$SCENARIO"
+      - name: Run the actual composite adapter
+        id: control
+        continue-on-error: true
+        uses: ./actions/commit-check
+        with:
+          trusted-config: .yaga.toml
+      - name: Require the expected outcome
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          OUTCOME: ${{ steps.control.outcome }}
+          EXIT_CODE: ${{ steps.control.outputs.exit-code }}
+        run: |
+          if [ "$SCENARIO" = valid ] || [ "$SCENARIO" = nondefault ] || [ "$SCENARIO" = advanced-main ]; then
+            test "$OUTCOME" = success
+            test "$EXIT_CODE" = 0
+          else
+            test "$OUTCOME" = failure
+            if [ "$SCENARIO" = invalid ] || [ "$SCENARIO" = nondefault-invalid ]; then
+              test "$EXIT_CODE" = 1
+            else
+              test "$EXIT_CODE" = 2
+            fi
+          fi
