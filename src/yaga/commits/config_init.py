@@ -63,7 +63,7 @@ def initialize_config(repository: Path, *, dry_run: bool = False) -> LoadedConfi
             f"{resolved_repository}"
         )
 
-    loaded = load_config(start=resolved_repository)
+    loaded = load_config(start=resolved_repository, use_global=False)
     if loaded.path is not None:
         raise ConfigurationError(
             f"configuration already applies to {resolved_repository}: {loaded.path}"
@@ -79,7 +79,7 @@ def initialize_config(repository: Path, *, dry_run: bool = False) -> LoadedConfi
 
     try:
         loaded = load_config(temporary, start=resolved_repository)
-        concurrently_loaded = load_config(start=resolved_repository)
+        concurrently_loaded = load_config(start=resolved_repository, use_global=False)
         if concurrently_loaded.path is not None:
             raise ConfigurationError(
                 f"configuration already applies to {resolved_repository}: "

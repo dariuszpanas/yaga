@@ -324,6 +324,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
     """Return a JSON-ready effective policy document."""
     return {
         "config_version": policy.config_version,
+        "required_version": policy.required_version,
         "allowed_types": _json_values(policy.allowed_types, maximum=128),
         "type_case": policy.type_case.value,
         "scope_policy": policy.scope_policy.value,

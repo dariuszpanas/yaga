@@ -150,8 +150,13 @@ def test_commit_action_cli_rejects_missing_or_invalid_runner_identity(
     assert "YAGA failed:" in capsys.readouterr().err
 
 
-def test_commit_action_runs_without_site_packages_or_installed_cli(tmp_path: Path) -> None:
-    repository, event_file, action_environment = _action_fixture(tmp_path)
+@pytest.mark.parametrize("required_version", [">=0.1.0", ">=99.0.0"])
+def test_commit_action_runs_without_site_packages_or_installed_cli(
+    tmp_path: Path, required_version: str
+) -> None:
+    repository, event_file, action_environment = _action_fixture(
+        tmp_path, config=f'required-version = "{required_version}"\n'
+    )
     environment = os.environ.copy()
     environment.update(action_environment)
     environment["PYTHONPATH"] = str(ROOT / "src")
@@ -182,6 +187,10 @@ def test_commit_action_runs_without_site_packages_or_installed_cli(tmp_path: Pat
         text=True,
     )
 
+    if required_version == ">=99.0.0":
+        assert completed.returncode == 2
+        assert "does not satisfy" in completed.stderr + completed.stdout
+        return
     assert completed.returncode == 0
     assert completed.stderr == ""
     assert "YAGA checked pull request #17" in completed.stdout
