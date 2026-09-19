@@ -165,7 +165,7 @@ def check_pull_request(
         label=f"pull request #{event.number} title",
         message=event.title,
     )
-    if (
+    dependabot_skip = (
         loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.SKIP
         and event.author_login == "dependabot[bot]"
         and event.author_type == "Bot"
@@ -176,9 +176,18 @@ def check_pull_request(
                 and event.head_ref.startswith("dependabot/")
             )
         )
-    ):
-        title = _dependabot_skip_result(title_target)
-        commits = tuple(_dependabot_skip_result(target) for target in targets)
+    )
+    configured_skip = event.author_login.casefold() in {
+        login.casefold() for login in loaded.policy.skip_pull_request_authors
+    }
+    if dependabot_skip or configured_skip:
+        reason = (
+            DEPENDABOT_PULL_REQUEST_SKIP_REASON
+            if dependabot_skip
+            else "Configured pull request author"
+        )
+        title = _skip_result(title_target, reason)
+        commits = tuple(_skip_result(target, reason) for target in targets)
     else:
         title = apply_typos(
             check_header(title_target, loaded.policy),
@@ -388,11 +397,11 @@ def _author_type(value: object) -> str:
     return value
 
 
-def _dependabot_skip_result(target: CommitTarget) -> CheckResult:
+def _skip_result(target: CommitTarget, reason: str) -> CheckResult:
     return CheckResult(
         target=target,
         header=header_from(target.message),
-        skipped_reason=DEPENDABOT_PULL_REQUEST_SKIP_REASON,
+        skipped_reason=reason,
     )
 
 

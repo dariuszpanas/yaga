@@ -183,6 +183,7 @@ class CommitPolicy:
     required_colon_footer_tokens: tuple[str, ...] = ()
     length_unit: LengthUnit = LengthUnit.CODEPOINTS
     footer_syntax: FooterSyntax = FooterSyntax.CONVENTIONAL
+    skip_pull_request_authors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

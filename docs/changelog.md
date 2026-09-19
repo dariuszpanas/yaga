@@ -9,6 +9,9 @@
 
 ### Added
 
+- Add explicit PR-author exemptions for dependency update services and other named accounts,
+  without changing the existing Dependabot option or bypassing event/head validation.
+
 - Add opt-in initial-uppercase, final-period, URL wrapping, footer line-length, and exact colon
   trailer constraints for commit-policy consumers.
 - Add a read-only trusted-default-branch commit-check Action mode with committed policy loading,

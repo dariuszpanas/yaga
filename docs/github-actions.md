@@ -127,3 +127,7 @@ The commit Action checks both PR titles and full messages when `typos = "check"`
 Install Typos before the Action; it does not install optional tools automatically.
 Trusted mode uses an isolated built-in dictionary and requires the executable outside the checkout.
 See [commit policy](commit-policy.md#optional-typos-integration) for errors and configuration.
+
+For other dependency update bots or service accounts, configure an explicit
+[`skip-pull-request-authors` list](configuration.md#explicit-pr-author-exemptions).
+It exempts title and commit rules, including spelling, after normal event/head validation.

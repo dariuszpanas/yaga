@@ -354,6 +354,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "body_min_words": policy.body_min_words,
         "body_max_line_length": policy.body_max_line_length,
         "body_paragraph_splitting": policy.body_paragraph_splitting.value,
+        "skip_pull_request_authors": _json_values(policy.skip_pull_request_authors, maximum=128),
         "dependabot_pull_requests": policy.dependabot_pull_requests.value,
         "typos": policy.typos.value,
         "quality": {

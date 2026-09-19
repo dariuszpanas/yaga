@@ -120,6 +120,7 @@ version. Pin the installation separately when CI must always use one exact relea
 | `body-min-words` | Integer from 0 through 100000, counting prose tokens. |
 | `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
 | `body-paragraph-splitting` | `skip` (default) or `check` for likely sentence splits across blank lines. |
+| `skip-pull-request-authors` | Empty-default list of up to 128 explicit GitHub PR author logins exempt from title and commit checks. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
 | `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, max-tokens, max-input-tokens, and input-mode. |
@@ -326,3 +327,28 @@ files. A shallow checkout is valid only when Git already has the selected commit
 Keep policy files in the checked-out repository, but keep runtime selectors explicit. A policy file
 does not authorize fetching, changing branches, reading secrets, or using a different revision.
 For machine consumers, prefer JSON reports over scraping human text.
+
+## Explicit PR author exemptions
+
+For dependency update services or other explicitly exempt accounts:
+
+```toml
+[tool.yaga.commit]
+skip-pull-request-authors = ["renovate[bot]", "release-service"]
+```
+
+Use `[commit]` in `.yaga.toml`. This list is empty by default. Logins match the validated
+PR author case-insensitively and must be literal names, not patterns, emails, Git authors,
+committers, triggering actors, or branch names. Each entry is at most 128 ASCII characters
+(letters, digits, underscore, dot, hyphen, and an optional trailing `[bot]`); duplicate
+case-insensitive entries are rejected. Both Bot and User accounts can be listed explicitly.
+
+The exemption skips title and full-message structural and spelling checks only after event,
+checkout, policy, and commit-range validation. Reports use `Configured pull request author`.
+It does not exempt ordinary `commit check`, repository checks, or other providers.
+Unlike the narrower `dependabot-pull-requests = "skip"` option in trusted mode, this explicit
+list applies regardless of head repository or branch. Listing an account opts into that scope.
+The existing Dependabot option retains its identity and trusted same-repository/branch checks.
+
+Use `trusted-config` when the exemption must come from the default-branch policy. Default
+PR-head mode intentionally reads PR policy, including this list; it is not trusted merge authority.
