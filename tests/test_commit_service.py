@@ -202,8 +202,8 @@ def test_standalone_service_applies_optional_typos_policy(
     seen_repositories: list[Path] = []
 
     monkeypatch.setattr(
-        "yaga.commits.service.check_typos",
-        lambda _message, *, repository: (
+        "yaga.commits.typos.check_typos",
+        lambda _message, *, repository, isolated=False: (
             seen_repositories.append(repository)
             or (Diagnostic(code="typos.word", message="possible typo 'teh'", line=1),)
         ),

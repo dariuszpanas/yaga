@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Honor optional Typos spelling checks for GitHub PR titles and commit messages, including the
+  read-only Action; isolate trusted-mode spelling from ambient configuration and preserve tool errors.
+
 ### Added
 
 - Add opt-in initial-uppercase, final-period, URL wrapping, footer line-length, and exact colon

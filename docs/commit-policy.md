@@ -215,8 +215,8 @@ Set `typos = "check"` to run the installed [Typos CLI](https://github.com/crate-
 each selected commit message. YAGA sends the message through standard input, requests Typos JSON
 Lines output, validates bounded finding fields, and converts each finding into a stable
 `typos.word` diagnostic. This works with
-`--message`, hooks, individual Git commits, and ranges; the default `typos = "skip"` keeps policy
-results independent of the tools installed on a developer machine.
+`--message`, hooks, individual Git commits, ranges, and GitHub pull-request titles and commits.
+The default `typos = "skip"` keeps policy results independent of the tools installed on a developer machine.
 When Typos provides its bounded `byte_offset`, YAGA preserves it as a 1-based diagnostic column;
 older or alternate JSON output without that field falls back to column 1.
 Text and GitHub output include both the line and column in each policy diagnostic. GitHub
@@ -234,3 +234,17 @@ and keep project-specific words in Typos' `_typos.toml`. Use Typos' repository-w
 pre-commit integration for source files; YAGA's adapter is narrowly scoped to commit messages.
 When `--repo` points at a different checkout, YAGA runs Typos from that repository so its local
 Typos configuration is used; direct message and Git-backed sources follow the same rule.
+
+### Spelling in trusted pull-request checks
+
+With the commit Action's `trusted-config` mode, `typos = "check"` applies to both the
+PR title and every selected full commit message. Structural title checks remain header-only.
+Authentic Dependabot skips and existing skipped commit types also skip spelling checks.
+Findings fail with exit `1`; a missing or broken tool fails with exit `2`.
+
+Install a pinned Typos executable outside the checkout before invoking the Action.
+Trusted mode passes `--isolated`, using the tool's built-in dictionary without repository,
+parent, or global configuration discovery. Custom dictionaries are currently unsupported in
+trusted mode: neither a PR's `_typos.toml` nor dirty files in the trusted checkout can weaken it.
+Ordinary local checks and the default PR-head mode retain repository Typos configuration.
+Keep the tool version consistent when comparing local and CI spelling results.

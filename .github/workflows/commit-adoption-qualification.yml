@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [valid, invalid, stale, nondefault, nondefault-invalid, advanced-main]
+        scenario: [valid, invalid, stale, nondefault, nondefault-invalid, advanced-main, typos-valid, typos-message, typos-title, typos-missing, typos-broken, typos-bot]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -23,6 +23,16 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+      - name: Install pinned Typos for spelling controls
+        if: startsWith(matrix.scenario, 'typos-')
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/crate-ci/typos/releases/download/v1.50.2/typos-v1.50.2-x86_64-unknown-linux-musl.tar.gz \
+            --output "$RUNNER_TEMP/typos.tar.gz"
+          echo "abcb3e257c7c2abeff4d903f7fe68071357637605bdb283ce2251f44bc70dc09  $RUNNER_TEMP/typos.tar.gz" | sha256sum --check
+          mkdir "$RUNNER_TEMP/typos-bin"
+          tar -xzf "$RUNNER_TEMP/typos.tar.gz" -C "$RUNNER_TEMP/typos-bin" ./typos
+          echo "$RUNNER_TEMP/typos-bin" >> "$GITHUB_PATH"
       - name: Prepare disposable control
         id: fixture
         env:
@@ -40,12 +50,12 @@ jobs:
           OUTCOME: ${{ steps.control.outcome }}
           EXIT_CODE: ${{ steps.control.outputs.exit-code }}
         run: |
-          if [ "$SCENARIO" = valid ] || [ "$SCENARIO" = nondefault ] || [ "$SCENARIO" = advanced-main ]; then
+          if [ "$SCENARIO" = valid ] || [ "$SCENARIO" = nondefault ] || [ "$SCENARIO" = advanced-main ] || [ "$SCENARIO" = typos-valid ] || [ "$SCENARIO" = typos-bot ]; then
             test "$OUTCOME" = success
             test "$EXIT_CODE" = 0
           else
             test "$OUTCOME" = failure
-            if [ "$SCENARIO" = invalid ] || [ "$SCENARIO" = nondefault-invalid ]; then
+            if [ "$SCENARIO" = invalid ] || [ "$SCENARIO" = nondefault-invalid ] || [ "$SCENARIO" = typos-message ] || [ "$SCENARIO" = typos-title ]; then
               test "$EXIT_CODE" = 1
             else
               test "$EXIT_CODE" = 2
