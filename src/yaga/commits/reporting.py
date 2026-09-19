@@ -338,6 +338,14 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "description_min_length": policy.description_min_length,
         "description_max_length": policy.description_max_length,
         "description_ending": policy.description_ending.value,
+        "description_case": policy.description_case.value,
+        "length_unit": policy.length_unit.value,
+        "footer_syntax": policy.footer_syntax.value,
+        "line_length_urls": policy.line_length_urls.value,
+        "footer_max_line_length": policy.footer_max_line_length,
+        "required_colon_footer_tokens": _json_values(
+            policy.required_colon_footer_tokens, maximum=128
+        ),
         "breaking_markers": policy.breaking_markers.value,
         "required_footer_tokens": _json_values(policy.required_footer_tokens, maximum=128),
         "forbidden_footer_tokens": _json_values(policy.forbidden_footer_tokens, maximum=128),

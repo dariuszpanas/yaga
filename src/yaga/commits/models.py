@@ -30,6 +30,35 @@ class EndingPolicy(StrEnum):
     ALLOW = "allow"
     REQUIRE = "require"
     FORBID = "forbid"
+    FORBID_PERIOD = "forbid-period"
+
+
+class DescriptionCasePolicy(StrEnum):
+    """Optional initial-letter policy, independent of type and scope casing."""
+
+    ANY = "any"
+    FORBID_INITIAL_UPPER = "forbid-initial-uppercase"
+
+
+class LengthUnit(StrEnum):
+    """Unit used for configured text length bounds."""
+
+    CODEPOINTS = "codepoints"
+    UTF16 = "utf16"
+
+
+class FooterSyntax(StrEnum):
+    """Closed footer separator grammars, separate from token presence policy."""
+
+    CONVENTIONAL = "conventional"
+    COLON_WHITESPACE = "colon-whitespace"
+
+
+class LineLengthURLPolicy(StrEnum):
+    """Whether HTTP references exempt a complete line from wrapping limits."""
+
+    CHECK = "check"
+    EXEMPT = "exempt"
 
 
 class MergePolicy(StrEnum):
@@ -148,6 +177,12 @@ class CommitPolicy:
     quality: QualityPolicy = QualityPolicy()
     body_paragraph_splitting: ParagraphSplittingPolicy = ParagraphSplittingPolicy.SKIP
     required_version: str | None = None
+    description_case: DescriptionCasePolicy = DescriptionCasePolicy.ANY
+    line_length_urls: LineLengthURLPolicy = LineLengthURLPolicy.CHECK
+    footer_max_line_length: int | None = None
+    required_colon_footer_tokens: tuple[str, ...] = ()
+    length_unit: LengthUnit = LengthUnit.CODEPOINTS
+    footer_syntax: FooterSyntax = FooterSyntax.CONVENTIONAL
 
 
 @dataclass(frozen=True, slots=True)

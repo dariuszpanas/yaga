@@ -31,6 +31,9 @@ def main(argv: list[str] | None = None) -> int:
         repository = _required_environment("GITHUB_REPOSITORY")
         base_ref = _required_environment("GITHUB_BASE_REF")
         head_ref = _required_environment("GITHUB_HEAD_REF")
+        trusted_config = os.environ.get("YAGA_COMMIT_TRUSTED_CONFIG") or None
+        trusted_revision = _required_environment("GITHUB_SHA") if trusted_config else None
+        trusted_ref = _required_environment("GITHUB_REF") if trusted_config else None
     except InputError as error:
         print(f"YAGA failed: {safe_error_text(error)}", file=sys.stderr)
         return 2
@@ -42,6 +45,9 @@ def main(argv: list[str] | None = None) -> int:
         repository_id=repository_id,
         base_ref=base_ref,
         head_ref=head_ref,
+        trusted_config=trusted_config,
+        trusted_revision=trusted_revision,
+        trusted_ref=trusted_ref,
     )
 
 

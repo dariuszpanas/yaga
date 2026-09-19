@@ -1,5 +1,29 @@
 # Configuration
 
+## Opt-in consumer commit constraints
+
+The following schema-v1 options leave existing defaults unchanged:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `description-case` | `"any"` | `"forbid-initial-uppercase"` rejects an initial Unicode uppercase letter; quoted, numeric, uncased and titlecase initials remain allowed. |
+| `length-unit` | `"codepoints"` | `"utf16"` counts UTF-16 code units for header, description, body and line-length bounds, matching JavaScript string lengths. Byte and word limits are unchanged. |
+| `footer-syntax` | `"conventional"` | `"colon-whitespace"` permits one or more whitespace characters after a footer colon, including a tab. The default retains the exact colon-space/hash-space grammar. |
+| `description-ending` | `"allow"` | `"forbid-period"` rejects only a final period, preserving question and exclamation endings. Existing `allow`, `require`, and `forbid` retain their meanings. |
+| `line-length-urls` | `"check"` | `"exempt"` exempts entire body/footer lines containing lowercase `http://` or `https://` followed by non-whitespace, with no preceding ASCII word character. It does not validate URLs. |
+| `footer-max-line-length` | unset | Positive character limit through 100,000, including continuation lines; reports `footer.line-length`. |
+| `required-colon-footer-tokens` | `[]` | Case-sensitive, nonempty colon trailers; `Validation #123` and `validation: checked` do not satisfy `Validation`. Reports `footer.required-colon`. |
+
+Required colon tokens use the existing bounded ASCII token grammar and the combined 128-entry
+footer-policy budget. They may not overlap forbidden tokens. Use `footer-syntax = "colon-whitespace"`
+to accept tabs or multiple spaces after colons; the footer must still begin at a paragraph
+boundary. Existing `required-footer-tokens` retains its
+case-insensitive colon/hash semantics. These options do not establish identity or attest that
+the described validation actually occurred. Footer and body rules never apply to PR titles.
+
+These settings are individual policy controls, not a general commitlint compatibility mode.
+YAGA retains its own structural parser; qualify the complete consumer corpus before migration.
+
 YAGA configuration is intentionally explicit and versioned. A configuration file is policy, not
 runtime input: it must not contain commands, environment interpolation, secrets, or provider
 selection side effects.

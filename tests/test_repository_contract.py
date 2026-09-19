@@ -119,8 +119,8 @@ def test_commit_action_is_a_separate_read_only_closed_interface() -> None:
     action = read("actions/commit-check/action.yml")
     workflow = read(".github/workflows/commit-policy.yml")
 
-    assert "inputs:" not in action
-    assert "outputs:" not in action
+    assert section_keys(action, "inputs") == {"trusted-config"}
+    assert section_keys(action, "outputs") == {"exit-code"}
     assert re.search(r"actions/setup-python@[0-9a-f]{40}", action)
     assert 'token: ""' in action
     assert 'YAGA_COMMIT_ACTION_RUNTIME: "1"' in action

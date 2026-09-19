@@ -14,6 +14,7 @@ from yaga.commits.config import load_config
 from yaga.commits.git import read_commit, read_range
 from yaga.commits.models import CheckResult, CommitTarget, DependabotPullRequestPolicy
 from yaga.commits.parser import header_from
+from yaga.commits.trusted_policy import load_trusted_policy
 from yaga.errors import GitError, InputError
 from yaga.files import read_file_prefix
 
@@ -50,6 +51,8 @@ class PullRequestEvent:
     author_login: str
     author_id: int
     author_type: str
+    head_repository: str = ""
+    default_branch: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,9 +100,19 @@ def check_pull_request(
     expected_repository_id: int | None = None,
     expected_base_ref: str | None = None,
     expected_head_ref: str | None = None,
+    trusted_config: str | None = None,
+    trusted_revision: str | None = None,
+    trusted_ref: str | None = None,
 ) -> PullRequestValidationReport:
     """Check one event title and its exact base-to-head commit selection."""
     event = load_pull_request_event(event_file)
+    trusted = trusted_config is not None
+    if trusted != (trusted_revision is not None) or trusted != (trusted_ref is not None):
+        raise InputError("trusted policy requires a config path, revision, and runner ref together")
+    if trusted and (config is not None or expected_event_name != "pull_request_target"):
+        raise InputError(
+            "trusted policy requires pull_request_target runner context and no --config"
+        )
     repo = repository.expanduser().resolve()
     if not repo.is_dir():
         raise InputError("repository directory does not exist")
@@ -121,15 +134,27 @@ def check_pull_request(
         validate_action_context(
             event,
             event_name=expected_event_name,
+            trusted_policy=trusted,
             repository=expected_repository,
             repository_id=expected_repository_id,
             base_ref=expected_base_ref,
             head_ref=expected_head_ref,
         )
     checkout = read_commit(repo, "HEAD")
-    if checkout.sha != event.head_sha:
+    if not trusted and checkout.sha != event.head_sha:
         raise GitError("repository HEAD does not match the pull request head SHA")
-    loaded = load_config(config, start=repo)
+    if trusted:
+        if not event.default_branch or trusted_ref != f"refs/heads/{event.default_branch}":
+            raise InputError("trusted policy requires the default-branch runner ref")
+        if checkout.sha != trusted_revision:
+            raise GitError("trusted checkout HEAD does not match the runner SHA")
+        fetched = read_commit(repo, f"refs/remotes/pull/{event.number}/head")
+        if fetched.sha != event.head_sha:
+            raise GitError("fetched pull request head does not match the event head SHA")
+        assert trusted_config is not None and trusted_revision is not None
+        loaded = load_trusted_policy(repo, trusted_revision, trusted_config)
+    else:
+        loaded = load_config(config, start=repo)
     targets = read_range(
         repo,
         f"{event.base_sha}..{event.head_sha}",
@@ -143,6 +168,13 @@ def check_pull_request(
         loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.SKIP
         and event.author_login == "dependabot[bot]"
         and event.author_type == "Bot"
+        and (
+            not trusted
+            or (
+                event.head_repository == event.repository
+                and event.head_ref.startswith("dependabot/")
+            )
+        )
     ):
         title = _dependabot_skip_result(title_target)
         commits = tuple(_dependabot_skip_result(target) for target in targets)
@@ -250,6 +282,12 @@ def load_pull_request_event(path: Path) -> PullRequestEvent:
         author_login=author_login,
         author_id=author_id,
         author_type=author_type,
+        head_repository=head_repository_name,
+        default_branch=(
+            _ref(repository["default_branch"], "repository default branch")
+            if "default_branch" in repository
+            else None
+        ),
     )
 
 
@@ -261,10 +299,12 @@ def validate_action_context(
     repository_id: int,
     base_ref: str,
     head_ref: str,
+    trusted_policy: bool = False,
 ) -> None:
     """Bind a parsed payload to the immutable GitHub runner context."""
-    if event_name != "pull_request":
-        raise InputError("GitHub event name must be pull_request")
+    required_event = "pull_request_target" if trusted_policy else "pull_request"
+    if event_name != required_event:
+        raise InputError(f"GitHub event name must be {required_event}")
     if repository != event.repository:
         raise InputError("GitHub repository does not match the event payload")
     if (

@@ -123,6 +123,9 @@ def test_commit_action_cli_accepts_only_the_fixed_command(
                 "repository_id": 100,
                 "base_ref": "main",
                 "head_ref": "feature",
+                "trusted_config": None,
+                "trusted_revision": None,
+                "trusted_ref": None,
             },
         )
     ]

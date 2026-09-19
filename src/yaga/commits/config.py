@@ -15,7 +15,11 @@ from yaga.commits.models import (
     CasePolicy,
     CommitPolicy,
     DependabotPullRequestPolicy,
+    DescriptionCasePolicy,
     EndingPolicy,
+    FooterSyntax,
+    LengthUnit,
+    LineLengthURLPolicy,
     LoadedConfig,
     MergePolicy,
     ParagraphSplittingPolicy,
@@ -53,6 +57,12 @@ _COMMIT_KEYS = frozenset(
         "description-min-length",
         "description-max-length",
         "description-ending",
+        "description-case",
+        "length-unit",
+        "footer-syntax",
+        "line-length-urls",
+        "footer-max-line-length",
+        "required-colon-footer-tokens",
         "body-policy",
         "body-min-length",
         "body-min-words",
@@ -124,6 +134,19 @@ def _read_toml(path: Path) -> dict[str, Any]:
         raise ConfigurationError(f"cannot read configuration {path}: {error}") from error
     if len(raw) > MAX_CONFIG_BYTES:
         raise ConfigurationError(f"configuration exceeds {MAX_CONFIG_BYTES} bytes: {path}")
+    return _decode_toml(raw, path)
+
+
+def load_config_bytes(raw: bytes, *, path: Path) -> LoadedConfig:
+    """Parse one bounded configuration supplied by a verified committed blob."""
+    if len(raw) > MAX_CONFIG_BYTES:
+        raise ConfigurationError(f"configuration exceeds {MAX_CONFIG_BYTES} bytes: {path}")
+    root = _configuration_root(_decode_toml(raw, path), path=path, explicit=True)
+    assert root is not None
+    return LoadedConfig(policy=_parse_policy(root, path), path=path)
+
+
+def _decode_toml(raw: bytes, path: Path) -> dict[str, Any]:
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as error:
@@ -276,15 +299,23 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         )
 
     required_footer_tokens = _footer_tokens(raw_commit, "required-footer-tokens", path=path)
+    required_colon_footer_tokens = _footer_tokens(
+        raw_commit, "required-colon-footer-tokens", path=path
+    )
     forbidden_footer_tokens = _footer_tokens(raw_commit, "forbidden-footer-tokens", path=path)
-    if len(required_footer_tokens) + len(forbidden_footer_tokens) > MAX_LIST_ITEMS:
+    if (
+        len(required_footer_tokens)
+        + len(forbidden_footer_tokens)
+        + len(required_colon_footer_tokens)
+        > MAX_LIST_ITEMS
+    ):
         raise ConfigurationError(
-            f"required-footer-tokens and forbidden-footer-tokens exceed "
+            f"required-footer-tokens, forbidden-footer-tokens and required-colon-footer-tokens exceed "
             f"{MAX_LIST_ITEMS} combined entries in {path}"
         )
-    overlap = {token.casefold() for token in required_footer_tokens} & {
-        token.casefold() for token in forbidden_footer_tokens
-    }
+    overlap = {
+        token.casefold() for token in (*required_footer_tokens, *required_colon_footer_tokens)
+    } & {token.casefold() for token in forbidden_footer_tokens}
     if overlap:
         token = next(token for token in forbidden_footer_tokens if token.casefold() in overlap)
         raise ConfigurationError(
@@ -319,6 +350,28 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             "description-ending",
             path,
         ),
+        description_case=_enum(
+            raw_commit.get("description-case", "any"),
+            DescriptionCasePolicy,
+            "description-case",
+            path,
+        ),
+        length_unit=_enum(
+            raw_commit.get("length-unit", "codepoints"), LengthUnit, "length-unit", path
+        ),
+        footer_syntax=_enum(
+            raw_commit.get("footer-syntax", "conventional"), FooterSyntax, "footer-syntax", path
+        ),
+        line_length_urls=_enum(
+            raw_commit.get("line-length-urls", "check"),
+            LineLengthURLPolicy,
+            "line-length-urls",
+            path,
+        ),
+        footer_max_line_length=_optional_integer(
+            raw_commit, "footer-max-line-length", minimum=1, maximum=100_000, path=path
+        ),
+        required_colon_footer_tokens=required_colon_footer_tokens,
         body_policy=body_policy,
         body_min_length=body_min,
         body_min_words=body_min_words,
