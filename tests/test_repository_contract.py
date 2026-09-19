@@ -221,11 +221,11 @@ def test_ci_branch_policy_uses_explicit_unprivileged_event_names() -> None:
 
 
 def test_branch_policy_contract_is_documented_and_dogfooded() -> None:
-    readme = read("README.md")
+    reference = read("docs/branch-policy.md")
     contributing = read("CONTRIBUTING.md")
     agents = read("AGENTS.md")
 
-    for document in (readme, contributing, agents):
+    for document in (reference, contributing, agents):
         assert "branch check" in document
         assert "`branch.syntax`" in document
         assert "`branch.allowed`" in document
@@ -233,9 +233,9 @@ def test_branch_policy_contract_is_documented_and_dogfooded() -> None:
         assert "`github.head_ref`" in document
         assert "`github.ref_name`" in document
 
-    assert "one through 64 unique, case-sensitive patterns" in readme
-    assert "does not inspect the current checkout, invoke Git" in readme
-    assert "not a claim about every Git host" in readme
+    assert "one through 64 unique, case-sensitive patterns" in reference
+    assert "does not inspect the current checkout, invoke Git" in reference
+    assert "not a claim about every Git host" in reference
 
 
 def test_ci_repository_plan_uses_one_exact_unprivileged_committed_tree_revision() -> None:
@@ -261,12 +261,12 @@ def test_ci_repository_plan_uses_one_exact_unprivileged_committed_tree_revision(
 
 
 def test_tree_policy_contract_is_documented_and_dogfooded_in_repo_plan_v2() -> None:
-    readme = read("README.md")
+    reference = read("docs/tree-policy.md")
     contributing = read("CONTRIBUTING.md")
     agents = read("AGENTS.md")
     plan = tomllib.loads(read(".yaga/checks/ci.toml"))
 
-    for document in (readme, contributing, agents):
+    for document in (reference, contributing, agents):
         assert "tree check" in document
         assert "`tree.required`" in document
         assert "`tree.forbidden`" in document
@@ -278,17 +278,17 @@ def test_tree_policy_contract_is_documented_and_dogfooded_in_repo_plan_v2() -> N
         assert "alternate" in document
         assert "cycle-safe" in document
 
-    assert "This is path policy, not secret-content detection" in readme
-    assert "may differ from the selected tree" in readme
-    assert "outermost enclosing repository" in readme
-    assert re.search(r"does\s+not claim policy provenance", readme)
+    assert "This is path policy, not secret-content detection" in reference
+    assert "may differ from the selected tree" in reference
+    assert "outermost enclosing repository" in reference
+    assert re.search(r"does\s+not claim policy provenance", reference)
     assert plan["plan-version"] == 2
     assert "tree" in plan["checks"]
     assert plan["tree-policy"] == ".yaga/tree-policy.toml"
 
 
 def test_mode_policy_contract_is_documented_and_dogfooded_in_repo_plan_v2() -> None:
-    documents = [read(path) for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md")]
+    documents = [read(path) for path in ("docs/mode-policy.md", "CONTRIBUTING.md", "AGENTS.md")]
     plan = tomllib.loads(read(".yaga/checks/ci.toml"))
 
     for document in documents:
@@ -311,10 +311,10 @@ def test_mode_policy_contract_is_documented_and_dogfooded_in_repo_plan_v2() -> N
 
 def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:
     example = read("examples/commit-policy.yml")
-    readme = read("README.md")
+    reference = read("docs/github-actions.md")
 
     assert COMMIT_CHECK_ACTION in example
-    assert COMMIT_CHECK_ACTION in readme
+    assert COMMIT_CHECK_ACTION in reference
     assert "uses: ./actions/commit-check" not in example
     assert CHECKOUT_ACTION in example
     assert "pull_request:" in example
@@ -338,7 +338,7 @@ def test_commit_policy_example_is_copy_ready_and_immutably_pinned() -> None:
 
 def test_pre_commit_provider_is_one_closed_file_adapter() -> None:
     manifest = read(".pre-commit-hooks.yaml")
-    readme = read("README.md")
+    reference = read("docs/commit-policy.md")
 
     assert manifest == (
         "- id: yaga-commit-check\n"
@@ -350,18 +350,18 @@ def test_pre_commit_provider_is_one_closed_file_adapter() -> None:
         "  pass_filenames: true\n"
         '  minimum_pre_commit_version: "3.2.0"\n'
     )
-    assert "repo: https://github.com/dariuszpanas/yaga" in readme
-    assert "rev: cd02385e3216ac544e7783c7dd6929340e230e95" in readme
-    assert "id: yaga-commit-check" in readme
-    assert "pre-commit install --hook-type commit-msg --install-hooks" in readme
+    assert "repo: https://github.com/dariuszpanas/yaga" in reference
+    assert "rev: cd02385e3216ac544e7783c7dd6929340e230e95" in reference
+    assert "id: yaga-commit-check" in reference
+    assert "pre-commit install --hook-type commit-msg --install-hooks" in reference
 
 
 def test_footer_policy_contract_is_documented_for_maintainers_and_users() -> None:
-    readme = read("README.md")
+    reference = read("docs/commit-policy.md")
     contributing = read("CONTRIBUTING.md")
     agents = read("AGENTS.md")
 
-    for document in (readme, contributing, agents):
+    for document in (reference, contributing, agents):
         assert "`required-footer-tokens`" in document
         assert "`forbidden-footer-tokens`" in document
         assert "`Signed-off-by`" in document
@@ -369,28 +369,28 @@ def test_footer_policy_contract_is_documented_for_maintainers_and_users() -> Non
         assert "`footer.required`" in document
         assert "`footer.forbidden`" in document
 
-    assert "at most 128 entries combined" in readme
-    assert "pull-request title's header-only check" in readme
+    assert "at most 128 entries combined" in reference
+    assert "pull-request title's header-only check" in reference
 
 
 def test_per_type_scope_policy_contract_is_documented_and_dogfooded() -> None:
-    readme = read("README.md")
+    reference = read("docs/commit-policy.md")
     contributing = read("CONTRIBUTING.md")
     agents = read("AGENTS.md")
 
-    for document in (readme, contributing, agents):
+    for document in (reference, contributing, agents):
         assert "`scope-policy-by-type`" in document
         assert "`scope.required`" in document
         assert "`scope.forbidden`" in document
         assert "conservative structural" in document
 
-    assert "at most 128 safe type tokens" in readme
-    assert "complete commits and pull-request\ntitles" in readme
+    assert "at most 128 safe type tokens" in reference
+    assert "complete commits and pull-request\ntitles" in reference
 
 
 def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:
     ci = read(".github/workflows/ci.yml")
-    readme = read("README.md")
+    reference = read("docs/github-review-adapter.md")
     contributing = read("CONTRIBUTING.md")
 
     assert "pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]" in ci
@@ -401,7 +401,7 @@ def test_prerequisite_ci_names_and_triggers_the_exact_source_boundary() -> None:
     assert "YAGA CI {0} for #{1} at base {2}" in ci
     assert "name: CI Prerequisites" in workflow_job(ci, "gate")
     assert "name: CI Gate" not in ci
-    for document in (readme, contributing):
+    for document in (reference, contributing):
         assert "YAGA CI <action> for #<pull-request> at base <full-base-SHA>" in document
         assert "ready_for_review" in document
 
@@ -410,7 +410,7 @@ def test_recommended_v3_is_explicitly_dogfooded_and_bounded() -> None:
     makefile = read("Makefile")
     ci = read(".github/workflows/ci.yml")
     plan = read(".yaga/checks/ci.toml")
-    readme = read("README.md")
+    reference = read("docs/workflow-checks.md")
     contributing = read("CONTRIBUTING.md")
     agents = read("AGENTS.md")
 
@@ -421,7 +421,7 @@ def test_recommended_v3_is_explicitly_dogfooded_and_bounded() -> None:
     assert 'workflow-security-profile = "recommended-v3"' in plan
     assert "recommended-v2" not in plan
 
-    for document in (readme, contributing, agents):
+    for document in (reference, contributing, agents):
         assert "`recommended-v1`" in document
         assert "`recommended-v2`" in document
         assert "`recommended-v3`" in document
@@ -431,11 +431,11 @@ def test_recommended_v3_is_explicitly_dogfooded_and_bounded() -> None:
         assert "`pull_request_target`" in document
         assert "`workflow_run`" in document
 
-    assert "With no selection options, YAGA still selects the frozen `recommended-v1`" in readme
-    assert "A mixed-event workflow remains pull-request-triggered" in readme
-    assert "a job-level `if` condition" in readme
-    assert "does not cover other write scopes, alternate" in readme
-    assert "tokens, reusable-workflow permission inheritance, or expressions" in readme
+    assert "With no selection options, YAGA still selects the frozen `recommended-v1`" in reference
+    assert "A mixed-event workflow remains pull-request-triggered" in reference
+    assert "a job-level `if` condition" in reference
+    assert "does not cover other write scopes, alternate" in reference
+    assert "tokens, reusable-workflow permission inheritance, or expressions" in reference
 
 
 def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> None:
@@ -646,63 +646,63 @@ def test_examples_serialize_exact_boundaries_without_post_close_or_main_push_wak
 
 
 def test_docs_define_bounded_polling_and_explicit_rerun_recovery() -> None:
-    readme = read("README.md")
+    reference = read("docs/github-review-adapter.md")
     contributing = read("CONTRIBUTING.md")
 
-    assert "Polling is bounded" in readme
-    assert "rerun CI" in readme
-    assert "There is no scheduled repair" in readme
+    assert "Polling is bounded" in reference
+    assert "rerun CI" in reference
+    assert "There is no scheduled repair" in reference
     assert re.search(r"no\s+schedule, issue-comment", contributing)
     assert "job-timeout-minutes" in contributing
     assert "sole step" in contributing
 
 
 def test_docs_require_strict_status_threads_and_reject_merge_queues() -> None:
-    readme = read("README.md")
+    reference = read("docs/github-review-adapter.md")
 
-    assert "Require strict, up-to-date" in readme
-    assert "required conversation resolution" in readme
-    assert "Review Policy Boundary" in readme
-    assert "CI Prerequisites" in readme
-    assert "Merge queues are unsupported" in readme
-    assert "no `merge_group` trigger" in readme
+    assert "Require strict, up-to-date" in reference
+    assert "required conversation resolution" in reference
+    assert "Review Policy Boundary" in reference
+    assert "CI Prerequisites" in reference
+    assert "Merge queues are unsupported" in reference
+    assert "no `merge_group` trigger" in reference
 
 
 def test_docs_explain_direct_writer_authority_and_audit_limit() -> None:
-    readme = read("README.md")
+    reference = read("docs/github-review-adapter.md")
     security = read("SECURITY.md")
 
-    assert "classic commit status" in readme
-    assert re.search(r"both must\s+pass", readme)
-    assert "shared GitHub Actions integration" in readme
-    assert "statuses: write" in readme
-    assert re.search(r"reserve\s+every\s+case-insensitive `Agent Review` alias", readme)
-    assert "dedicated YAGA GitHub App" in readme
+    assert "classic commit status" in reference
+    assert re.search(r"both must\s+pass", reference)
+    assert "shared GitHub Actions integration" in reference
+    assert "statuses: write" in reference
+    assert re.search(r"reserve\s+every\s+case-insensitive `Agent Review` alias", reference)
+    assert "dedicated YAGA GitHub App" in reference
     assert "same-repository workflow remains" in security
     assert "Commit-status publication is not transactional" in security
 
 
 def test_docs_define_the_single_quota_guarded_review_request() -> None:
-    readme = read("README.md")
+    reference = read("docs/github-review-adapter.md")
     security = read("SECURITY.md")
 
-    assert "posts at most one strictly marked quota-consuming request" in readme
-    assert "agent-review-approval" in readme
+    assert "posts at most one strictly marked quota-consuming request" in reference
+    assert "agent-review-approval" in reference
     assert (
         "Only that protected route's exact YAGA marker authorizes an external-author request"
-        in (readme)
+        in (reference)
     )
     assert re.search(
         r"Only the protected route's exact approval marker\s+authorizes YAGA to request review",
         security,
     )
-    assert "Disable automatic agent reviews" in readme
-    assert "drain every existing agent-review task" in readme
-    assert re.search(r"An eyes reaction is progress, not\s+success", readme)
+    assert "Disable automatic agent reviews" in reference
+    assert "drain every existing agent-review task" in reference
+    assert re.search(r"An eyes reaction is progress, not\s+success", reference)
     assert re.search(
         r"Every outcome must be strictly later than the exact current-boundary Actions-owned YAGA "
         r"request\s+marker, including on the initial non-draft `opened` boundary",
-        readme,
+        reference,
     )
     assert re.search(
         r"`observe` route is available only for\s+that already-posted exact request", security
@@ -710,27 +710,27 @@ def test_docs_define_the_single_quota_guarded_review_request() -> None:
     assert re.search(
         r"Visible unsolicited connector activity fails closed without\s+(?:posting )?a duplicate "
         r"YAGA request",
-        readme,
+        reference,
     )
-    assert "External approval never reuses unsolicited evidence" in readme
-    assert "delayed review of an older head" in readme
-    assert "no direct or other\nintegration-triggered Agent review can overlap YAGA" in readme
-    assert "trusted successful status\nlineage for every older YAGA request" in readme
-    assert "More than eight older YAGA\nrequest boundaries also fail closed" in readme
-    assert "must not enable this beta action" in readme
-    assert "directly posting an agent-review request" in readme
-    assert "temporal correlation, not a native provider binding" in readme
+    assert "External approval never reuses unsolicited evidence" in reference
+    assert "delayed review of an older head" in reference
+    assert "no direct or other\nintegration-triggered Agent review can overlap YAGA" in reference
+    assert "trusted successful status\nlineage for every older YAGA request" in reference
+    assert "More than eight older YAGA\nrequest boundaries also fail closed" in reference
+    assert "must not enable this beta action" in reference
+    assert "directly posting an agent-review request" in reference
+    assert "temporal correlation, not a native provider binding" in reference
     assert "initial reaction-only success is accepted" not in security.casefold()
 
 
 def test_docs_explain_the_delayed_invalidator_close_boundary() -> None:
-    readme = read("README.md")
+    reference = read("docs/github-review-adapter.md")
     contributing = read("CONTRIBUTING.md")
     security = read("SECURITY.md")
 
-    assert "skips a PR that is\nalready closed" in readme
-    assert re.search(r"race an already-running\s+worker's final live read", readme)
-    assert "does not\nguarantee zero post-close writes" in readme
+    assert "skips a PR that is\nalready closed" in reference
+    assert re.search(r"race an already-running\s+worker's final live read", reference)
+    assert "does not\nguarantee zero post-close writes" in reference
     assert re.search(r"Treat this as a\s+bounded residual", contributing)
     assert "cannot guarantee zero post-close writes" in security
 

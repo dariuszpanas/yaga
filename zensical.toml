@@ -12,6 +12,7 @@ nav = [
   { "Home" = "index.md" },
   { "Start here" = [
     { "Get started" = "getting-started.md" },
+    { "Assess and adopt in CI" = "ci-adoption.md" },
     { "Usage modes" = "usage.md" },
     { "Adoption recipes" = "recipes.md" },
   ] },
@@ -20,11 +21,20 @@ nav = [
     { "Configuration" = "configuration.md" },
     { "Commit policy" = "commit-policy.md" },
     { "Repository checks" = "repository-checks.md" },
+    { "Branch policy" = "branch-policy.md" },
+    { "Changed-path policy" = "change-policy.md" },
+    { "Tree policy" = "tree-policy.md" },
+    { "Path policy" = "path-policy.md" },
+    { "Mode policy" = "mode-policy.md" },
+    { "Size policy" = "size-policy.md" },
+    { "Workflow checks" = "workflow-checks.md" },
+    { "Repository plans" = "repository-plans.md" },
     { "GitHub Actions" = "github-actions.md" },
   ] },
   { "Optional review tools" = [
     { "Commit quality" = "commit-quality.md" },
     { "Agent review gate" = "agent-review-gate.md" },
+    { "GitHub review adapter" = "github-review-adapter.md" },
   ] },
   { "Project" = [
     { "Troubleshooting" = "troubleshooting.md" },
@@ -36,6 +46,7 @@ nav = [
 ]
 
 [project.theme]
+custom_dir = "overrides"
 logo = "assets/branding/isometric_terminal_y_logo_transparent.png"
 favicon = "assets/branding/isometric_terminal_y_logo_transparent.png"
 language = "en"

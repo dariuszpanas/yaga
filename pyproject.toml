@@ -46,7 +46,7 @@ quality-bedrock = [
 ]
 
 [tool.uv]
-required-version = "==0.12.7"
+required-version = ">=0.12.7"
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
@@ -57,6 +57,8 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [project.urls]
+Documentation = "https://dariuszpanas.github.io/yaga/"
+Changelog = "https://dariuszpanas.github.io/yaga/changelog.html"
 Repository = "https://github.com/dariuszpanas/yaga"
 Issues = "https://github.com/dariuszpanas/yaga/issues"
 
@@ -68,6 +70,7 @@ dev = [
     "hatchling==1.32.0",
     "pre-commit>=4.6.2,<5",
     "pytest>=8.3",
+    "readme-renderer[md]>=46.0",
     "ruff>=0.14.13",
     "ty>=0.0.12",
     "zensical>=0.0.20",

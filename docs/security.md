@@ -9,9 +9,9 @@ Git revisions, paths, workflow text, event payloads, API responses, comments, re
 and status metadata are treated as untrusted. Providers bound input sizes, disable Git prompts and
 replacement refs, invoke Git without a shell, and fail closed on malformed or ambiguous evidence.
 
-Checks do not fetch history or infer state from the current checkout. Revision-bound providers
-operate on one explicit commit-ish and enumerate a bounded committed tree. `repo check` requires
-an explicit plan and keeps provider failures distinct.
+Git-backed checks do not fetch history. Commit checks default to `HEAD` only when no explicit
+source is supplied; committed-tree providers require an explicit revision. `repo check` requires
+an explicit provider selection or a named plan and keeps provider failures distinct.
 
 ## Actions trust split
 

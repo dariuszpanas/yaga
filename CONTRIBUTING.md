@@ -7,12 +7,19 @@ gate is `agent-review`.
 
 ## Development
 
-Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) are recommended:
+Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) 0.12.7 or newer are required
+for the development workflow. CI pins uv separately for reproducibility; contributors may use
+newer uv releases:
 
 ```bash
 uv sync --group dev
 uv run make ci
 ```
+
+The full gate also needs Git, GNU Make, Bash, a running Docker engine using Linux containers,
+and the Typos CLI (`cargo install typos-cli --version 1.49.0 --locked`, matching CI).
+On Windows, put Git for Windows' Bash on `PATH` before the Windows/WSL Bash launcher.
+`uv sync` installs the Python development dependencies, not these external tools.
 
 The full gate invokes
 `yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD`; that explicit
@@ -33,7 +40,7 @@ with project and Python environment leakage removed.
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `mode`,
-`path`, `repo`, `size`, `tree`, `workflow`, and `gate`.
+`path`, `repo`, `self`, `size`, `tree`, `workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.

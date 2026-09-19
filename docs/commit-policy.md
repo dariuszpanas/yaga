@@ -1,123 +1,213 @@
 # Commit policy
 
-`commit check` is YAGA's first general-purpose provider. It validates Conventional Commit
-structure while keeping parser behavior separate from the configured policy.
+With no input option, YAGA checks `HEAD`. Exactly one explicit source may be selected:
 
-## Configuration
+```bash
+yaga commit check --message "feat(cli): add configurable checks"
+yaga commit check --file .git/COMMIT_EDITMSG
+printf 'fix: preserve stdin\n' | yaga commit check --stdin
+yaga commit check --commit HEAD~1
+yaga commit check --range origin/main..HEAD
+yaga commit quality --commit HEAD --offline
+```
 
-Configuration is schema version 1 in either `[tool.yaga]` and `[tool.yaga.commit]` in
-`pyproject.toml`, or `[commit]` in a standalone `.yaga.toml`:
+Optional model advice is covered by the [commit quality guide](commit-quality.md).
+
+Git commit and range sources read complete messages without fetching or invoking a shell. Exact
+commit checks select one commit; range checks preserve oldest-first order. Both require complete,
+non-shallow history because Git's shallow boundary can hide stored parents. Commit, change, mode,
+path, tree, and size selection reject legacy graft overlays, and replacement refs are disabled for
+all six.
+An empty range, a missing ref, or a selection above the configured commit limit is an operational
+error.
+
+All Git-backed checks share one bounded runtime. It resolves an absolute regular Git executable
+outside the enclosing worktree and its resolved metadata and object-store boundaries, starts no
+shell, inherits only a minimal environment, disables pagers and prompts, contains the spawned
+process tree, and enforces hard time and output limits including bounded termination cleanup. Every
+command uses Git's global `--no-lazy-fetch` option, so an unsupported client or a missing promised
+object fails closed instead of contacting a remote.
+
+The built-in policy enforces only Conventional Commit structure, accepts any type and scope, and
+ignores commits that Git proves have multiple parents. Put stricter project policy in the nearest
+`.yaga.toml` or `pyproject.toml`. Discovery walks toward the repository root, preferring
+`.yaga.toml` in each directory; `--config` selects one file explicitly. Files are never merged, and
+unknown or misspelled keys fail loudly.
+
+For `pyproject.toml`:
 
 ```toml
 [tool.yaga]
 config-version = 1
 
 [tool.yaga.commit]
-allowed-types = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"]
-type-case = "lower"
-scope-policy = "optional"
-scope-policy-by-type = { feat = "required", fix = "required" }
-allowed-scopes = ["api", "cli", "config"]
+allowed-types = [
+  "build", "chore", "ci", "docs", "feat", "fix",
+  "perf", "refactor", "revert", "style", "test",
+]
+type-case = "lower"              # any, lower, or upper
+scope-policy = "optional"        # optional, required, or forbidden
+scope-policy-by-type = { feat = "required", fix = "required", revert = "forbidden" }
+allowed-scopes = ["cli", "config", "git"]
 scope-case = "lower"
 header-max-length = 100
 description-min-length = 3
 description-max-length = 72
-description-ending = "forbid"
-breaking-markers = "paired"
-required-footer-tokens = ["Refs"]
+description-ending = "forbid"    # allow, require, or forbid . ! ?
+breaking-markers = "paired"      # either or paired
+required-footer-tokens = ["Signed-off-by"]
 forbidden-footer-tokens = ["WIP"]
 body-policy = "optional"
+body-min-length = 0
 body-min-words = 8
 # Omit body-max-line-length unless this repository wants a wrapping limit.
 # Set body-paragraph-splitting = "check" to catch sentence-like prose split by blank lines.
-dependabot-pull-requests = "skip"
-typos = "skip"
-merge-commits = "reject"
+dependabot-pull-requests = "skip" # check or skip in event-aware PR checks
+merge-commits = "reject"         # ignore, check, or reject
+ignored-headers = ['Revert "*"'] # bounded, case-sensitive glob patterns
 max-commits = 64
 ```
 
-YAGA loads exactly one nearest `.yaga.toml` or `pyproject.toml`; files are never merged. An
-explicit `--config` selects one source. Unknown keys, invalid types, duplicate normalized tokens,
-and unsupported schema versions fail closed.
+A standalone `.yaga.toml` uses `config-version = 1` and `[commit]` instead of the two
+`[tool.yaga...]` tables. Omit `allowed-types` or `allowed-scopes` to allow any value. An explicit
+empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must not be empty.
+`yaga config show` prints every effective value and the source file, with `--format json` for tools.
 
-`scope-policy-by-type` overrides the global scope policy for complete commits and PR titles.
-The override replaces only scope presence; `scope-case` and `allowed-scopes` still validate every
-scope that is present. Matching is case-insensitive for the type key, while configured type and
-scope case policies remain independent. An empty `allowed-scopes` list permits only unscoped
-messages, and `allowed-types` must not be empty when supplied.
+`dependabot-pull-requests` defaults to `"check"`. Setting it to `"skip"` skips Conventional Commit
+policy evaluation only in `yaga github pull-request check` and the read-only commit-check Action,
+and only when the event's pull-request author is exactly the GitHub `dependabot[bot]` Bot account,
+following [GitHub's event-author guidance for Dependabot
+automation](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions?learn=dependency_version_updates).
+The adapter still validates the complete event and runner context, verifies the checked-out head,
+loads configuration, and enumerates the bounded exact commit range before returning a visible
+`Dependabot pull request` skip. It does not skip change, mode, path, size, tree, workflow, test, or
+review-gate checks.
 
-`description-min-length` and `description-max-length` apply to the description after the type and
-optional scope. `description-ending` controls only `.`, `!`, and `?`; it does not rewrite or strip
-the message. `breaking-markers` accepts `either` or `paired`; pairing requires both a header `!`
-and a recognized final breaking footer, or neither.
+Ordinary `commit check` and the `commit` provider inside `repo check` never infer Dependabot from a
+Git author name, email, message, or branch because those values are author-controlled. They keep
+checking normally. A saved event file can reproduce the adapter decision for diagnosis, but its
+author identity is only asserted local input; the fixed Action gets host-issued event provenance
+from `GITHUB_EVENT_PATH`.
 
-## Bodies and footers
+`scope-policy-by-type` defaults to an empty mapping. Each entry replaces the global
+`scope-policy` only for that Conventional Commit type, so a project can require scopes for
+`feat` and `fix`, keep them optional elsewhere, and forbid them for `revert`. Type matching is
+case-insensitive and the same effective policy is used for complete commits and pull-request
+titles. `scope-case` and `allowed-scopes` still validate every scope that is present.
 
-`body-min-words` counts Unicode-whitespace-delimited prose tokens that contain a Unicode
-alphanumeric character. Recognized final footers are excluded. A nonzero minimum does not make an
-optional absent body required, and body minima must be zero when the body is forbidden.
+The mapping accepts at most 128 safe type tokens and the same closed `optional`, `required`, and
+`forbidden` values as the global policy. Configuration rejects case-insensitive duplicate keys and,
+when `allowed-types` is configured, override keys outside that list. An empty `allowed-scopes` list
+is invalid when any reachable type requires a scope; a non-empty list is invalid when every
+reachable type forbids scopes. `header-max-length` validation uses a conservative structural lower
+bound so shorter Unicode case-fold equivalents are never rejected during configuration loading;
+the commit check remains authoritative for every actual header.
 
-Required and forbidden footer tokens apply to complete commit messages, never pull-request titles.
-Matching is exact and case-insensitive and recognizes both `Token: value` and `Token #value`;
-repeated tokens are allowed. These are presence checks, not signer, DCO, or signature validation.
-Tokens use one to 128 ASCII letters, digits, or hyphens; the two lists share a 128-entry bound,
-must not overlap, and cannot use the reserved breaking-marker spellings.
+`breaking-markers` defaults to `"either"`. A header `!`, a recognized final
+`BREAKING CHANGE:` or `BREAKING-CHANGE:` footer, or both mark a breaking change in that mode. The
+`"paired"` policy requires both markers or neither; exactly one produces
+`breaking.marker-pair`. Marker pairing applies to complete commit messages, not pull-request titles,
+whose policy check intentionally covers only the Conventional Commit header.
 
-Footer parsing starts only when a valid token begins the first content paragraph or a later
-paragraph after a blank line. Once the boundary is found, blank and non-token lines remain part of
-the current multiline footer value until a later valid token begins another footer. The stable
-`footer.required` and `footer.forbidden` diagnostics retain source-line attribution while bounding
-displayed details.
+`required-footer-tokens` and `forbidden-footer-tokens` default to empty lists. They apply to complete
+commit messages, including every commit selected by a range or a pull-request event, but never to
+the pull-request title's header-only check. Matching is exact and ASCII case-insensitive: configured
+`Signed-off-by` matches `SIGNED-OFF-BY: A User`, but not a token with an added prefix or suffix.
+Both `Token: value` and `Token #value` count, provided the value starts with a non-whitespace
+character. Repeated tokens are allowed; one occurrence satisfies a requirement, while any
+occurrence violates a prohibition. These are presence checks only: requiring `Signed-off-by` does
+not validate signer identity, DCO compliance, or a cryptographic signature.
 
-`body-min-length` and `body-min-words` are independent lower bounds. Word counting splits on
-Unicode whitespace and counts only tokens containing a Unicode alphanumeric character; punctuation
-and emoji-only tokens do not count, and recognized footer content is excluded. A nonzero minimum
-does not make an optional body required. Use `body-policy = "required"` when presence matters, and
-keep both minima at zero when `body-policy = "forbidden"`.
+Configured footer tokens contain only one through 128 ASCII letters, digits, or hyphens, and the
+two lists may contain at most 128 entries combined. Configuration rejects case-insensitive
+duplicates within either list, overlap between the lists, and both reserved breaking-marker token
+spellings, `BREAKING CHANGE` and `BREAKING-CHANGE`.
 
-`body-max-line-length` is an optional upper bound, not a default formatting rule. Omit it to allow
-longer prose lines, or set a repository-specific positive limit when commit wrapping is part of the
-project’s style. YAGA does not require 72- or 100-column body wrapping.
+A footer block begins only when a valid footer token starts the first content paragraph or a new
+paragraph after a blank line. Once that boundary is found, the rest of the message is footer
+content: blank and non-token lines continue a multiline footer value, while a later valid token
+starts another footer even without an intervening blank line. Reporting remains bounded:
+`footer.required` reports only the first configured missing token at line 1 plus a count of any
+other missing tokens, and `footer.forbidden` reports only the earliest forbidden occurrence at its
+exact source line.
 
-`body-paragraph-splitting` accepts `skip` (the default) or `check`. The check catches a likely
-sentence split where a blank line separates one-line prose paragraphs, without rejecting an
-intentional one-line paragraph. Wrapped paragraphs and list items are ignored. This is not a rule
-that requires every paragraph to contain two physical lines.
+`body-min-length` and `body-min-words` are independent lower bounds on the parsed prose body.
+`body-min-words` accepts an integer from `0` through `100000` and defaults to `0`; it counts
+Unicode-whitespace-delimited tokens that contain at least one Unicode alphanumeric character.
+Punctuation-only and emoji-only tokens do not count, while text without Unicode whitespace is one
+token. The minimum is checked only when a prose body exists, so use `body-policy = "required"` to
+require one. A recognized final footer block is not prose body and does not contribute words. When
+`body-policy = "forbidden"`, both body minima must be zero.
 
-For example, with `body-paragraph-splitting = "check"`, this passes because the two
-short paragraphs are separate notes and the first ends a sentence:
+`body-paragraph-splitting` accepts `skip` (the default) or `check`. The `check` mode catches a
+blank-line split between sentence-like one-line paragraphs while leaving standalone short
+paragraphs and list items alone. A one-line validation note or justification remains valid; this is
+not a minimum paragraph-height rule and does not enforce a wrapping width.
 
-```text
-fix: clarify parser behavior
+For a new repository, YAGA can create a recommended standalone policy and immediately report its
+effective values:
 
-The parser accepts the legacy form.
-
-Validation: the compatibility test still passes.
+```bash
+yaga config init --repo .
 ```
 
-This fails because the blank lines split one sentence into three one-line prose paragraphs:
+Use `yaga config init --repo . --dry-run` to validate and inspect the same starter policy without
+creating `.yaga.toml`; the report names the path that would be published and marks the preview
+explicitly.
 
-```text
-fix: clarify parser behavior
+The starter permits the common Conventional Commit types, requires a lowercase type, keeps the
+scope optional (and lowercase when present), bounds headers, rejects merge commits, and
+checks at most 64 commits per range. Initialization creates only `.yaga.toml`: it never edits
+`pyproject.toml`, overwrites a path, or shadows a configuration already discovered for the target
+directory. Use `--format json` when another tool needs the created path and effective policy.
 
-The parser accepts the legacy form,
+Diagnostics have stable names such as `syntax.header`, `type.allowed`, `scope.required`,
+`scope.forbidden`, `header.length`, `breaking.marker-pair`, `body.word-count`,
+`body.paragraph-format`, `footer.required`,
+and `footer.forbidden`. Text and versioned JSON reports use these exit codes:
 
-including input received from older clients
+| Exit | Meaning |
+| --- | --- |
+| `0` | Every checked commit passed; ignored merge/header records may have been skipped. |
+| `1` | At least one commit violated policy. |
+| `2` | Invocation, input, configuration, or Git failed. |
 
-when compatibility mode is enabled.
+## Local commit-message hook
+
+YAGA ships a pre-commit provider for the existing file-backed command. Pin the repository to an
+audited immutable commit that contains `.pre-commit-hooks.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/dariuszpanas/yaga
+    rev: cd02385e3216ac544e7783c7dd6929340e230e95
+    hooks:
+      - id: yaga-commit-check
 ```
 
-The heuristic looks for a stronger continuation signal: the previous paragraph ends in
-continuation punctuation such as `,`, `;`, `:`, or a dash, or the next paragraph begins with a
-lowercase letter. A paragraph that simply ends without punctuation is not an error by itself. It is
-deliberately not a general prose formatter. Use `body-paragraph-splitting = "skip"` (or omit the
-key) when the repository does not want this layout check; use `body-max-line-length` separately if
-it also wants to constrain physical line width.
+Install the non-default hook type and its environment:
 
-YAGA’s own repository policy sets `body-policy = "required"` with a minimum prose length, so normal
-human commits include a durable explanation. The event-aware commit Action still skips policy
-evaluation for the exact Dependabot bot identity when `dependabot-pull-requests = "skip"`, including
-multiline Dependabot commit messages.
+```bash
+pre-commit install --hook-type commit-msg --install-hooks
+```
+
+The provider requires pre-commit 3.2 or newer and YAGA requires Python 3.12 or newer. If
+pre-commit's default interpreter is older, set `language_version: python3.12` (or another supported
+interpreter) on the hook.
+
+Repositories that want ordinary `pre-commit install` to include it can add
+`default_install_hook_types: [pre-commit, commit-msg]` to their configuration. Policy remains in
+`.yaga.toml` or `pyproject.toml`; do not duplicate it in hook arguments. The hook runs only after
+explicit installation, can be bypassed with `--no-verify` or `SKIP=yaga-commit-check`, and does not
+run for commits created directly by GitHub, APIs, or bots. File mode has no parent metadata: it
+cannot enforce `merge-commits = "reject"` and may apply ordinary syntax rules to a proposed merge
+message even when actual merge commits would be ignored. Retain the GitHub commit-policy check as
+the repository-side source of truth.
+
+CI should use a non-shallow checkout containing the exact base and head, then call
+`yaga commit check --range "$BASE_SHA..$HEAD_SHA"`. `--quiet` suppresses validation reports while
+operational errors still go to standard error; `--format json` provides a stable schema for another
+tool.
 
 ## Optional Typos integration
 
@@ -144,104 +234,3 @@ and keep project-specific words in Typos' `_typos.toml`. Use Typos' repository-w
 pre-commit integration for source files; YAGA's adapter is narrowly scoped to commit messages.
 When `--repo` points at a different checkout, YAGA runs Typos from that repository so its local
 Typos configuration is used; direct message and Git-backed sources follow the same rule.
-
-## Optional model quality advisory
-
-Typos catches spelling mistakes, but it cannot tell whether a message explains a meaningful change.
-For a broader, opt-in signal, choose a provider and run:
-
-```bash
-uv sync --extra quality
-yaga commit quality --message "fix: update parser behavior"
-yaga commit quality --range origin/main..HEAD --offline
-
-# Local instruction model
-yaga commit quality --task seq2seq --model google/flan-t5-small --revision <sha>
-
-# Amazon Bedrock
-uv sync --extra quality-bedrock
-yaga commit quality --provider bedrock --region us-east-1
-```
-
-The command uses `saridormi/commit-message-quality-codebert` at a pinned revision by default. The
-model was trained as a binary high/low commit-message quality classifier; YAGA treats its `LABEL_0`
-score as a low-quality probability and flags messages at `0.70` or higher. Override the model,
-revision, and threshold with `--model`, `--revision`, and `--threshold` when testing a compatible
-classifier. The `seq2seq` task uses `AutoTokenizer` and `AutoModelForSeq2SeqLM`, bounds generation
-with `--max-tokens`, and accepts only a `PASS`/`FLAG` response. Pin every Hugging Face revision
-with a lowercase hexadecimal SHA, so an accidental moving tag cannot silently change the result.
-Use `--max-input-tokens` or `quality.max-input-tokens` to tune the tokenizer window for a compatible
-model; the default is 512 and the allowed range is 1 through 4096. The effective bound is printed
-in text and JSON reports. Hugging Face results additionally state whether each selected message
-was truncated at that bound and include the measured input-token count; other providers may leave
-those per-message fields unknown.
-
-The Bedrock provider uses the AWS SDK default credential chain and the Converse API. It supports
-the `classification` task only; `seq2seq` is a local Hugging Face mode. Its default model is
-`amazon.nova-micro-v1:0`; use `--model` for a different compatible model and `--region` to select
-the runtime region. The adapter sends only the bounded commit message and a fixed classification
-prompt. It does not expose AWS credentials, response headers, or raw provider errors in reports.
-
-Input coverage is deliberately visible but bounded. The selected message is passed to the quality
-adapter up to YAGA's 12,000-character provider-input limit. The Hugging Face classification and
-seq2seq adapters then tokenize with a 512-token limit, so a very long message can have its tail
-truncated by the model even though the report still counts every selected message and body line.
-Use `commit check` for exact full-message rules such as body structure, paragraph layout, footer
-presence, and Typos findings; treat model output as an advisory signal about the bounded model
-input, not proof that every token was semantically reviewed.
-
-All providers are advisory, not a parser, formatter, security boundary, or replacement for the
-configured commit policy. It may misunderstand project-specific context and should not be used to
-reject automated commits without review. The model and its Python runtime are not imported by
-either composite Action runtime, and the default package installation remains dependency-light.
-The first online run may download roughly 500 MB of model weights; subsequent `--offline` runs use
-the local Hugging Face cache. Use `--format json` for automation, or `--format github` in Actions
-for escaped warning annotations for flagged advisory results. Provider failures use an error
-annotation and exit `2`. The GitHub output also emits one bounded notice with counts, provider,
-task, model, revision, input limits, threshold, and offline mode; retain the same metadata in JSON
-reports for reproducibility.
-
-## Git selection and hooks
-
-```bash
-yaga commit check --message "feat(cli): add a check"
-yaga commit check --commit HEAD~1
-yaga commit check --range origin/main..HEAD
-```
-
-Git selection is shell-free, disables replacement refs and lazy fetching, rejects unsafe revisions,
-and bounds messages, ranges, output, and diagnostics. Merge-commit behavior is controlled by
-`merge-commits`; it is not inferred from the commit subject.
-
-The source modes are deliberately exclusive:
-
-| Source | Checks | Typical use |
-| --- | --- | --- |
-| `--message` | One supplied message | Editor or test feedback. |
-| `--file` | One UTF-8 file | The `commit-msg` hook. |
-| `--stdin` | One UTF-8 stream | Shell or editor integration. |
-| `--commit` | One Git commit | Inspecting an existing commit. |
-| `--range` | Every commit, oldest first | Pull-request or release validation. |
-
-With no source, YAGA checks `HEAD`. It never combines sources or silently changes a missing base.
-Git-backed checks require the relevant history and do not fetch it.
-
-YAGA also exposes one direct `commit-msg` pre-commit adapter. Install it explicitly with
-`pre-commit install --hook-type commit-msg --install-hooks`. The hook cannot inspect parent
-metadata, so the repository-side range check remains authoritative.
-
-## Dependabot and reports
-
-`dependabot-pull-requests = "skip"` applies only to the event-aware GitHub PR command and the
-read-only commit Action. It requires the exact `dependabot[bot]` login, `Bot` type, and bounded
-positive ID from the parsed PR author object. Ordinary commit and repository checks continue to
-run.
-
-Stable diagnostics include `syntax.header`, `type.allowed`, `scope.required`, `header.length`,
-`breaking.marker-pair`, `body.word-count`, `footer.required`, and `footer.forbidden`. Use
-`--format json` for the versioned machine contract or `--format github` for escaped annotations.
-
-Complete commit messages receive body, footer, and merge-parent rules. Pull-request titles are
-checked only as a Conventional Commit header: body minima, footer tokens, breaking-footer pairing,
-and merge-parent policy do not apply to the title. The event-aware adapter then checks the exact
-event `base.sha..head.sha` commit range separately.

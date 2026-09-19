@@ -35,7 +35,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert build_requirements == ["hatchling==1.32.0"]
     assert "hatchling==1.32.0" in project["dependency-groups"]["dev"]
     assert "pre-commit>=4.6.2,<5" in project["dependency-groups"]["dev"]
-    assert project["tool"]["uv"]["required-version"] == "==0.12.7"
+    assert project["tool"]["uv"]["required-version"] == ">=0.12.7"
     commit_policy = project["tool"]["yaga"]["commit"]
     assert commit_policy["breaking-markers"] == "paired"
     assert commit_policy["scope-policy-by-type"] == {
@@ -156,7 +156,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         ],
     }
 
-    for documentation in ("README.md", "CONTRIBUTING.md"):
+    for documentation in ("docs/workflow-checks.md", "CONTRIBUTING.md"):
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
@@ -314,12 +314,15 @@ def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
     valid = (
         b"Metadata-Version: 2.4\n"
         b"Requires-Python: >=3.12\n"
+        b"Description-Content-Type: text/markdown\n"
         b"Requires-Dist: pyyaml<7,>=6.0.3\n"
         b"Requires-Dist: typer<1,>=0.27.2\n"
         b"Requires-Dist: boto3<2,>=1.37; extra == 'quality-bedrock'\n"
         b"Requires-Dist: torch<3,>=2.6; extra == 'quality'\n"
         b"Requires-Dist: transformers<6,>=5.10; extra == 'quality'\n"
         b"\n"
+        b'<img src="https://dariuszpanas.github.io/yaga/assets/branding/'
+        b'isometric_terminal_y_logo_transparent.png" alt="YAGA terminal Y logo">'
     )
     check_build.validate_wheel_metadata(valid)
 
@@ -333,6 +336,8 @@ def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
             b"Requires-Dist: typer<1,>=0.27.2\nRequires-Dist: requests>=2",
         ),
         valid.replace(b"Requires-Python: >=3.12", b"Requires-Python: >=3.11"),
+        valid.replace(b"Description-Content-Type: text/markdown\n", b""),
+        valid.replace(b"text/markdown", b"text/plain"),
     ):
         with pytest.raises(SystemExit):
             check_build.validate_wheel_metadata(malformed)

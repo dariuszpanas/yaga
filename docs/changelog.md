@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add offline `required-version` checks and whole-file project precedence over global defaults.
+  Project environments and automation ignore global configuration.
+- Add shell and PowerShell convenience installers backed by uv, and explicit `yaga self update`
+  with installation ownership checks and a dry run.
+
+### Changed
+
+- Focus the README on problems YAGA solves and routes into documentation. Move detailed contracts
+  to provider references and add a guide for evaluating and adopting YAGA in another repository's CI.
+
+### Fixed
+
+- Serve the README logo from public documentation and use absolute package-description links.
+  Validate the rendered wheel description during the package build.
+- Restore the documentation error page's skip-to-content target.
+- Accept uv 0.12.7 and newer for local development while keeping CI's exact tool pin.
+  Document the external tools required by the full development gate.
+
 ## 0.1.0 — Beta
 
 Initial release candidate; publication date will be recorded when the release is published.

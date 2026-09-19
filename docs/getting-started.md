@@ -8,6 +8,48 @@ the executable and import package are **`yaga`**. The `yaga` distribution is an 
 A tool installer makes `yaga` available from any repository without adding it to each project's
 dependencies. Choose one installation method below.
 
+### Convenience installer
+
+The scripts bootstrap uv when it is absent, then install the `yaga-cli` PyPI distribution in a
+per-user tool environment with Python 3.12. They do not require administrator access and do not
+install Git, Docker, Typos, or optional model dependencies.
+
+On macOS or Linux:
+
+```bash
+curl -fsSL https://dariuszpanas.github.io/yaga/install.sh | sh
+```
+
+Or use wget:
+
+```bash
+wget -qO- https://dariuszpanas.github.io/yaga/install.sh | sh
+```
+
+The script reuses an existing uv installation. When uv needs to be installed, it prefers curl
+and falls back to wget if curl is unavailable. If neither downloader is available, it stops
+with instructions. A download failure stops installation rather than trying another downloader.
+
+In PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://dariuszpanas.github.io/yaga/install.ps1 | iex"
+```
+
+`-ExecutionPolicy Bypass` applies to this PowerShell process; it does not persistently change your
+execution policy. This follows [uv's Windows installation instructions](https://docs.astral.sh/uv/getting-started/installation/#standalone-installer).
+
+You can [inspect the shell script](install.sh) or [PowerShell script](install.ps1), download it,
+and execute the saved file instead. These convenience commands execute downloaded code.
+The bootstrap uses uv 0.12.7; an existing uv is reused. Set `YAGA_VERSION` to a published final
+`X.Y.Z` release to pin YAGA, or omit it for the latest release. Set `YAGA_NO_MODIFY_PATH=1` to
+skip `uv tool update-shell`; then add the directory reported by `uv tool dir --bin` to `PATH`
+yourself. Standard uv environment variables, including `UV_TOOL_DIR` and `UV_TOOL_BIN_DIR`,
+remain supported. A failed download or install stops the script; it does not report success.
+
+Run the installer once, then use the update command below. An existing installation is managed
+by uv's normal conflict handling; the script does not force replacement of another executable.
+
 ### uv (recommended)
 
 [Install uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
@@ -56,28 +98,28 @@ yaga --help
 This command is available while that environment is active. For a command available across
 terminals without activation, use uv or pipx above.
 
-### Use it in your project
+### Update or uninstall
 
-Change into the repository you want to check, replacing the example path below:
+For a uv tool installation (including the convenience installer), run:
 
 ```bash
-cd /path/to/your-project
-yaga config init --repo .
-yaga config show --repo .
-yaga commit check --message "feat: add a useful feature"
-yaga commit check --commit HEAD
+yaga self update --dry-run
+yaga self update
 ```
 
-`config init` is only needed if the target repository has no discovered YAGA policy. Existing
-policies should be inspected with `config show`. The message example passes the starter policy;
-an existing stricter policy can require additional content. Git-backed checks require Git on
-`PATH` and the selected history locally. `workflow lint` additionally requires Docker.
+YAGA verifies that uv owns its current environment and delegates to `uv tool upgrade yaga-cli`.
+uv retains the stored version constraint and extras, so an exact pin remains pinned. To change
+that constraint, use `uv tool install --python 3.12 "yaga-cli==X.Y.Z"` with the new published
+version. Updating is explicit and requires network access; ordinary checks never update YAGA.
+Project environments and pipx installations receive manager-specific instructions instead of
+being modified by `self update`.
 
-Run **`yaga` directly** with this installation. `uv run yaga` is the project-environment form
-used when developing YAGA or when a target project explicitly depends on it. The global tool
-still discovers policy from the repository being checked, not from its installation directory.
-
-### Update or uninstall
+On Windows, the running `yaga.exe` is locked. YAGA starts a hidden worker using the base Python
+interpreter, exits, and lets that worker run uv after the launcher closes. The command prints a
+temporary completion-log path; scheduling is not proof of success. Wait for
+`YAGA_UPDATE_EXIT_CODE=0` in the log, then run `yaga --version`. A different code means the update
+failed: inspect the log and run `uv tool upgrade yaga-cli` directly to retry. The helper removes
+itself and retains the log for inspection. On other platforms the command waits for uv to finish.
 
 Use the same installer you chose originally:
 
@@ -133,26 +175,10 @@ The stable exit contract is:
 Use `--format json` for a versioned machine-readable report and `--format github` for escaped
 workflow annotations.
 
-## Add the commit-message hook
+## Add checks to your workflow
 
-YAGA exposes one direct `commit-msg` adapter through `.pre-commit-hooks.yaml`:
-
-```yaml
-repos:
-  - repo: https://github.com/dariuszpanas/yaga
-    rev: <audited-40-character-commit-sha>
-    hooks:
-      - id: yaga-commit-check
-```
-
-Install that hook type explicitly:
-
-```bash
-pre-commit install --hook-type commit-msg --install-hooks
-```
-
-The hook complements CI; it cannot inspect merge parents or replace a complete-history range
-check.
+Once a local check works, follow the [adoption recipes](recipes.md) for hooks and CI.
+See [commit policy](commit-policy.md) for the full message and hook reference.
 
 ## Install from a checkout
 
@@ -164,9 +190,8 @@ git clone https://github.com/dariuszpanas/yaga.git
 cd yaga
 ```
 
-Checkout commands require the exact uv version declared by `required-version` in
-`pyproject.toml`. If uv reports a mismatch, update it through your installation method to the
-version shown in that error.
+Checkout commands require uv 0.12.7 or newer. CI pins its own version for reproducibility.
+See [Contributing](contributing.md) for the development tool prerequisites.
 
 To install the current source as a user-wide tool:
 
@@ -188,31 +213,5 @@ uv run yaga --help
 
 This creates the checkout's `.venv`. Use `uv run yaga` for that environment; use `yaga` directly
 for the global tool. See [Contributing](contributing.md) for the development checks.
-
-## Build these docs locally
-
-The documentation site is managed by [Zensical](https://zensical.org/docs/get-started/):
-
-```bash
-make docs
-make docs-serve
-```
-
-`make docs` performs a clean strict build. `make docs-serve` starts the local preview server at
-`http://localhost:9000` by default. Override the address when needed, for example
-`make docs-serve DOCS_ADDR=127.0.0.1:8000`.
-
-Without Make (including on Windows), run the same commands directly:
-
-```bash
-uv run zensical build --strict --clean
-uv run zensical serve --dev-addr 127.0.0.1:9000
-```
-
-Open `http://127.0.0.1:9000` and leave the server running while editing: saved documentation
-changes rebuild automatically. Press `Ctrl+C` in its terminal to stop the preview. The header's
-theme control cycles between light, dark, and your system preference.
-
-Every push to `main` publishes the clean build to [GitHub Pages](https://dariuszpanas.github.io/yaga/).
 
 For the complete operating model, see [Usage modes](usage.md) and [Configuration](configuration.md).

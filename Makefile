@@ -8,6 +8,7 @@ actionlint:
 
 docs:
 	uv run zensical build --strict --clean
+	uv run python scripts/check_docs.py
 
 docs-serve:
 	uv run zensical serve --dev-addr "$(DOCS_ADDR)"
