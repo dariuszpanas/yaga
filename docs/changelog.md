@@ -2,32 +2,16 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-19
+
+First public beta release.
+
 ### Added
 
 - Add offline `required-version` checks and whole-file project precedence over global defaults.
   Project environments and automation ignore global configuration.
 - Add shell and PowerShell convenience installers backed by uv, and explicit `yaga self update`
   with installation ownership checks and a dry run.
-
-### Changed
-
-- Focus the README on problems YAGA solves and routes into documentation. Move detailed contracts
-  to provider references and add a guide for evaluating and adopting YAGA in another repository's CI.
-
-### Fixed
-
-- Serve the README logo from public documentation and use absolute package-description links.
-  Validate the rendered wheel description during the package build.
-- Restore the documentation error page's skip-to-content target.
-- Accept uv 0.12.7 and newer for local development while keeping CI's exact tool pin.
-  Document the external tools required by the full development gate.
-
-## 0.1.0 — Beta
-
-Initial release candidate; publication date will be recorded when the release is published.
-
-### Added
-
 - Add a tag-triggered PyPI trusted-publishing workflow and a manual build-only release rehearsal.
   Publish the exact validated distributions with upload permissions isolated from source execution.
 - Make PyPI installation the default onboarding path with uv, pipx, and pip instructions, PATH
@@ -120,6 +104,8 @@ Initial release candidate; publication date will be recorded when the release is
 
 ### Changed
 
+- Focus the README on problems YAGA solves and routes into documentation. Move detailed contracts
+  to provider references and add a guide for evaluating and adopting YAGA in another repository's CI.
 - Run the full test suite on Windows with Python 3.12 as well as Linux with Python 3.12–3.14,
   including the Windows Git executable and process-containment regressions.
 - Cache the verified Cargo registry used to install the pinned Typos CLI, reducing repeated network
@@ -154,6 +140,11 @@ Initial release candidate; publication date will be recorded when the release is
 
 ### Fixed
 
+- Serve the README logo from public documentation and use absolute package-description links.
+  Validate the rendered wheel description during the package build.
+- Restore the documentation error page's skip-to-content target.
+- Accept uv 0.12.7 and newer for local development while keeping CI's exact tool pin.
+  Document the external tools required by the full development gate.
 - Select only pull-request commits in the quality workflow, use an exact commit for manual runs,
   and treat unexpected process exits as operational failures.
 - Resolve quality defaults for the selected provider, so Bedrock does not inherit a Hugging Face
