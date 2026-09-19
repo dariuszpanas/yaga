@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Give MSYS2, Git Bash, and Cygwin users explicit shell PATH setup instructions after installation.
+- Include copyable PowerShell and Bash/zsh log commands after scheduling a Windows self update.
+
 ## [0.1.0] - 2026-09-19
 
 First public beta release.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from typing import Annotated
 
 import typer
@@ -31,6 +32,18 @@ def update(
             "Update scheduled after YAGA exits. Completion log: " + safe_error_text(result.log)
         )
         typer.echo("Wait for YAGA_UPDATE_EXIT_CODE=0 in that log, then run yaga --version.")
+        path = result.log.as_posix()
+        typer.echo("Read the log (repeat if the completion code is not present yet):")
+        typer.echo("  Bash/zsh: " + safe_error_text("cat -- " + shlex.quote(path)))
+        typer.echo(
+            "  PowerShell: "
+            + safe_error_text(
+                "Get-Content -LiteralPath '" + str(result.log).replace("'", "''") + "'"
+            )
+        )
+        typer.echo(
+            "For future updates with foreground progress, run uv tool upgrade yaga-cli directly."
+        )
     else:
         typer.echo("uv completed the update. Run yaga --version to inspect the installed version.")
 
