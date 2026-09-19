@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-19
+
 ### Fixed
 
 - Give MSYS2, Git Bash, and Cygwin users explicit shell PATH setup instructions after installation.
