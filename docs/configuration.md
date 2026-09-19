@@ -30,6 +30,50 @@ YAGA walks from the requested directory toward the repository root and loads exa
 explicit file and disables discovery; files are never merged. Unknown keys, wrong TOML types,
 duplicate normalized values, unsafe paths, and unsupported versions are errors.
 
+### Global defaults and project isolation
+
+For a global installation (uv tool, pipx, or system Python), a user configuration is a fallback
+only when no project configuration exists. Its location is `%APPDATA%/yaga/config.toml` on
+Windows and `$XDG_CONFIG_HOME/yaga/config.toml` (default `~/.config/yaga/config.toml`) elsewhere.
+It uses the standalone `.yaga.toml` shape. Create this file explicitly; installation does not
+create policy for you.
+
+The precedence is **explicit `--config`, nearest project file, global file, built-in defaults**.
+One file supplies the entire configuration: a project file never inherits omitted keys from global
+settings. An invalid project file fails instead of falling back to the global file.
+`yaga config show --repo .` displays the effective source and policy.
+
+Ordinary virtual environments, including project `.venv` installations, ignore global settings.
+uv and pipx tool environments are identified by their manager receipt in the environment root.
+Global fallback is also disabled when `CI`, `GITHUB_ACTIONS`, or either YAGA Action runtime
+indicator is nonempty. `config init` always creates project policy independently of user defaults.
+
+### Required YAGA version
+
+```toml
+[tool.yaga]
+required-version = ">=0.1.0, <1.0.0"
+```
+
+In a standalone or global configuration, omit the `[tool.yaga]` header. This optional root key
+checks the running YAGA release offline when configuration is loaded. A mismatch is a configuration
+error (exit 2), before commit policy evaluation; it never downloads or updates software. Project
+requirements replace global requirements along with the rest of the file.
+
+Requirements accept `>=`, `>`, `<=`, `<`, `==`, and `!=` against final `MAJOR.MINOR.PATCH`
+versions, joined by commas (all must match). Each numeric component has at most nine digits and
+no leading zeroes. The limit is eight comparisons and 256 characters. Wildcards, compatible-release
+operators, prereleases, URLs, and other Python packaging requirement syntax are not supported.
+
+This setting applies to commands that load this configuration: commit checks and quality, the
+GitHub commit adapter, repository checks selecting the commit provider, and `config show`.
+Explicit-policy providers such as `branch check` and `tree check` retain their no-discovery
+contract. Use `yaga config show --config pyproject.toml` as an explicit version preflight before
+those checks. Help, `--version`, and `self update` remain available to recover from a mismatch.
+
+See [installation and updates](getting-started.md#update-or-uninstall) for changing the installed
+version. Pin the installation separately when CI must always use one exact release.
+
 ## Commit policy keys
 
 | Key | Values and purpose |

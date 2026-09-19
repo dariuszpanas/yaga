@@ -26,8 +26,10 @@ from yaga.commits.models import (
     QualityTask,
     TyposPolicy,
 )
+from yaga.config_scope import global_config_path
 from yaga.errors import ConfigurationError
 from yaga.files import read_file_prefix
+from yaga.version_requirement import check_requirement
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_LIST_ITEMS = 128
@@ -38,7 +40,7 @@ _TYPE_TOKEN = re.compile(r"^[^\s()!:]+$")
 _SCOPE_TOKEN = re.compile(r"^[^\s()]+$")
 _FOOTER_TOKEN = re.compile(r"^[A-Za-z0-9-]+$")
 _RESERVED_FOOTER_TOKENS = frozenset({"breaking change", "breaking-change"})
-_ROOT_KEYS = frozenset({"config-version", "commit"})
+_ROOT_KEYS = frozenset({"config-version", "required-version", "commit"})
 _COMMIT_KEYS = frozenset(
     {
         "allowed-types",
@@ -73,6 +75,7 @@ def load_config(
     explicit: Path | None = None,
     *,
     start: Path | None = None,
+    use_global: bool = True,
 ) -> LoadedConfig:
     """Load one explicit or nearest discovered YAGA configuration."""
     if explicit is not None:
@@ -98,6 +101,9 @@ def load_config(
             root = _configuration_root(document, path=pyproject, explicit=False)
             if root is not None:
                 return LoadedConfig(policy=_parse_policy(root, pyproject), path=pyproject)
+    global_path = global_config_path() if use_global else None
+    if global_path is not None and global_path.is_file():
+        return load_config(global_path, use_global=False)
     return LoadedConfig(policy=CommitPolicy(), path=None)
 
 
@@ -157,6 +163,9 @@ def _configuration_root(
 def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
     _reject_unknown(root, _ROOT_KEYS, label="YAGA", path=path)
     config_version = _integer(root.get("config-version", 1), "config-version", 1, 1, path)
+    required_version = (
+        check_requirement(root["required-version"]) if "required-version" in root else None
+    )
     raw_commit = root.get("commit", {})
     if not isinstance(raw_commit, dict):
         raise ConfigurationError(f"commit must be a table in {path}")
@@ -285,6 +294,7 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
 
     return CommitPolicy(
         config_version=config_version,
+        required_version=required_version,
         allowed_types=allowed_types,
         type_case=_enum(
             raw_commit.get("type-case", CasePolicy.ANY.value),

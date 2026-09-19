@@ -1,0 +1,2 @@
+# Downloaded shell scripts must remain executable by POSIX shells from any checkout.
+docs/install.sh text eol=lf

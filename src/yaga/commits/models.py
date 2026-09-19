@@ -147,6 +147,7 @@ class CommitPolicy:
     typos: TyposPolicy = TyposPolicy.SKIP
     quality: QualityPolicy = QualityPolicy()
     body_paragraph_splitting: ParagraphSplittingPolicy = ParagraphSplittingPolicy.SKIP
+    required_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
