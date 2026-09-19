@@ -1,36 +1,12 @@
-# Agent review gate
+# Agent review plans and receipts
 
-The write-capable review integration is exposed as `yaga gate agent-review <operation>` and the
-`agent-review` composite Action selector. The gate owns the trusted lifecycle around agent review;
-the configured review adapter owns provider-specific request and evidence details.
+Use these provider-neutral commands to describe review work for an external adapter and evaluate
+its results. YAGA validates policies and receipts; it does not execute the configured agents.
+The adapter is responsible for running each lens and authenticating its evidence.
 
-The Action dispatch entrypoint is `yaga.agent_review.runtime`. It delegates to the fixed GitHub
-adapter under `yaga.agent_review.github`, which recognizes the Codex connector's exact event and
-evidence contract. Separate provider-neutral policy and receipt commands support external
-integrations; the Action does not select or execute those integrations.
-
-The current GitHub adapter requests a fixed Codex review and checks its completion evidence. It
-cannot execute configured lens instructions or bind evidence to a policy digest, so every nonempty
-`agent-review-policy-file` input fails before policy loading or GitHub API access, including a
-policy with one Codex lens. Use `policy plan --format json` as the handoff to an external adapter,
-run each lens there, then pass its complete receipt to `policy evaluate`.
-
-A formal Codex findings review can satisfy the fixed adapter's completion check. Consumers must
-enable GitHub required conversation resolution to keep unresolved review threads merge-blocking;
-findings outside resolvable threads require separate enforcement. The provider-neutral receipt
-evaluator instead aggregates the explicit `passed`, `failed`, and `pending` outcomes supplied by
-an external adapter.
-
-## Operations
-
-The closed operations are `invalidate`, `prepare`, `authorize`, `observe`, `request`, and
-`finalize`. `prepare` emits only a closed route capability and pull-request number; candidate
-identity never crosses a job output.
-
-The workflow is split so untrusted pull-request CI can provide prerequisites while trusted
-default-branch workflows own lifecycle invalidation, authorization, requests, and terminal status
-publication. The exact current-boundary request is required before accepting any agent reaction,
-comment, review, or check result, including the initial `opened` boundary.
+For the experimental fixed Codex request/completion protocol, see the separate
+[GitHub review adapter](github-review-adapter.md). That adapter cannot execute configured lens
+instructions or bind outcomes to a policy digest. Neither surface is required for ordinary CI checks.
 
 ## Named lenses
 
@@ -224,32 +200,12 @@ known outcomes (`review` or `advisory`), publication modes, bounded instructions
 preset label. The label is intentionally not a YAGA provider registry: an external adapter decides
 which service, model, or human workflow it represents. The validator does not contact an agent or
 read credentials. Run the installed `policy check`, `plan`, `template`, and `evaluate` commands in
-that adapter's trusted workflow. The fixed GitHub composite Action rejects configured policies;
-leave its `agent-review-policy-file` input empty. PR-controlled policy or receipt content must
+that adapter's trusted workflow. The fixed GitHub composite Action does not accept configured policies. PR-controlled policy or receipt content must
 never be used as security authority.
 
-## Evidence and recovery
+## Evidence responsibility
 
-An external adapter may use a clean comment, inline findings, a native review, a reaction, or a
-check run. That adapter must correlate its provider result to the exact pull request, base commit,
-head commit, named lens, adapter preset, lifecycle boundary, and request before emitting a
-`passed`, `failed`, or `pending` receipt. The local receipt evaluator validates policy identity and
-aggregates outcomes; it does not independently authenticate provider evidence.
-
-The fixed GitHub adapter recognizes Codex clean comments, formal findings reviews, and clean
-reactions after the current YAGA request. It validates the pull request, base and head commits,
-lifecycle boundary, and request. Configured lens identity and policy digests are unsupported.
-
-Evidence must be strictly later than the exact request. Missing, malformed, ambiguous, stale,
-displaced, unsolicited, or over-budget evidence fails closed. The gate revalidates live pull-request
-state and status capacity around every write, and bounds comments, reviews, reactions, statuses,
-event data, requests, and polling.
-
-## Quota firewall
-
-Configure the owner identity and protected approval route required by the selected adapter. Store no
-secrets in the approval environment, prevent self-review, and disable administrator bypass. Disable
-automatic reviews and drain existing agent tasks before enabling the publisher.
-
-YAGA cannot prevent a separate human or app from posting a direct review request, so provider-side
-controls and repository permissions remain part of the deployment boundary.
+An external adapter must correlate results to the exact pull request, base and head commits,
+named lens, adapter preset, lifecycle boundary, and request. The local receipt evaluator validates
+policy identity and aggregates outcomes; it does not independently authenticate provider evidence.
+PR-controlled policy or receipt content must never be treated as security authority.

@@ -18,50 +18,162 @@ layout, merge-parent behavior, and optional Typos integration. A model result do
 of those rules. Quality findings use exit `1`; missing dependencies, cache failures, malformed
 provider output, and other operational failures use exit `2`.
 
-## Input sources and modes
+## Quality input modes
 
-Exactly one source may be supplied; without one, YAGA checks `HEAD`:
+Select exactly one source, or let the command use `HEAD` when no source option is present. The
+source determines which complete commit message reaches the provider; it does not change the
+quality policy or model settings:
 
-| Source | Example | Use |
+| Source | Example | Use it when |
 | --- | --- | --- |
-| Message | `--message "fix: reject invalid values"` | Check text before creating a commit. |
-| File | `--file .git/COMMIT_EDITMSG` | Integrate with an editor or hook. |
-| Standard input | `--stdin` | Feed generated text. |
-| Commit | `--commit HEAD~1` | Recheck one existing commit. |
-| Range | `--range origin/main..HEAD` | Check commits oldest first. |
+| Direct message | `--message "fix: reject invalid values"` | Checking text before creating a commit. |
+| UTF-8 file | `--file .git/COMMIT_EDITMSG` | Integrating with a commit editor or hook. |
+| Standard input | `--stdin` | Passing generated text without creating a temporary file. |
+| One commit | `--commit HEAD~1` | Rechecking one committed message. |
+| Commit range | `--range origin/main..HEAD` | Reviewing several commits oldest first. |
+| Default | no source option | Checking `HEAD` in a repository. |
 
-The source determines the complete message selected; `--input-mode` determines what reaches the
-provider:
+For example, these invocations all select one message source and use the same configured provider:
 
 ```bash
-# Default: subject, body, and final footer block.
-yaga commit quality --commit HEAD~1 --input-mode message
-
-# Deliberately score only the first line.
-yaga commit quality --commit HEAD~1 --input-mode title
+yaga commit quality --message "fix(parser): reject malformed trailers"
+yaga commit quality --file .git/COMMIT_EDITMSG --offline
+printf 'docs: explain the cache boundary\n' | yaga commit quality --stdin --offline
+yaga commit quality --commit HEAD~1 --format json
+yaga commit quality --range origin/main..HEAD --format json
 ```
 
-`message` is the default and includes the body. `title` sends only the first line. Reports include
-the selected mode and retain message/body line counts. Both modes are bounded to 12,000 characters
-before inference; reports expose the exact character count and character truncation state.
-Git-backed selection never fetches, and range results preserve oldest-first order.
+The source options are mutually exclusive. `--message`, `--file`, and `--stdin` do not read Git;
+`--commit`, `--range`, and the default `HEAD` source use the bounded Git runtime and do not fetch.
+Range results preserve oldest-first order, and a missing ref, empty range, shallow boundary, or
+selection above the configured commit limit is an operational error with exit `2`.
 
-## Provider and task matrix
+Quality checks send the complete commit message to the provider by default. Use
+`--input-mode title` when a repository deliberately wants title-only advisory scoring; use
+`--input-mode message` to make the full-message behavior explicit. The selected mode is included
+in text and JSON reports, while the original message and its body-line counts remain visible.
 
-| Provider | Task | Execution | Result |
-| --- | --- | --- | --- |
-| `huggingface` | `classification` | Local model | Numeric low-quality score and threshold decision. |
-| `huggingface` | `seq2seq` | Local instruction model | Strict `PASS` or `FLAG`, optionally with a reason. |
-| `bedrock` | `classification` | AWS Converse API | Classification decision outside the runner. |
+The command also reads non-secret defaults from `[tool.yaga.commit.quality]` or `[commit.quality]`
+in the discovered configuration. Use `--config` to select one explicit file; CLI options override
+the configured provider, task, model, revision, threshold, region, generation bound, and Hugging
+Face input-token bound.
 
-The default is the pinned Hugging Face classifier. It treats `LABEL_0` as the low-quality
-probability and flags scores at or above `0.70`; classification does not explain its score.
-Thresholds are inclusive from `0` through `1`, so `0` deliberately flags every classifier result.
-Classifier output is bounded and duplicate labels are rejected, so malformed or ambiguous model
-responses fail as operational errors rather than silently changing the decision.
-Seq2seq responses must begin with `PASS` or `FLAG`, are bounded to 4,096 bytes, and are still
-advisory. Bedrock supports classification only, defaults to `amazon.nova-micro-v1:0`, and reads
-credentials from the normal AWS SDK chain. Credentials never belong in TOML or reports.
+```bash
+# Pinned local classifier (default)
+uv sync --extra quality
+yaga commit quality --message "fix: update parser behavior" --offline
+
+# Configurable local instruction model; use a pinned commit of the model
+yaga commit quality --task seq2seq --model google/flan-t5-small --revision <sha>
+
+# AWS credentials and region come from the normal AWS SDK chain
+uv sync --extra quality-bedrock
+yaga commit quality --provider bedrock --region us-east-1
+```
+
+The Hugging Face provider supports `classification` and `seq2seq`. Classification uses the
+low-quality probability and `--threshold`; seq2seq produces a strict `PASS` or `FLAG` decision
+with a bounded reason. The Bedrock adapter uses the Converse API and defaults to Amazon Nova
+Micro; `--model` can select another compatible model. Bedrock currently supports the
+`classification` task only; `seq2seq` is a local Hugging Face mode. YAGA never accepts provider
+credentials in policy files or command output. `--offline` is available only for local Hugging
+Face models.
+
+## Choosing a quality mode
+
+Use classification when the repository wants a stable numeric signal and a cheap pass/fail
+threshold. The default model is pinned by its immutable revision, and `--threshold` controls the
+low-quality probability at which a message is flagged. Classification does not explain its score.
+
+Use Hugging Face `seq2seq` when a locally cached instruction model should return a short reason. The
+model must follow the bounded `PASS` or `FLAG` response contract; `--max-tokens` limits the generated
+response. `--model` and `--revision` are independent, so pin both together when selecting a model
+other than the default. A seq2seq result is still advisory and is not treated as a replacement for
+the deterministic commit policy.
+
+Use Bedrock when model execution should stay outside the runner. YAGA calls the Bedrock Converse
+API for each selected message, obtains credentials from the normal AWS SDK credential chain, and
+uses `--region` or the SDK's configured region. No Hugging Face files are downloaded in this mode;
+`--offline` is therefore rejected. Keep AWS credentials in the workflow environment or its identity
+provider, never in `.yaga.toml`.
+
+All modes receive the complete selected message, including its body and final footer block. The
+model tokenizer or provider may apply its own input limit; YAGA bounds the submitted prompt and
+reports the selected line count, body-line count, exact model-input character count, and token
+coverage in text and JSON output. Character and token truncation are reported independently.
+This makes title-only versus multiline model runs visible in CI logs without printing the full
+message. Reports also include a SHA-256 fingerprint of the exact bounded selected input, allowing
+online and offline runs to be compared without exposing the commit text. The model can therefore
+notice a vague body, but exact rules such as paragraph layout,
+footer presence, or configured scopes remain the responsibility of `commit check`.
+The default Hugging Face input window is 512 tokens; configure it with `--max-input-tokens` or
+`max-input-tokens` when the selected model supports a different context size. The effective value
+is included in text and JSON reports. Hugging Face results also report the measured input-token
+count and whether each message was actually truncated at that window; `null` is used when the
+provider cannot expose that fact.
+
+## Hugging Face cache and offline replay
+
+The first online Hugging Face invocation downloads the tokenizer and model for the exact revision.
+The files are stored in the normal Hugging Face cache, or in `HF_HOME` when that variable is set.
+An offline invocation sets the provider's local-files-only loading mode and never contacts the Hub:
+
+```bash
+export HF_HOME="$PWD/.yaga-huggingface"
+yaga commit quality --range origin/main..HEAD --revision <model-sha>
+yaga commit quality --range origin/main..HEAD --revision <model-sha> --offline
+```
+
+The second command succeeds only when the first command populated the same cache with the same
+model revision and task. Cache the directory between CI runs, using a key that includes the runner
+OS, Python/runtime family, task, and model revision. Do not cache credential directories or put
+provider tokens in the cache. A cache miss should be handled by one intentional online warm-up
+step followed by the offline proof step; this makes accidental network access visible in CI.
+
+For a repository configuration, put non-secret defaults in the policy and keep runtime mode
+selection explicit:
+
+```toml
+[tool.yaga.commit.quality]
+provider = "huggingface"
+task = "classification"
+model = "saridormi/commit-message-quality-codebert"
+revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
+threshold = 0.70
+max-tokens = 32
+max-input-tokens = 512
+input-mode = "message"
+```
+
+The precedence is CLI option, then the selected configuration file, then the provider default.
+`--config` changes which policy file supplies defaults; it does not merge files. In particular,
+`--offline` is a per-invocation runtime choice and is not a policy-file credential or side effect.
+
+A model finding returns exit `1`, while missing dependencies, unavailable credentials/models, or
+invalid provider output returns exit `2`. Use `--format json` when another tool needs the stable
+provider, task, model, decision, score, and reason fields.
+
+## Interpreting quality findings
+
+The default classifier is an advisory signal about how much useful change description a message
+resembles. It is not a second Conventional Commit parser and it does not know the repository's
+actual diff. For example, `fix: update parser behavior` is structurally valid, but the classifier
+may flag it because the subject does not identify what changed or why. A more concrete subject such
+as `fix(parser): reject malformed trailer values` is more likely to pass. Adding a body that
+explains the behavior change usually lowers the score further.
+
+Classification scores are low-quality probabilities: a larger score is more suspicious, and the
+default `0.70` threshold flags the message. The classifier can catch vague subjects, missing
+structure, and low-information bodies, but it can also flag intentionally concise messages and
+pass fluent but generic text. It cannot reliably enforce configured types, scopes, body minimums,
+footers, line limits, or any requirement that depends on the repository diff; use `commit check`
+for those exact rules.
+
+Classification providers do not produce an explanation beyond the score. Use `--format json` to
+retain the score for diagnostics, or use a seq2seq/Bedrock provider when a bounded natural-language
+reason is more useful than a stable probability. Treat model findings as review prompts rather than
+proof that a message is invalid.
+
 
 ## Configuration
 
@@ -89,20 +201,6 @@ of that directory. Use a pinned remote model for revision-based cache identity. 
 defaults to 512 tokens and can be set from 1 through 4096. Character and token bounds are
 independent, so a message can fit YAGA's character limit but still be tokenizer-truncated.
 
-## Cache and offline replay
-
-An online Hugging Face run downloads files for the exact revision. Set `HF_HOME` and repeat the
-same model, revision, task, and Python environment for an offline proof:
-
-```bash
-export HF_HOME="$PWD/.yaga-huggingface"
-yaga commit quality --range origin/main..HEAD --revision <model-sha>
-yaga commit quality --range origin/main..HEAD --revision <model-sha> --offline
-```
-
-`--offline` is Hugging Face-only and must fail on a cache miss rather than using the network. In
-CI, cache only the model directory with a key containing OS, Python family, task, model ID, and
-revision. Never cache credentials or files produced by untrusted pull-request code.
 
 ## Reports and limits
 

@@ -108,7 +108,9 @@ jobs:
       - run: bash -n scripts/composite_smoke_python
       - run: uv run --frozen --python 3.12 python scripts/check_build.py
       - name: Build documentation
-        run: uv run --frozen --python 3.12 zensical build --strict --clean
+        run: |
+          uv run --frozen --python 3.12 zensical build --strict --clean
+          uv run --frozen --python 3.12 python scripts/check_docs.py
       - name: Install the composite smoke interpreter
         run: |
           install -D --mode=0755 \

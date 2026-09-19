@@ -1,148 +1,83 @@
 # GitHub Actions
 
-YAGA can run as an installed CLI or through its composite Actions. Keep those trust surfaces
-separate.
+Use ordinary unprivileged CI for repository checks. The write-capable review adapter has a
+separate [deployment guide](github-review-adapter.md); it is not required to use YAGA in CI.
 
-## Pull-request checks
+## Pull-request checks in GitHub Actions
 
-Pull-request CI is intentionally unprivileged. Check out the exact event head with complete
-history, disable persisted credentials, and pass event values through quoted environment
-variables. For example:
+`yaga github pull-request check` applies the same commit policy to a GitHub event without calling
+the GitHub API. It checks the pull-request title as a single Conventional Commit header, then checks
+every commit in the exact event `base.sha..head.sha` range. Body and merge rules do not apply to the
+title; all configured header, type, scope, and description rules do. Text, versioned JSON, and
+escaped `--format github` annotations share exit codes `0`, `1`, and `2` with `commit check`.
 
-```yaml
-- uses: actions/checkout@<audited-full-sha>
-  with:
-    ref: ${{ github.event.pull_request.head.sha }}
-    fetch-depth: 0
-    persist-credentials: false
-- name: Check commits
-  env:
-    YAGA_RANGE: ${{ format('{0}...{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) }}
-  run: >-
-    uv run yaga commit check --range "$YAGA_RANGE" --format github
-```
+When `dependabot-pull-requests = "skip"`, the adapter recognizes only a strictly parsed PR author
+with login `dependabot[bot]` and account type `Bot`. Both the title and every selected commit are
+reported as skipped with the reason `Dependabot pull request`, and the command exits `0`. A human
+PR, a near-match account, malformed event data, a checkout mismatch, missing history, or an
+over-limit range is never converted into a skip.
 
-If the repository policy sets `typos = "check"`, install the pinned Typos CLI before the check:
-
-```yaml
-- name: Install Typos CLI
-  run: cargo install typos-cli --version 1.49.0 --locked
-```
-
-The adapter sends each complete selected commit message through Typos' stdin interface and uses
-its JSON-lines output. Keep the version pinned and install it in the same job as YAGA; otherwise a
-missing executable is an operational failure (exit `2`), not a skipped spelling check.
-
-This workflow is a quota-saving quality heuristic, not a security authority: pull-request code
-controls its own execution.
-
-The repository's optional `commit-quality` workflow uses `--input-mode message` and
-`--format github` for both its online cache-population run and its offline replay. This makes the
-complete-message behavior explicit, including commit bodies. The workflow always runs the offline
-replay even when the online advisory flags a message, then preserves the combined exit contract:
-operational errors (`2`) take precedence over findings (`1`). Both bounded reports are copied into
-`GITHUB_STEP_SUMMARY`; the online summary records whether the model cache was hit. The cache key
-includes the runner OS, Python family, task, model identifier, and exact revision, and the workflow
-passes those same variables to both inference commands so cache identity cannot drift from the selected
-model. Do not cache executable files from an untrusted pull request. Keeping the input mode explicit
-also prevents a future policy-default change from silently narrowing the workflow's coverage.
-Each per-message quality result includes a SHA-256 fingerprint of the exact bounded model input,
-which helps compare flagged messages without exposing commit text in the job summary. The GitHub
-notice also includes an ordered report-level fingerprint, so an all-pass online/offline pair can be
-compared even when no warning annotations are emitted.
-
-For an ordinary installed-CLI check, keep the source and checkout boundary explicit:
-
-```yaml
-- uses: actions/checkout@<audited-full-sha>
-  with:
-    fetch-depth: 0
-    persist-credentials: false
-- name: Check changed paths
-  env:
-    YAGA_CHANGE_RANGE: ${{ format('{0}...{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) }}
-  run: >-
-    uv run yaga change check
-    --policy .yaga/change-policy.toml
-    --range "$YAGA_CHANGE_RANGE"
-    --format github
-```
-
-The branch provider receives `github.head_ref` for pull requests and the branch-only
-`github.ref_name` for pushes. Committed-tree providers receive the exact checked-out head through
-`--revision`; they do not use the commit provider's `--commit` option or inspect staged and
-untracked files. Keep these values in quoted environment variables rather than interpolating them
-into shell source.
-
-## Composite Action boundary
-
-The root Action accepts only the closed inputs `gate`, `operation`, `github-token`,
-`prerequisite-workflow`, `lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`,
-`job-timeout-minutes`, and the optional `agent-review-policy-file`. The token is passed through the environment and never appears in
-arguments, outputs, logs, or exceptions.
-The root Agent-review step also captures its bounded stdout and stderr into an escaped
-`GITHUB_STEP_SUMMARY` block while preserving the underlying operation exit code, so pending,
-policy, and operational outcomes remain visible without opening raw logs.
-
-The fixed GitHub adapter cannot execute configured lens instructions or bind completion evidence
-to a policy digest. Every nonempty `agent-review-policy-file` value is rejected before policy
-loading or GitHub API access; leave that input empty. Its fixed Codex request/completion behavior
-remains available. Use `yaga gate agent-review policy plan --format json` and `policy evaluate`
-with a separate trusted adapter for configured review work, including a single named lens.
-
-The write-capable root runtime uses `YAGA_ACTION_RUNTIME=1` and standard-library-only imports.
-The separate read-only commit Action uses `YAGA_COMMIT_ACTION_RUNTIME=1`; it may use commit policy
-modules but never Typer, the Agent review gate, REST transport, or site packages.
-
-The Action preserves GitHub workflow annotations and writes the same bounded report, including
-operational errors, to `GITHUB_STEP_SUMMARY` inside an escaped `<pre>` block. This makes a failed
-commit-policy check readable from the run summary without changing its `0`/`1`/`2` exit contract.
-
-## Workflow policy
-
-Pin every third-party action to an audited full commit SHA. Keep permissions least-privilege and
-audit every writer. `workflow security` intentionally does not emulate GitHub expressions; dynamic
-privileged checkout inputs and ambiguous permissions fail closed.
-
-For the retained write-capable review workflow, trusted default-branch `pull_request_target` or
-`workflow_run` jobs are the only writers. They must not consume pull-request code, artifacts, or
-cache.
-
-### Choosing a workflow provider
-
-Use the providers together when the repository needs all three guarantees:
-
-| Provider | Answers | Needs Docker? |
-| --- | --- | --- |
-| `workflow check` | Are external actions and container images immutably referenced? | No |
-| `workflow security` | Does the workflow satisfy the selected trust profile? | No |
-| `workflow lint` | Does bounded actionlint parsing accept the workflow structure? | Yes |
-
-The security profile is cumulative and opt-in by version: `recommended-v1` is the frozen default,
-v2 adds literal `persist-credentials: false` on direct runner-resolved checkout steps, and v3 adds
-the `pull_request` writer restriction for exact `pull-requests: write` and `statuses: write`
-permissions. A custom `--rule` selection replaces the profile and cannot be combined with
-`--profile`. A passing security check does not replace immutable-reference or syntax checks.
-
-### Aggregate and plan modes
-
-For a stable local-and-CI gate, select providers through a versioned plan:
-
-```toml
-plan-version = 2
-checks = ["workflow", "workflow-security", "workflow-lint", "tree"]
-workflow-paths = [".github/workflows", "examples"]
-workflow-security-profile = "recommended-v3"
-tree-policy = ".yaga/tree-policy.toml"
-```
+For local diagnosis, save a `pull_request` event and check out its exact head before running:
 
 ```bash
-yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD --format github
+yaga github pull-request check --event-file event.json --repo .
 ```
 
-Plans never discover themselves, fetch, run commands, interpolate environment values, or become
-security authority when changed by a pull request. `--plan` replaces provider-selection flags;
-runtime repository, commit, revision, and output options remain on the command line. Selecting a
-committed-tree provider requires one exact `--revision`, while `--commit` or `--range` belongs only
-to the commit provider. Provider reports stay separate, and exit `2` wins over findings when any
-selected provider has an operational error.
+The separate read-only Action wraps that command for CI:
+
+```yaml
+name: Commit Policy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yaga-commit-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  commit-policy:
+    name: Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dariuszpanas/yaga/actions/commit-check@cd02385e3216ac544e7783c7dd6929340e230e95
+```
+
+The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,
+shallow history, a missing object, an empty range, or a checkout that does not equal the event head.
+The Action has no token input or write/API code path, and the YAGA runtime never fetches Git history
+or installs YAGA dependencies; the reference workflow grants only `contents: read`. It strictly
+binds the event name, repository ID/name, base/head refs, and open PR payload to the runner context,
+strictly parses the PR author record used by the optional Dependabot policy, and caps workflow
+annotations at 50. Its pinned `actions/setup-python` bootstrap receives an explicit empty token and
+may obtain the declared Python 3.12 runtime before YAGA starts.
+
+This remains an unprivileged PR check and therefore a quality signal, not a security authority. The
+policy file comes from the PR-head worktree and can be changed by the PR; review policy changes like
+any other code. Title validation is bound to the triggering event rather than the commit SHA. The
+`edited` wake and per-PR cancellation reduce stale ordering, but do not turn title metadata into
+immutable evidence. The copy-ready [commit-policy workflow](https://github.com/dariuszpanas/yaga/blob/main/examples/commit-policy.yml) pins an
+audited pre-release commit; review and deliberately replace that immutable SHA when adopting a
+newer YAGA revision.
+
+## Other workflow checks
+
+See [workflow checks](workflow-checks.md) for immutable references, security profiles, and
+Docker-backed syntax checks. Use [repository plans](repository-plans.md) to combine providers.
+
+If your commit policy enables Typos, install the executable in the same job before invoking YAGA:
+
+```bash
+cargo install typos-cli --version 1.49.0 --locked
+```
+
+See [commit policy](commit-policy.md#optional-typos-integration) for errors and configuration.

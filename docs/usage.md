@@ -164,15 +164,7 @@ yaga gate agent-review finalize
 ```
 
 Consumers should use the supplied composite Action and trusted default-branch workflow model,
-not invoke write operations from pull-request code. See [Agent review gate](agent-review-gate.md)
+not invoke write operations from pull-request code. See [GitHub review adapter](github-review-adapter.md)
 for the lifecycle, evidence, authorization, and quota requirements.
 
-## Documentation preview and build
-
-```bash
-make docs-serve
-make docs
-```
-
-The preview server watches Markdown changes. The build target uses Zensical strict clean mode so
-stale cache state cannot hide broken links or navigation.
+For documentation development, see [Contributing](contributing.md#build-these-docs-locally).

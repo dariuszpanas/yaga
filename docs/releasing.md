@@ -31,9 +31,18 @@ It never runs the PyPI upload job. Manual runs on other branches are skipped.
 Download the artifact to inspect the wheel and source distribution. A rehearsal is build evidence,
 not proof that PyPI's publisher/environment setup works: OIDC authorization happens on publication.
 
+Inspect the description embedded in the wheel, rendered with `readme_renderer.markdown`, in a
+browser. The build gate checks the Markdown content type, absolute HTTPS links, and preserved
+public logo markup; it deliberately does not make network requests. Before publication, verify
+image and link URLs anonymously, including documentation fragments and the package's project
+URLs. The logo must load from the public documentation site. Repository and example links need
+the source repository to be public; authenticated maintainer access does not prove they work for
+package users. Twine's metadata check does not prove remote images or links are reachable.
+
 ## Publish a version
 
-1. Update `pyproject.toml` and user-facing version references. Convert the candidate changelog
+1. Update `pyproject.toml`, `VERSION` in `src/yaga/version_requirement.py`, and user-facing version
+   references. Tests require the Action runtime version to match package metadata. Convert the candidate changelog
    heading into `## [0.1.0] - YYYY-MM-DD`, using the actual release date, and retain `Unreleased`
    above it. The Beta classifier is a maturity label; version `0.1.0` is a normal PyPI version,
    not the PEP 440 prerelease `0.1.0b1`.

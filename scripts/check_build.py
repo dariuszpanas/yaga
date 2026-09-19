@@ -16,6 +16,11 @@ from email.parser import BytesParser
 from pathlib import Path
 from typing import BinaryIO, cast
 
+if __package__:
+    from .check_description import validate_description
+else:
+    from check_description import validate_description
+
 ROOT = Path(__file__).resolve().parents[1]
 MAX_SMOKE_OUTPUT_BYTES = 65_536
 SMOKE_MESSAGE = "feat(build): execute the built wheel"
@@ -37,6 +42,12 @@ def validate_wheel_metadata(raw: bytes) -> None:
         raise SystemExit("wheel has the wrong runtime dependency metadata")
     if metadata.get("Requires-Python") != ">=3.12":
         raise SystemExit("wheel has the wrong Python requirement metadata")
+    if metadata.get("Description-Content-Type") != "text/markdown":
+        raise SystemExit("wheel must declare a Markdown description")
+    payload = metadata.get_payload(decode=True)
+    if not isinstance(payload, bytes):
+        raise SystemExit("wheel must contain a UTF-8 description")
+    validate_description(payload.decode("utf-8"))
 
 
 def run_bounded(
