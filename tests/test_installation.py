@@ -20,6 +20,30 @@ from yaga.errors import ConfigurationError
 from yaga.version_requirement import VERSION, check_requirement
 
 
+def test_scheduled_update_prints_usable_log_commands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shlex
+
+    from yaga.commands import self_manage
+
+    log = tmp_path / "user's update" / "update.log"
+    monkeypatch.setattr(
+        self_manage, "self_update", lambda **kwargs: self_update.UpdateResult(("uv",), log)
+    )
+    result = CliRunner().invoke(app, ["self", "update"])
+    assert result.exit_code == 0
+    assert "scheduled" in result.output
+    assert "uv completed" not in result.output
+    shell_command = next(
+        line.split("Bash/zsh: ", 1)[1]
+        for line in result.output.splitlines()
+        if "Bash/zsh: " in line
+    )
+    assert shlex.split(shell_command) == ["cat", "--", log.as_posix()]
+    assert "Get-Content -LiteralPath '" + str(log).replace("'", "''") + "'" in result.output
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="native Windows launcher handoff")
 def test_windows_worker_waits_and_reports_completion(tmp_path: Path) -> None:
     worker = tmp_path / "worker.py"

@@ -50,6 +50,25 @@ remain supported. A failed download or install stops the script; it does not rep
 Run the installer once, then use the update command below. An existing installation is managed
 by uv's normal conflict handling; the script does not force replacement of another executable.
 
+### MSYS2, Git Bash, and Cygwin on Windows
+
+Use the shell installer above. Native Windows uv manages Windows' `PATH`, which may differ from
+your POSIX shell's `PATH`. The shell installer prints an export command with the resolved tool
+directory and the selected uv directory instead of invoking `uv tool update-shell` on these platforms.
+This also makes a freshly bootstrapped uv available. If uv is already on your PATH, you can resolve
+the directory yourself:
+
+```bash
+export PATH="$(cygpath -u "$(uv --no-config tool dir --bin)"):$PATH"
+hash -r
+yaga --help
+```
+
+Run them in your current shell; a piped installer cannot change its parent shell's environment.
+Add the export line to `~/.zshrc` for zsh or `~/.bashrc` for Bash to persist it. The installer
+does not edit these files. This also applies when installing with uv directly. uv itself must
+be on your shell's `PATH`.
+
 ### uv (recommended)
 
 [Install uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
@@ -116,10 +135,14 @@ being modified by `self update`.
 
 On Windows, the running `yaga.exe` is locked. YAGA starts a hidden worker using the base Python
 interpreter, exits, and lets that worker run uv after the launcher closes. The command prints a
-temporary completion-log path; scheduling is not proof of success. Wait for
+temporary completion-log path and copyable PowerShell and Bash/zsh commands to read it;
+scheduling is not proof of success. Repeat the log command until the completion code appears. Wait for
 `YAGA_UPDATE_EXIT_CODE=0` in the log, then run `yaga --version`. A different code means the update
 failed: inspect the log and run `uv tool upgrade yaga-cli` directly to retry. The helper removes
 itself and retains the log for inspection. On other platforms the command waits for uv to finish.
+For foreground progress on Windows, run `uv tool upgrade yaga-cli` directly instead of starting
+YAGA; uv can then replace the executable without waiting for a handoff. This works in PowerShell,
+MSYS2, and Git Bash.
 
 Use the same installer you chose originally:
 

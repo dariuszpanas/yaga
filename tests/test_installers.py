@@ -112,7 +112,7 @@ Invoke-Expression ([IO.File]::ReadAllText($env:YAGA_INSTALLER_SOURCE))
     assert "running scripts is disabled" not in result.stderr
 
 
-@pytest.mark.parametrize("shell", ["sh", "powershell"])
+@pytest.mark.parametrize("shell", ["sh", "msys-zsh", "powershell"])
 @pytest.mark.parametrize("scenario", ["latest", "pinned", "invalid", "failed", "no-path"])
 def test_installer_delegation(tmp_path: Path, shell: str, scenario: str) -> None:
     if shell == "powershell":
@@ -132,9 +132,16 @@ def test_installer_delegation(tmp_path: Path, shell: str, scenario: str) -> None
         )
         suffix = ".sh"
         arguments = []
+        if shell == "msys-zsh":
+            if sys.platform != "win32":
+                pytest.skip("MSYS2 zsh requires Windows")
+            executable = "C:/msys64/usr/bin/zsh.exe"
+            arguments = ["-f"]
         mock = tmp_path / "uv"
         mock.write_text(
-            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$YAGA_TEST_LOG"\nexit "$YAGA_TEST_EXIT"\n',
+            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$YAGA_TEST_LOG"\n'
+            'if [ "$*" = "--no-config tool dir --bin" ]; then printf "%s\\n" "$YAGA_TEST_BIN"; fi\n'
+            'exit "$YAGA_TEST_EXIT"\n',
             encoding="utf-8",
         )
         mock.chmod(0o755)
@@ -145,10 +152,13 @@ def test_installer_delegation(tmp_path: Path, shell: str, scenario: str) -> None
     environment.update(
         PATH=str(tmp_path) + os.pathsep + environment.get("PATH", ""),
         YAGA_TEST_LOG=log.as_posix(),
+        YAGA_TEST_BIN=(tmp_path / "user's tool bin").as_posix(),
         YAGA_TEST_EXIT="7" if scenario == "failed" else "0",
         YAGA_VERSION={"pinned": "1.2.3", "invalid": "1.2.3;echo bad"}.get(scenario, ""),
         YAGA_NO_MODIFY_PATH="1" if scenario == "no-path" else "0",
     )
+    if shell == "msys-zsh":
+        environment["PATH"] = str(tmp_path) + ";C:/msys64/usr/bin;" + os.environ.get("PATH", "")
     result = subprocess.run(
         [executable, *arguments, str(ROOT / "docs" / ("install" + suffix))],
         cwd=tmp_path,
@@ -170,6 +180,31 @@ def test_installer_delegation(tmp_path: Path, shell: str, scenario: str) -> None
         calls = log.read_text().splitlines()
         package = "yaga-cli==1.2.3" if scenario == "pinned" else "yaga-cli"
         assert calls[0] == f"--no-config tool install --python 3.12 {package}"
-        assert len(calls) == (1 if scenario == "no-path" else 2)
-        if scenario != "no-path":
+        msys_shell = shell in {"sh", "msys-zsh"} and sys.platform == "win32"
+        assert len(calls) == (1 if scenario == "no-path" and not msys_shell else 2)
+        if msys_shell:
+            assert calls[1] == "--no-config tool dir --bin"
+            assert "export PATH='" in result.stdout
+            assert "tool bin'" in result.stdout
+            assert "~/.zshrc" in result.stdout
+            assert "Open a new terminal" not in result.stdout
+            tool_bin = tmp_path / "user's tool bin"
+            tool_bin.mkdir()
+            entrypoint = tool_bin / "yaga"
+            entrypoint.write_text("#!/bin/sh\necho found-test-yaga\n", encoding="utf-8")
+            entrypoint.chmod(0o755)
+            export = next(
+                line.strip() for line in result.stdout.splitlines() if "export PATH=" in line
+            )
+            resolved = subprocess.run(
+                [executable, "-c", export + "; hash -r; yaga"],
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            assert resolved.returncode == 0, resolved.stderr
+            assert resolved.stdout.strip() == "found-test-yaga"
+        elif scenario != "no-path":
             assert calls[1] == "--no-config tool update-shell"

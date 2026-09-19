@@ -34,10 +34,26 @@ install_yaga() (
         uv_bin="$HOME/.local/bin/uv"
     fi
     "$uv_bin" --no-config tool install --python 3.12 "$package"
-    if [ "${YAGA_NO_MODIFY_PATH:-0}" != 1 ]; then
-        "$uv_bin" --no-config tool update-shell
-    fi
-    printf '%s\n' 'YAGA installed. Open a new terminal and run yaga --help.' \
+    case "$(uname -s)" in
+        MSYS*|MINGW*|CYGWIN*)
+            tool_bin=$("$uv_bin" --no-config tool dir --bin)
+            shell_bin=$(cygpath -u "$tool_bin" | sed "s/'/'\\\\''/g")
+            shell_uv_bin=$(cygpath -u "$(dirname "$uv_bin")" | sed "s/'/'\\\\''/g")
+            printf '%s\n' 'YAGA installed. In MSYS2, Git Bash, or Cygwin, run in your current shell:'
+            printf "  export PATH='%s':'%s':\"\$PATH\"\n" "$shell_bin" "$shell_uv_bin"
+            printf '%s\n' \
+                '  hash -r' \
+                '  yaga --help' \
+                'Add the export line to ~/.zshrc (zsh) or ~/.bashrc (bash) to keep it for new shells.'
+            ;;
+        *)
+            if [ "${YAGA_NO_MODIFY_PATH:-0}" != 1 ]; then
+                "$uv_bin" --no-config tool update-shell
+            fi
+            printf '%s\n' 'YAGA installed. Open a new terminal and run yaga --help.'
+            ;;
+    esac
+    printf '%s\n' \
         'Update: yaga self update. Remove: uv tool uninstall yaga-cli.'
 )
 
