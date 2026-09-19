@@ -163,7 +163,7 @@ def test_version_is_available_from_the_installed_command() -> None:
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "yaga 0.1.0"
+    assert result.stdout.strip() == "yaga 0.1.1"
 
 
 def test_github_pull_request_command_skips_multiline_dependabot_commit(

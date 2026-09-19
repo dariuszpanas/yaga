@@ -68,7 +68,7 @@ def test_windows_worker_waits_and_reports_completion(tmp_path: Path) -> None:
     assert not worker.exists()
 
 
-@pytest.mark.parametrize("requirement", [">=0.1.0", "==0.1.0", ">0.0.9, <1.0.0", "!=2.0.0"])
+@pytest.mark.parametrize("requirement", [">=0.1.0", "==0.1.1", ">0.0.9, <1.0.0", "!=2.0.0"])
 def test_requirement_accepts_current_release(requirement: str) -> None:
     assert check_requirement(requirement) == requirement
 
@@ -82,7 +82,7 @@ def test_requirement_rejects_invalid_syntax(requirement: object) -> None:
         check_requirement(requirement)
 
 
-@pytest.mark.parametrize("requirement", [">0.1.0", "<0.1.0", ">=1.0.0", "!=0.1.0"])
+@pytest.mark.parametrize("requirement", [">0.1.1", "<0.1.0", ">=1.0.0", "!=0.1.1"])
 def test_requirement_rejects_incompatible_release(requirement: str) -> None:
     with pytest.raises(ConfigurationError, match="does not satisfy"):
         check_requirement(requirement)
