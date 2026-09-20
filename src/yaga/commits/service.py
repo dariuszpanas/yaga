@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from yaga.commits.checker import check_target
+from yaga.commits.checker import check_header, check_target
 from yaga.commits.config import load_config
 from yaga.commits.git import read_commit, read_range
 from yaga.commits.models import (
@@ -20,7 +20,7 @@ from yaga.commits.quality import (
     QualityReport,
     check_quality,
 )
-from yaga.commits.sources import from_file, from_message, from_stdin
+from yaga.commits.sources import from_edit, from_file, from_message, from_stdin, validate_title
 from yaga.commits.typos import apply_typos
 from yaga.errors import InputError
 
@@ -29,6 +29,8 @@ def check_commits(
     repository: Path,
     *,
     message: str | None = None,
+    title: str | None = None,
+    edit: Path | None = None,
     file: Path | None = None,
     stdin: bool = False,
     commit: str | None = None,
@@ -37,6 +39,8 @@ def check_commits(
 ) -> ValidationReport:
     """Check HEAD or exactly one explicitly selected commit-message source."""
     selected = [
+        title is not None,
+        edit is not None,
         message is not None,
         file is not None,
         stdin,
@@ -44,10 +48,23 @@ def check_commits(
         revision_range is not None,
     ]
     if sum(selected) > 1:
-        raise InputError("choose only one of --message, --file, --stdin, --commit, or --range")
+        raise InputError(
+            "choose only one of --title, --edit, --message, --file, --stdin, --commit, or --range"
+        )
 
     repo = _resolve_repository(repository)
     loaded = load_config(config, start=repo)
+    if title is not None:
+        target = CommitTarget("title", validate_title(title))
+        result = apply_typos(check_header(target, loaded.policy), loaded.policy, repository=repo)
+        return ValidationReport(results=(result,), config_path=loaded.path)
+    if edit is not None:
+        return _check_targets(
+            [from_edit(edit, repository=repo)],
+            config_path=loaded.path,
+            policy=loaded.policy,
+            repository=repo,
+        )
     targets = _select_targets(
         message=message,
         file=file,

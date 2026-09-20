@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from yaga.commits.models import CheckResult, CommitPolicy, Diagnostic, TyposPolicy
+from yaga.commits.models import CheckResult, CommitPolicy, Diagnostic, TyposConfig, TyposPolicy
 from yaga.commits.parser import MAX_MESSAGE_BYTES, normalize_message
 from yaga.errors import InputError, safe_error_text
 from yaga.git.runtime import run_bounded_process
@@ -27,12 +27,21 @@ def apply_typos(
     """Apply optional spelling checks after structural checks and skip decisions."""
     if policy.typos is not TyposPolicy.CHECK or result.skipped_reason is not None:
         return result
-    diagnostics = check_typos(result.target.message, repository=repository, isolated=isolated)
+    diagnostics = check_typos(
+        result.target.message,
+        repository=repository,
+        isolated=isolated,
+        config_isolated=policy.typos_config is TyposConfig.ISOLATED,
+    )
     return replace(result, diagnostics=(*result.diagnostics, *diagnostics))
 
 
 def check_typos(
-    message: str, *, repository: Path | None = None, isolated: bool = False
+    message: str,
+    *,
+    repository: Path | None = None,
+    isolated: bool = False,
+    config_isolated: bool = False,
 ) -> tuple[Diagnostic, ...]:
     """Check one commit message through an installed ``typos`` executable."""
     executable = shutil.which("typos")
@@ -57,7 +66,13 @@ def check_typos(
         raise InputError("commit message exceeds the hard byte limit for Typos input")
     try:
         completed = run_bounded_process(
-            [executable, "-", "--format", "json", *(["--isolated"] if isolated else [])],
+            [
+                executable,
+                "-",
+                "--format",
+                "json",
+                *(["--isolated"] if isolated or config_isolated else []),
+            ],
             cwd=repository,
             stdin_data=message_bytes,
             stdout_limit=MAX_OUTPUT_BYTES,

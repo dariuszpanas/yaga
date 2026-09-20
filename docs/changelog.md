@@ -14,6 +14,9 @@
 
 ### Added
 
+- Check standalone titles with `commit check --title`, clean editor comments explicitly with
+  `commit check --edit`, and choose isolated local spelling with `typos-config = "isolated"`.
+
 - Add explicit PR-author exemptions for dependency update services and other named accounts,
   without changing the existing Dependabot option or bypassing event/head validation.
 

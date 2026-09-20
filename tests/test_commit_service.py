@@ -203,7 +203,7 @@ def test_standalone_service_applies_optional_typos_policy(
 
     monkeypatch.setattr(
         "yaga.commits.typos.check_typos",
-        lambda _message, *, repository, isolated=False: (
+        lambda _message, *, repository, isolated=False, config_isolated=False: (
             seen_repositories.append(repository)
             or (Diagnostic(code="typos.word", message="possible typo 'teh'", line=1),)
         ),
@@ -253,7 +253,7 @@ def test_standalone_service_rejects_multiple_sources_before_repository_work(
 
     with pytest.raises(
         InputError,
-        match=r"choose only one of --message, --file, --stdin, --commit, or --range",
+        match=r"choose only one of --title, --edit, --message, --file, --stdin, --commit, or --range",
     ):
         check_commits(
             Path("missing"),

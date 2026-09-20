@@ -26,6 +26,16 @@ app = typer.Typer(help="Inspect and enforce commit-message policy.", no_args_is_
 
 @app.command("check")
 def check_commits(
+    edit: Annotated[
+        Path | None,
+        typer.Option(
+            "--edit", help="Check an editor file after Git strips comments and whitespace."
+        ),
+    ] = None,
+    title: Annotated[
+        str | None,
+        typer.Option("--title", help="Check one standalone title without body or footer policy."),
+    ] = None,
     message: Annotated[
         str | None,
         typer.Option("--message", "-m", help="Check one explicit message."),
@@ -67,6 +77,8 @@ def check_commits(
     try:
         report = check_commit_service(
             repository,
+            title=title,
+            edit=edit,
             message=message,
             file=file_,
             stdin=stdin,

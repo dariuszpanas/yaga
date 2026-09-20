@@ -14,13 +14,14 @@ from yaga.commits.config import load_config
 from yaga.commits.git import read_commit, read_range
 from yaga.commits.models import CheckResult, CommitTarget, DependabotPullRequestPolicy
 from yaga.commits.parser import header_from
+from yaga.commits.sources import MAX_TITLE_BYTES, validate_title
 from yaga.commits.trusted_policy import load_trusted_policy
 from yaga.commits.typos import apply_typos
 from yaga.errors import GitError, InputError
 from yaga.files import read_file_prefix
 
 MAX_PULL_REQUEST_EVENT_BYTES = 1024 * 1024
-MAX_PULL_REQUEST_TITLE_BYTES = 1024
+MAX_PULL_REQUEST_TITLE_BYTES = MAX_TITLE_BYTES
 MAX_PULL_REQUEST_NUMBER = 9_223_372_036_854_775_807
 MAX_PULL_REQUEST_AUTHOR_LOGIN_BYTES = 128
 MAX_PULL_REQUEST_AUTHOR_TYPE_BYTES = 32
@@ -434,23 +435,4 @@ def _ref(value: object, label: str) -> str:
 
 
 def _title(value: object) -> str:
-    if not isinstance(value, str) or not value:
-        raise InputError("pull request title must be one non-empty line")
-    try:
-        encoded = value.encode("utf-8")
-    except UnicodeEncodeError as error:
-        raise InputError("pull request title is not valid UTF-8") from error
-    if len(encoded) > MAX_PULL_REQUEST_TITLE_BYTES:
-        raise InputError(
-            f"pull request title exceeds the hard {MAX_PULL_REQUEST_TITLE_BYTES}-byte limit"
-        )
-    if any(_unsafe_title_character(character) for character in value):
-        raise InputError("pull request title contains unsafe characters")
-    return value
-
-
-def _unsafe_title_character(value: str) -> bool:
-    category = unicodedata.category(value)
-    return category in {"Cc", "Cs", "Zl", "Zp"} or (
-        category == "Cf" and value not in {"\u200c", "\u200d"}
-    )
+    return validate_title(value, label="pull request title")

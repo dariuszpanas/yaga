@@ -55,8 +55,11 @@ their own revision grammar and output parsing. Every invocation must use the run
 bypasses them. Read repository pointer and alternate metadata only as bounded regular files with
 open-time type and identity revalidation; special files must fail closed before Git starts.
 
-`commit check` accepts exactly one of a message, UTF-8 file, standard input, Git commit, or Git
-range; with none it checks `HEAD`. Preserve full messages, deterministic oldest-first range order,
+`commit check` accepts exactly one of a title, editor file, literal message, UTF-8 file,
+standard input, Git commit, or Git range; with none it checks `HEAD`. Titles apply header and
+spelling policy only. Explicit editor files use bounded Git comment stripping with user and
+repository comment settings; literal files and historical messages are never stripped. Preserve full
+messages, deterministic oldest-first range order,
 hard message/config/output/count bounds, shell-free Git invocation, and explicit failure for missing
 or shallow history. Git-backed commit and range selection reject legacy graft overlays before and
 after reading parent metadata, and replacement refs remain disabled for every Git operation. Commit

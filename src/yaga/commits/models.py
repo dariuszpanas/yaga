@@ -90,6 +90,13 @@ class TyposPolicy(StrEnum):
     CHECK = "check"
 
 
+class TyposConfig(StrEnum):
+    """Whether spelling checks discover ambient Typos configuration."""
+
+    REPOSITORY = "repository"
+    ISOLATED = "isolated"
+
+
 class ParagraphSplittingPolicy(StrEnum):
     """Whether to detect likely sentence splits across blank lines."""
 
@@ -184,6 +191,7 @@ class CommitPolicy:
     length_unit: LengthUnit = LengthUnit.CODEPOINTS
     footer_syntax: FooterSyntax = FooterSyntax.CONVENTIONAL
     skip_pull_request_authors: tuple[str, ...] = ()
+    typos_config: TyposConfig = TyposConfig.REPOSITORY
 
 
 @dataclass(frozen=True, slots=True)

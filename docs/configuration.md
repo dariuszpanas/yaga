@@ -123,6 +123,7 @@ version. Pin the installation separately when CI must always use one exact relea
 | `skip-pull-request-authors` | Empty-default list of up to 128 explicit GitHub PR author logins exempt from title and commit checks. |
 | `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
+| `typos-config` | `repository` (default) discovers Typos settings; `isolated` disables discovery. Trusted Actions always isolate. |
 | `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, max-tokens, max-input-tokens, and input-mode. |
 | `merge-commits` | `ignore`, `check`, or `reject`, based on Git parent identity. |
 | `ignored-headers` | Bounded case-sensitive glob patterns for intentional headers. |

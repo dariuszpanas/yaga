@@ -3,12 +3,35 @@
 from __future__ import annotations
 
 import sys
+import unicodedata
 from pathlib import Path
 
 from yaga.commits.models import CommitTarget
 from yaga.commits.parser import MAX_MESSAGE_BYTES
 from yaga.errors import InputError
 from yaga.files import read_file_prefix
+from yaga.git.runtime import strip_editor_comments
+
+MAX_TITLE_BYTES = 1024
+
+
+def validate_title(value: object, *, label: str = "title") -> str:
+    """Validate a bounded standalone title without normalizing its contents."""
+    if not isinstance(value, str) or not value:
+        raise InputError(f"{label} must be one non-empty line")
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise InputError(f"{label} is not valid UTF-8") from error
+    if len(encoded) > MAX_TITLE_BYTES:
+        raise InputError(f"{label} exceeds the hard {MAX_TITLE_BYTES}-byte limit")
+    for character in value:
+        category = unicodedata.category(character)
+        if category in {"Cc", "Cs", "Zl", "Zp"} or (
+            category == "Cf" and character not in {"\u200c", "\u200d"}
+        ):
+            raise InputError(f"{label} contains unsafe characters")
+    return value
 
 
 def from_message(message: str) -> CommitTarget:
@@ -36,6 +59,19 @@ def from_file(path: Path) -> CommitTarget:
     except UnicodeDecodeError as error:
         raise InputError(f"message file is not valid UTF-8: {resolved}") from error
     return CommitTarget(label=str(resolved), message=message)
+
+
+def from_edit(path: Path, *, repository: Path) -> CommitTarget:
+    """Read an editor file and remove Git comments without modifying the file."""
+    target = from_file(path)
+    cleaned = strip_editor_comments(
+        repository, target.message.encode("utf-8"), maximum=MAX_MESSAGE_BYTES
+    )
+    try:
+        message = cleaned.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise InputError("Git editor cleanup returned invalid UTF-8") from error
+    return CommitTarget(label=target.label, message=message)
 
 
 def from_stdin() -> CommitTarget:
