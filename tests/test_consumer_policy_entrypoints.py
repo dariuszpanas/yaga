@@ -44,9 +44,11 @@ def test_custom_body_entrypoint_agreement(tmp_path: Path, text: str, expected: i
     _assert_entrypoint_agreement(tmp_path, text, expected, config)
 
 
-def _assert_entrypoint_agreement(tmp_path: Path, text: str, expected: int, config: str) -> None:
+def _assert_entrypoint_agreement(
+    tmp_path: Path, text: str, expected: int, config: str, *, title: str = HEADER
+) -> None:
     repo, event, context = _action_fixture(
-        tmp_path, head_message=text, pull_request_title=HEADER, config=config
+        tmp_path, head_message=text, pull_request_title=title, config=config
     )
     executable = shutil.which("yaga")
     assert executable is not None
@@ -124,3 +126,21 @@ def test_warning_policy_entrypoint_agreement(tmp_path: Path, text: str, expected
         "description-min-length=5\n"
     )
     _assert_entrypoint_agreement(tmp_path, text, expected, config)
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Correct behavior\n\nExplain why", 0),
+        ("Correct behavior", 1),
+        ("Correct behavior\nNo separator", 1),
+    ],
+)
+def test_plain_message_entrypoint_agreement(tmp_path: Path, text: str, expected: int) -> None:
+    _assert_entrypoint_agreement(
+        tmp_path,
+        text,
+        expected,
+        '[commit]\nmessage-format="plain"\nbody-policy="required"\n',
+        title="Correct behavior",
+    )

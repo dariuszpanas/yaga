@@ -21,6 +21,7 @@ from yaga.commits.models import (
     LengthUnit,
     LineLengthURLPolicy,
     MergePolicy,
+    MessageFormat,
     ParagraphSplittingPolicy,
     PresencePolicy,
 )
@@ -30,6 +31,7 @@ from yaga.commits.parser import (
     iter_footer_starts,
     normalize_message,
     parse_message,
+    parse_plain_message,
 )
 from yaga.commits.policy import resolve_presence_policy
 from yaga.commits.severity import apply_severity
@@ -85,13 +87,18 @@ def _check_target(
     if any(fnmatchcase(header, pattern) for pattern in policy.ignored_headers):
         return CheckResult(target=target, header=header, skipped_reason="ignored header")
 
-    parsed = parse_message(normalized, footer_syntax=policy.footer_syntax)
+    parser = parse_plain_message if policy.message_format is MessageFormat.PLAIN else parse_message
+    parsed = parser(normalized, footer_syntax=policy.footer_syntax)
     if parsed is None:
         return _failure(
             target,
             header,
             "syntax.header",
-            "expected <type>[optional scope][!]: <description>",
+            (
+                "expected one nonempty plain title without outer whitespace or unsafe controls"
+                if policy.message_format is MessageFormat.PLAIN
+                else "expected <type>[optional scope][!]: <description>"
+            ),
         )
 
     diagnostics: list[Diagnostic] = []
@@ -103,38 +110,39 @@ def _check_target(
                 line=2,
             )
         )
-    _check_case(diagnostics, parsed.commit_type, policy.type_case, component="type")
-    if policy.allowed_types is not None and not _contains_casefold(
-        policy.allowed_types, parsed.commit_type
-    ):
-        diagnostics.append(
-            Diagnostic(
-                code="type.allowed",
-                message=f"type {parsed.commit_type!r} is not in allowed-types",
-            )
-        )
-
-    scope_policy = _scope_policy_for_type(policy, parsed.commit_type)
-    if parsed.scope is None:
-        if scope_policy is PresencePolicy.REQUIRED:
-            diagnostics.append(
-                Diagnostic(code="scope.required", message="a scope is required by policy")
-            )
-    else:
-        if scope_policy is PresencePolicy.FORBIDDEN:
-            diagnostics.append(
-                Diagnostic(code="scope.forbidden", message="scopes are forbidden by policy")
-            )
-        _check_case(diagnostics, parsed.scope, policy.scope_case, component="scope")
-        if policy.allowed_scopes is not None and not _contains_casefold(
-            policy.allowed_scopes, parsed.scope
+    if parsed.commit_type is not None:
+        _check_case(diagnostics, parsed.commit_type, policy.type_case, component="type")
+        if policy.allowed_types is not None and not _contains_casefold(
+            policy.allowed_types, parsed.commit_type
         ):
             diagnostics.append(
                 Diagnostic(
-                    code="scope.allowed",
-                    message=f"scope {parsed.scope!r} is not in allowed-scopes",
+                    code="type.allowed",
+                    message=f"type {parsed.commit_type!r} is not in allowed-types",
                 )
             )
+
+        scope_policy = _scope_policy_for_type(policy, parsed.commit_type)
+        if parsed.scope is None:
+            if scope_policy is PresencePolicy.REQUIRED:
+                diagnostics.append(
+                    Diagnostic(code="scope.required", message="a scope is required by policy")
+                )
+        else:
+            if scope_policy is PresencePolicy.FORBIDDEN:
+                diagnostics.append(
+                    Diagnostic(code="scope.forbidden", message="scopes are forbidden by policy")
+                )
+            _check_case(diagnostics, parsed.scope, policy.scope_case, component="scope")
+            if policy.allowed_scopes is not None and not _contains_casefold(
+                policy.allowed_scopes, parsed.scope
+            ):
+                diagnostics.append(
+                    Diagnostic(
+                        code="scope.allowed",
+                        message=f"scope {parsed.scope!r} is not in allowed-scopes",
+                    )
+                )
 
     if (
         policy.header_max_length is not None
@@ -215,7 +223,7 @@ def _check_target(
                 )
             )
         body_policy, _ = resolve_presence_policy(
-            policy.body_policy, policy.body_policy_by_type, parsed.commit_type
+            policy.body_policy, policy.body_policy_by_type, parsed.commit_type or ""
         )
         has_body = bool(parsed.body.strip())
         if body_policy is PresencePolicy.REQUIRED and not has_body:

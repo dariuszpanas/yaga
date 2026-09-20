@@ -52,6 +52,54 @@ def parse_message(
     ):
         return None
 
+    return _parse_content(
+        normalized,
+        commit_type=commit_type,
+        scope=scope,
+        description=match.group("description"),
+        breaking_header=match.group("breaking") == "!",
+        footer_syntax=footer_syntax,
+    )
+
+
+def parse_plain_message(
+    message: str, *, footer_syntax: FooterSyntax = FooterSyntax.CONVENTIONAL
+) -> ParsedCommit | None:
+    """Parse an ordinary title without inferring Conventional Commit components."""
+    normalized = normalize_message(message)
+    header = header_from(normalized)
+    if (
+        not header
+        or header != header.strip()
+        or any(
+            unicodedata.category(char) in {"Cc", "Cs", "Zl", "Zp"}
+            or (unicodedata.category(char) == "Cf" and char not in {"\u200c", "\u200d"})
+            for char in header
+        )
+    ):
+        return None
+    return _parse_content(
+        normalized,
+        commit_type=None,
+        scope=None,
+        description=header,
+        breaking_header=False,
+        footer_syntax=footer_syntax,
+    )
+
+
+def _parse_content(
+    normalized: str,
+    *,
+    commit_type: str | None,
+    scope: str | None,
+    description: str,
+    breaking_header: bool,
+    footer_syntax: FooterSyntax,
+) -> ParsedCommit:
+    """Share only paragraph/footer parsing between the two header grammars."""
+    lines = normalized.split("\n")
+    header = lines[0]
     separator_valid = len(lines) == 1 or lines[1] == ""
     content_start = 2 if len(lines) > 1 and lines[1] == "" else 1
     content = lines[content_start:]
@@ -69,14 +117,13 @@ def parse_message(
             footer_syntax=footer_syntax,
         )
     )
-    breaking_header = match.group("breaking") == "!"
 
     return ParsedCommit(
         message=normalized,
         header=header,
         commit_type=commit_type,
         scope=scope,
-        description=match.group("description"),
+        description=description,
         breaking=breaking_header or breaking_footer,
         breaking_header=breaking_header,
         breaking_footer=breaking_footer,

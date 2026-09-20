@@ -50,6 +50,7 @@ class ConfigStarter(StrEnum):
     RECOMMENDED_V1 = "recommended-v1"
     TITLE_V1 = "title-v1"
     COMPLETE_MESSAGE_V1 = "complete-message-v1"
+    PLAIN_V1 = "plain-v1"
 
 
 _TITLE_CONFIG = """# Editable title-focused policy; YAGA still checks selected commits.
@@ -76,7 +77,18 @@ body-policy-by-type = {feat = "required", fix = "required"}
 pull-request-message = "title-only"
 merge-commits = "ignore"
 """
+_PLAIN_CONFIG = """# Ordinary message structure with explicit editable limits.
+config-version = 1
+
+[commit]
+message-format = "plain"
+header-max-length = 100
+description-ending = "allow"
+body-policy = "optional"
+merge-commits = "ignore"
+"""
 _STARTERS = {
+    ConfigStarter.PLAIN_V1: _PLAIN_CONFIG.encode("utf-8"),
     ConfigStarter.RECOMMENDED_V1: _RECOMMENDED_CONFIG_BYTES,
     ConfigStarter.TITLE_V1: _TITLE_CONFIG.encode("utf-8"),
     ConfigStarter.COMPLETE_MESSAGE_V1: _COMPLETE_CONFIG.encode("utf-8"),
