@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-20
+
 ### Fixed
 
 - Honor optional Typos spelling checks for GitHub PR titles and commit messages, including the
