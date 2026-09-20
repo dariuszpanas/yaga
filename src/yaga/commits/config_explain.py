@@ -4,13 +4,15 @@ import re
 import unicodedata
 from typing import Any
 
-from yaga.commits.models import CommitPolicy
+from yaga.commits.models import CommitPolicy, MessageFormat
 from yaga.commits.policy import resolve_presence_policy
 from yaga.errors import InputError
 
 
 def explain_type(policy: CommitPolicy, commit_type: str) -> dict[str, Any]:
     """Explain overrides without claiming that a complete message would pass."""
+    if policy.message_format is MessageFormat.PLAIN:
+        raise InputError("plain message-format has no commit type to explain")
     if re.fullmatch(r"[^\s()!:]{1,128}", commit_type) is None or any(
         unicodedata.category(char).startswith("C") for char in commit_type
     ):

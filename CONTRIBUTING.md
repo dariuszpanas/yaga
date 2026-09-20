@@ -478,3 +478,10 @@ commit report schema v2 even for clean, empty, and skipped results; default comm
 v1. Diagnostic identity/order is stable, warning-only targets pass, and warning_count counts findings,
 not targets. Preserve severity through spelling, PR checks, and aggregate repository annotations;
 repository/error/config/quality envelopes retain their independent existing schema contracts.
+
+Keep message-format explicit and default conventional. Plain headers use a separate parser with no
+invented type/scope/breaking marker, sharing only content/footer parsing and applicable policy.
+Reject conventional-only config and warnings in plain mode. Message templates must remain stdout-only
+and deliberately incomplete, with explicit conventional components, no invented description or
+footer values, and an explicit supported editor comment character. Validate component input before
+ignored-header policy can bypass it; never modify Git configuration or commit history.

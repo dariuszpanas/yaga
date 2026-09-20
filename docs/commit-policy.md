@@ -401,3 +401,57 @@ quality-advisory reports, and operational-error envelopes retain their existing 
 Repository JSON retains its aggregate schema v1, with the commit child report advertising its own
 schema v2. Consumers enabling warnings must handle the child's version and severity explicitly;
 counting every diagnostic as an error is no longer correct for schema v2.
+
+## Ordinary messages and authoring help (development toward 0.2.0)
+
+Teams that want message policy without Conventional Commit prefixes can opt into plain format:
+
+```toml
+[tool.yaga.commit]
+message-format = "plain"
+header-max-length = 100
+body-policy = "required"
+```
+
+Or start from an editable, frozen policy with `yaga config init --starter plain-v1`.
+The default remains `"conventional"`; format is never inferred from the message. Plain format
+requires a nonempty first line without outer whitespace or unsafe controls. The whole first line
+is the description. Header/description limits, casing and ending policy, body/footer rules,
+references, spelling, warnings, Git merge policy, and explicit ignored headers still apply.
+A blank line must separate the title from body or footers.
+
+Plain parsing does not invent a type, scope, or header breaking marker, even when the text looks
+like `fix(core)!: example`. Final footer parsing is shared, including recognized breaking footers,
+but `!` has no special header meaning. Plain configuration rejects `allowed-types`, `type-case`,
+`scope-policy`, `allowed-scopes`, `scope-case`, `scope-policy-by-type`, `body-policy-by-type`, and
+`breaking-markers`, even if explicitly set to their conventional defaults. Warning rules for type,
+scope, or marker pairing are also rejected. Remove those keys when converting an existing policy;
+`config show --type` is not applicable to plain format.
+
+This option does not make messages suitable for tools that require Conventional Commit release
+classification. It changes YAGA's explicit validation grammar only. PR titles, opted-in proposed
+messages, and ordinary selected commits use the same configured format; title-only checks still
+exclude body and footer requirements.
+
+### Read-only message templates
+
+```bash
+yaga commit template --type fix --scope cli
+yaga commit template --type fix --scope cli --comment-char ';'
+# With message-format = "plain":
+yaga commit template
+```
+
+`commit template` prints an incomplete draft using the selected policy. It never writes a file,
+changes Git configuration, launches an editor, or rewrites history. Conventional drafts require an
+explicit type and a scope when policy requires one; supplied components must satisfy blocking policy even
+if an ignored-header pattern would otherwise skip checking. Plain drafts reject type/scope options.
+
+The description is deliberately blank. Required footer labels have blank values: YAGA does not
+invent a reason, work-item ID, sign-off identity, or a `Validation: passed` claim. Commented guidance
+shows effective prose requirements, relevant limits, allowed footer values, and warning rules.
+Complete the draft yourself and validate the final message; the draft is not a passing example.
+
+Template comments default to `#`; `;` is also supported explicitly. Match the Git editor's comment
+character or remove the guidance before committing. YAGA does not inspect or change that setting.
+`commit check --file` reads comments literally; `--edit` uses Git's configured cleanup behavior.

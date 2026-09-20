@@ -22,6 +22,7 @@ from yaga.commits.models import (
     LineLengthURLPolicy,
     LoadedConfig,
     MergePolicy,
+    MessageFormat,
     ParagraphSplittingPolicy,
     PresencePolicy,
     PullRequestMessagePolicy,
@@ -84,6 +85,7 @@ _COMMIT_KEYS = frozenset(
         "required-issue-prefixes",
         "footer-values",
         "warning-rules",
+        "message-format",
         "forbidden-footer-tokens",
         "merge-commits",
         "ignored-headers",
@@ -204,6 +206,24 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
     if not isinstance(raw_commit, dict):
         raise ConfigurationError(f"commit must be a table in {path}")
     _reject_unknown(raw_commit, _COMMIT_KEYS, label="commit", path=path)
+    message_format = _enum(
+        raw_commit.get("message-format", "conventional"), MessageFormat, "message-format", path
+    )
+    if message_format is MessageFormat.PLAIN:
+        incompatible = {
+            "allowed-types",
+            "type-case",
+            "scope-policy",
+            "allowed-scopes",
+            "scope-case",
+            "scope-policy-by-type",
+            "body-policy-by-type",
+            "breaking-markers",
+        } & raw_commit.keys()
+        if incompatible:
+            raise ConfigurationError(
+                f"plain message-format does not support {sorted(incompatible)!r} in {path}"
+            )
     raw_quality = raw_commit.get("quality", {})
     quality = _quality_policy(raw_quality, path)
 
@@ -324,6 +344,8 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         reachable_scope_policies=reachable_scope_policies,
         description_min=description_min,
     )
+    if message_format is MessageFormat.PLAIN:
+        minimum_header = description_min
     if header_max is not None and header_max < minimum_header:
         raise ConfigurationError(
             f"header-max-length cannot fit the configured minimum header length of "
@@ -368,7 +390,14 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         raise ConfigurationError(
             f"warning-rules must contain unique supported policy diagnostic codes in {path}"
         )
+    if message_format is MessageFormat.PLAIN and any(
+        code.startswith(("type.", "scope.", "breaking.")) for code in warning_rules
+    ):
+        raise ConfigurationError(
+            f"plain message-format cannot warn on conventional-only rules in {path}"
+        )
     return CommitPolicy(
+        message_format=message_format,
         warning_rules=warning_rules,
         required_issue_prefixes=issue_prefixes,
         footer_values=footer_values,

@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from yaga.commits.config import load_config
 from yaga.commits.github_reporting import (
     CommitOutputFormat,
     render_commit_error,
@@ -19,9 +20,41 @@ from yaga.commits.reporting import (
 )
 from yaga.commits.service import check_commit_quality
 from yaga.commits.service import check_commits as check_commit_service
+from yaga.commits.template import TemplateComment, message_template
 from yaga.errors import YagaError
 
 app = typer.Typer(help="Inspect and enforce commit-message policy.", no_args_is_help=True)
+
+
+@app.command("template")
+def template(
+    commit_type: Annotated[
+        str | None, typer.Option("--type", help="Explicit conventional commit type.")
+    ] = None,
+    scope: Annotated[
+        str | None, typer.Option("--scope", help="Explicit conventional scope, if needed.")
+    ] = None,
+    repository: Annotated[
+        Path, typer.Option("--repo", help="Configuration discovery root.")
+    ] = Path("."),
+    config: Annotated[
+        Path | None, typer.Option("--config", help="Use one explicit configuration file.")
+    ] = None,
+    comment: Annotated[
+        TemplateComment,
+        typer.Option("--comment-char", help="Match the editor's Git comment character."),
+    ] = TemplateComment.HASH,
+) -> None:
+    """Print an incomplete, policy-guided message template without modifying files or Git."""
+    try:
+        loaded = load_config(config, start=repository.expanduser().resolve())
+        output = message_template(
+            loaded.policy, commit_type=commit_type, scope=scope, comment=comment
+        )
+    except YagaError as error:
+        typer.echo(render_commit_error(error, CommitOutputFormat.TEXT), err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(output, nl=False)
 
 
 @app.command("check")

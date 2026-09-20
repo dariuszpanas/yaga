@@ -132,6 +132,13 @@ class QualityInputMode(StrEnum):
     TITLE = "title"
 
 
+class MessageFormat(StrEnum):
+    """Explicit message structure, independent of prose policy."""
+
+    CONVENTIONAL = "conventional"
+    PLAIN = "plain"
+
+
 class DiagnosticSeverity(StrEnum):
     """Whether a policy finding blocks validation."""
 
@@ -212,6 +219,7 @@ class CommitPolicy:
     required_issue_prefixes: tuple[str, ...] = ()
     footer_values: tuple[tuple[str, tuple[str, ...]], ...] = ()
     warning_rules: tuple[str, ...] = ()
+    message_format: MessageFormat = MessageFormat.CONVENTIONAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,11 +241,11 @@ class CommitFooter:
 
 @dataclass(frozen=True, slots=True)
 class ParsedCommit:
-    """A structurally valid Conventional Commit message."""
+    """Parsed message fields shared by explicit conventional and plain formats."""
 
     message: str
     header: str
-    commit_type: str
+    commit_type: str | None
     scope: str | None
     description: str
     breaking: bool
