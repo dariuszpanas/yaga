@@ -459,3 +459,8 @@ GitHub event check composes literal title, blank line, and bounded UTF-8 body; n
 are empty. Preserve the independent title result, optional schema-v1 `proposed_message` result,
 full policy and spelling checks, body-edit wakes, and pre-exemption event/range validation.
 Do not infer merge settings or claim the proposed text is the final merged commit.
+
+Keep config starter names frozen and the no-option recommended-v1 bytes unchanged. New starters
+must pass the normal loader and preserve atomic no-overwrite publication, race checks, and dry-run
+cleanup. Type explanations must share override resolution with validation, remain bounded and
+sanitized, and never imply that list membership alone proves a message valid.

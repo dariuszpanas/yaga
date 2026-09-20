@@ -279,3 +279,38 @@ Keep the tool version consistent when comparing local and CI spelling results.
 description together. The default is `"title-only"`. This setting affects only event-aware
 PR checks; see [GitHub Actions](github-actions.md#proposed-merge-messages-development-toward-020)
 for merge settings, event triggers, reporting, and limitations.
+
+## Workflow starters and type explanations (development toward 0.2.0)
+
+Start with explicit, editable settings for your workflow:
+
+```bash
+yaga config init --starter title-v1 --dry-run
+yaga config init --starter complete-message-v1
+yaga config show --type fix
+yaga config show --type docs --format json
+```
+
+`config init` without `--starter` retains the original `recommended-v1` starter byte for byte.
+`title-v1` uses lowercase types and a 100-character header limit, allows ending punctuation,
+leaves bodies optional, and ignores Git-proven merge commits. It does not disable checks on
+commits selected by the caller. `complete-message-v1` uses the same choices and additionally
+requires prose for `feat` and `fix`; other types remain optional. Neither starter imposes a
+word count or restricts the set of types. Their names are frozen: future recommendations need
+new names. Generated TOML is yours to edit, and initialization never replaces existing policy.
+`--dry-run` validates and reports the proposed policy without publishing a configuration file.
+
+Both starters retain title-only PR checks. If the PR description is your proposed merge body,
+explicitly enable `pull-request-message = "title-and-body"` as described above. Full-message
+requirements apply to actual commits and enabled proposed messages, never standalone titles.
+
+`config show --type TYPE` adds the effective body and scope requirements and names the override
+or global setting that supplied each. Matching is case-insensitive, just as in the checker.
+The JSON report adds `effective_type` only when requested. `listed_type_allowed` tells you whether
+the configured type list admits the token; it does not evaluate type casing or prove a complete
+message will pass. All independent casing, scope-list, length, footer, and other rules still apply.
+
+The reported `config_path` identifies the single selected file, or built-in defaults. A project
+configuration replaces the global fallback as a whole; fields are not merged between files.
+For trusted Actions, inspect the committed default-branch policy used by that runner: a local
+`config show` does not reproduce a trusted Action's revision selection automatically.

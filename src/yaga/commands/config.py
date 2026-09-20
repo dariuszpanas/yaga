@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from yaga.commits.config import load_config
-from yaga.commits.config_init import initialize_config
+from yaga.commits.config_init import ConfigStarter, initialize_config
 from yaga.commits.models import OutputFormat
 from yaga.commits.reporting import render_config, render_error
 from yaga.errors import YagaError
@@ -18,6 +18,9 @@ app = typer.Typer(help="Inspect YAGA configuration.", no_args_is_help=True)
 
 @app.command("init")
 def init_config(
+    starter: Annotated[
+        ConfigStarter, typer.Option("--starter", help="Frozen editable starter policy.")
+    ] = ConfigStarter.RECOMMENDED_V1,
     repository: Annotated[
         Path,
         typer.Option(
@@ -39,7 +42,7 @@ def init_config(
 ) -> None:
     """Create or preview a recommended standalone .yaga.toml without overwriting."""
     try:
-        loaded = initialize_config(repository, dry_run=dry_run)
+        loaded = initialize_config(repository, dry_run=dry_run, starter=starter)
     except YagaError as error:
         typer.echo(render_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
@@ -48,6 +51,10 @@ def init_config(
 
 @app.command("show")
 def show_config(
+    commit_type: Annotated[
+        str | None,
+        typer.Option("--type", help="Explain body and scope requirements for this type."),
+    ] = None,
     repository: Annotated[
         Path,
         typer.Option("--repo", help="Configuration discovery root."),
@@ -64,7 +71,8 @@ def show_config(
     """Show the effective configuration and its source."""
     try:
         loaded = load_config(config, start=repository.expanduser().resolve())
+        rendered = render_config(loaded, output_format, commit_type=commit_type)
     except YagaError as error:
         typer.echo(render_error(error, output_format), err=True)
         raise typer.Exit(code=2) from error
-    typer.echo(render_config(loaded, output_format))
+    typer.echo(rendered)

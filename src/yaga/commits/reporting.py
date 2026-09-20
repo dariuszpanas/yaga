@@ -7,6 +7,7 @@ import unicodedata
 from enum import StrEnum
 from typing import Any
 
+from yaga.commits.config_explain import explain_type
 from yaga.commits.models import (
     CheckResult,
     CommitPolicy,
@@ -292,6 +293,7 @@ def render_config(
     output_format: OutputFormat,
     *,
     dry_run: bool = False,
+    commit_type: str | None = None,
 ) -> str:
     """Render the effective configuration and its source."""
     policy = policy_document(config.policy)
@@ -302,6 +304,9 @@ def render_config(
         else None,
         "config": policy,
     }
+    explanation = explain_type(config.policy, commit_type) if commit_type is not None else None
+    if explanation is not None:
+        document["effective_type"] = explanation
     if dry_run:
         document["dry_run"] = True
     if output_format is OutputFormat.JSON:
@@ -317,6 +322,10 @@ def render_config(
     for key, value in policy.items():
         display = "any" if value is None and key.startswith("allowed_") else value
         lines.append(f"{key.replace('_', '-')}: {_text_value(display)}")
+    if explanation is not None:
+        lines.append("Effective type requirements:")
+        for key, value in explanation.items():
+            lines.append(f"  {key.replace('_', '-')}: {_text_value(value)}")
     return "\n".join(lines)
 
 

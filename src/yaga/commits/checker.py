@@ -30,6 +30,7 @@ from yaga.commits.parser import (
     normalize_message,
     parse_message,
 )
+from yaga.commits.policy import resolve_presence_policy
 from yaga.errors import InputError
 
 _TERMINAL_PUNCTUATION = (".", "!", "?")
@@ -211,8 +212,8 @@ def _check_target(
                     message="breaking changes must use both ! and a BREAKING CHANGE footer",
                 )
             )
-        body_policy = {key.casefold(): value for key, value in policy.body_policy_by_type}.get(
-            parsed.commit_type.casefold(), policy.body_policy
+        body_policy, _ = resolve_presence_policy(
+            policy.body_policy, policy.body_policy_by_type, parsed.commit_type
         )
         has_body = bool(parsed.body.strip())
         if body_policy is PresencePolicy.REQUIRED and not has_body:
@@ -400,13 +401,10 @@ def _contains_casefold(values: tuple[str, ...], candidate: str) -> bool:
 
 def _scope_policy_for_type(policy: CommitPolicy, commit_type: str) -> PresencePolicy:
     """Resolve one case-insensitive per-type override or the global fallback."""
-    if not policy.scope_policy_by_type:
-        return policy.scope_policy
-    folded_type = commit_type.casefold()
-    for configured_type, override in policy.scope_policy_by_type:
-        if configured_type.casefold() == folded_type:
-            return override
-    return policy.scope_policy
+    effective, _ = resolve_presence_policy(
+        policy.scope_policy, policy.scope_policy_by_type, commit_type
+    )
+    return effective
 
 
 def _check_footer_tokens(
