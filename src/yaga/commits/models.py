@@ -202,6 +202,8 @@ class CommitPolicy:
     body_policy_by_type: tuple[tuple[str, PresencePolicy], ...] = ()
     body_max_length: int | None = None
     pull_request_message: PullRequestMessagePolicy = PullRequestMessagePolicy.TITLE_ONLY
+    required_issue_prefixes: tuple[str, ...] = ()
+    footer_values: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

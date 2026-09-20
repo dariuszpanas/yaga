@@ -314,3 +314,45 @@ The reported `config_path` identifies the single selected file, or built-in defa
 configuration replaces the global fallback as a whole; fields are not merged between files.
 For trusted Actions, inspect the committed default-branch policy used by that runner: a local
 `config show` does not reproduce a trusted Action's revision selection automatically.
+
+## References and footer values (development toward 0.2.0)
+
+To require a work-item reference and a controlled validation label in complete messages:
+
+```toml
+[tool.yaga.commit]
+required-issue-prefixes = ["#", "PROJ-"]
+required-footer-tokens = ["Validation"]
+footer-values = {Validation = ["passed", "not-run"]}
+```
+
+Both new settings default to empty and apply only to complete messages, including opted-in
+proposed PR messages. Standalone titles and the independent PR title result remain header-only.
+A full message with neither `#123` nor `PROJ-123` reports `reference.required`.
+
+References are case-sensitive whitespace-delimited tokens, optionally wrapped in the punctuation
+`()` `[]` `{}` `<>` `,` `.` `;` `:` `!` `?` or ASCII quotation marks. A configured prefix must be followed
+by 1–20 ASCII digits, beginning with 1–9. `(#123).` matches; `#0`, `#012`, `prefix#123`, and
+`https://example.com/#123` do not. References may appear in the header, prose, or final footers.
+Markdown links, URLs, and tracker-specific query syntax are not interpreted. Prefixes start with
+an ASCII letter or `#`, followed by ASCII letters, digits, `_`, or `-`; there are at most 128 unique
+prefixes of at most 64 characters. Matching uses a bounded prefix tree over the already bounded
+message rather than user-supplied regular expressions.
+
+`footer-values` constrains every occurrence of each configured final footer token, matching tokens
+case-insensitively and values case-sensitively. It does not require the token to occur: combine it
+with `required-footer-tokens` when presence is mandatory. Values are the complete parsed footer
+value up to the next recognized token, with outer whitespace removed. A multiline value must match
+as a whole, so it cannot satisfy a configured single-line choice by adding an approved first line.
+Each offending token produces one source-located `footer.value` diagnostic. The configured footer
+syntax and paragraph boundary still determine which text is a footer; prose that resembles a
+trailer is not silently reclassified. With hash separators, `Refs #123` has value `123`.
+
+The table allows up to 128 unique case-insensitive tokens and 256 total choices, with at most 128
+choices per token. Each choice is a nonempty safe single-line string of at most 256 characters,
+without outer whitespace; duplicates are rejected. Breaking-change tokens and tokens forbidden
+by `forbidden-footer-tokens` cannot have value constraints.
+
+These options verify stored syntax only. A reference does not prove that an issue exists or is
+resolved. A `Validation: passed` label does not prove that tests ran. An allowed sign-off value
+would not prove identity, DCO compliance, or a cryptographic signature.

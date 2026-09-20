@@ -4,6 +4,9 @@
 
 ### Added
 
+- Require bounded work-item references and constrain exact footer values through opt-in
+  `required-issue-prefixes` and `footer-values` settings (planned for 0.2.0).
+
 - Add frozen editable workflow starters and `config show --type` explanations of effective
   body/scope overrides, preserving the existing default starter (planned for 0.2.0).
 

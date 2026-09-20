@@ -464,3 +464,10 @@ Keep config starter names frozen and the no-option recommended-v1 bytes unchange
 must pass the normal loader and preserve atomic no-overwrite publication, race checks, and dry-run
 cleanup. Type explanations must share override resolution with validation, remain bounded and
 sanitized, and never imply that list membership alone proves a message valid.
+
+Keep required-issue-prefixes and footer-values empty by default and full-message-only. References
+are bounded standalone prefix-plus-positive-ASCII-ID tokens, never unrestricted regexes or network
+lookups. Footer values reuse the parser's final suffix and token boundaries, check every occurrence,
+trim outer whitespace, compare values exactly, and emit at most one footer.value finding per token.
+Presence remains separate. Preserve configuration bounds and reject forbidden/breaking token
+constraints; neither reference syntax nor footer labels prove external state or identity.
