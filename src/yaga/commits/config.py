@@ -28,6 +28,7 @@ from yaga.commits.models import (
     QualityPolicy,
     QualityProvider,
     QualityTask,
+    TyposConfig,
     TyposPolicy,
 )
 from yaga.config_scope import global_config_path
@@ -72,6 +73,7 @@ _COMMIT_KEYS = frozenset(
         "dependabot-pull-requests",
         "skip-pull-request-authors",
         "typos",
+        "typos-config",
         "quality",
         "required-footer-tokens",
         "forbidden-footer-tokens",
@@ -423,6 +425,12 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             raw_commit.get("typos", TyposPolicy.SKIP.value),
             TyposPolicy,
             "typos",
+            path,
+        ),
+        typos_config=_enum(
+            raw_commit.get("typos-config", TyposConfig.REPOSITORY.value),
+            TyposConfig,
+            "typos-config",
             path,
         ),
         quality=quality,

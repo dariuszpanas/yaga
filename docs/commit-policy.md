@@ -172,9 +172,28 @@ and `footer.forbidden`. Text and versioned JSON reports use these exit codes:
 | `1` | At least one commit violated policy. |
 | `2` | Invocation, input, configuration, or Git failed. |
 
+## Standalone titles
+
+For a standalone title, use `yaga commit check --title "fix: correct the result"`.
+This applies header policy and optional spelling, without body or footer requirements.
+Titles must be one nonempty line of at most 1,024 UTF-8 bytes. Title input is mutually
+exclusive with every other message source.
+
 ## Local commit-message hook
 
-YAGA ships a pre-commit provider for the existing file-backed command. Pin the repository to an
+For an editor message containing Git comments, use `yaga commit check --edit "$1"` in
+a custom `commit-msg` hook. This reads the file without modifying it and delegates
+comment removal and whitespace cleanup to `git stripspace --strip-comments`, using
+Git's user and repository configuration, including `core.commentChar` and supported
+`core.commentString` settings. Comments cannot satisfy body requirements or introduce
+spelling findings. This is explicit strip-comments behavior, not an emulation of every
+`git commit --cleanup` mode; use literal `--file` when comments are intentional content.
+Git command-line `-c` overrides are not inherited. Automatic comment-character selection
+is not reconstructed from the editor session; use a fixed configured comment prefix.
+Missing files and invalid UTF-8 remain input errors. `--edit` cannot be combined with
+another source.
+
+YAGA ships a pre-commit provider for the existing literal file-backed command. Pin the repository to an
 audited immutable commit that contains `.pre-commit-hooks.yaml`:
 
 ```yaml
@@ -217,6 +236,11 @@ Lines output, validates bounded finding fields, and converts each finding into a
 `typos.word` diagnostic. This works with
 `--message`, hooks, individual Git commits, ranges, and GitHub pull-request titles and commits.
 The default `typos = "skip"` keeps policy results independent of the tools installed on a developer machine.
+Set `typos-config = "isolated"` alongside `typos = "check"` to disable Typos configuration
+discovery consistently for local titles, complete messages, and hooks. The default
+`typos-config = "repository"` preserves discovery. Trusted Action checks always isolate
+spelling configuration, regardless of this setting. Local isolation still permits Typos
+installed in a project environment; trusted Actions require an executable outside the checkout.
 When Typos provides its bounded `byte_offset`, YAGA preserves it as a 1-based diagnostic column;
 older or alternate JSON output without that field falls back to column 1.
 Text and GitHub output include both the line and column in each policy diagnostic. GitHub

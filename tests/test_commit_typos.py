@@ -244,3 +244,18 @@ def test_trusted_typos_rejects_repository_executable(
     )
     with pytest.raises(InputError, match="outside the repository"):
         check_typos("fix: correct spelling", repository=tmp_path, isolated=True)
+
+
+def test_local_config_isolation_allows_project_installed_tool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = tmp_path / "typos"
+    executable.touch()
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: str(executable))
+
+    def run(command, **kwargs):
+        assert "--isolated" in command
+        return ProcessResult(0, b"", b"", False, False, False)
+
+    monkeypatch.setattr("yaga.commits.typos.run_bounded_process", run)
+    assert check_typos("fix: correct spelling", repository=tmp_path, config_isolated=True) == ()

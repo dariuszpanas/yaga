@@ -357,6 +357,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "skip_pull_request_authors": _json_values(policy.skip_pull_request_authors, maximum=128),
         "dependabot_pull_requests": policy.dependabot_pull_requests.value,
         "typos": policy.typos.value,
+        "typos-config": policy.typos_config.value,
         "quality": {
             "provider": policy.quality.provider.value,
             "task": policy.quality.task.value,

@@ -132,6 +132,54 @@ def run_git(
     return result
 
 
+def strip_editor_comments(repository: Path, message: bytes, *, maximum: int) -> bytes:
+    """Clean explicit editor input with Git's user and repository comment settings.
+
+    This read-only editor adapter deliberately uses user config; revision-bound
+    operations continue to use the isolated environment in run_git.
+    """
+    repo = open_repository(repository)
+    environment = _git_environment()
+    for key in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM"):
+        environment.pop(key, None)
+    for key in (
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_NOSYSTEM",
+    ):
+        if key in os.environ:
+            environment[key] = os.environ[key]
+    try:
+        result = run_bounded_process(
+            [
+                repo.executable,
+                "--no-pager",
+                "--no-lazy-fetch",
+                "-C",
+                str(repo.directory),
+                "stripspace",
+                "--strip-comments",
+            ],
+            environment=environment,
+            stdin_data=message,
+            stdout_limit=maximum,
+            stderr_limit=MAX_GIT_ERROR_BYTES,
+            timeout_seconds=MAX_GIT_SECONDS,
+        )
+    except (OSError, ValueError) as error:
+        raise GitError("Git could not clean the editor message") from error
+    if result.timed_out or result.stdout_overflow or result.stderr_overflow:
+        raise GitError("Git editor cleanup exceeded its bounded execution limits")
+    if result.returncode != 0:
+        raise GitError(f"Git editor cleanup failed: {safe_git_error(result.stderr)}")
+    return result.stdout
+
+
 def _require_no_windows_command_script(executable: Path) -> None:
     """Keep Windows batch dispatch outside the shell-free Git boundary."""
     if os.name != "nt":
