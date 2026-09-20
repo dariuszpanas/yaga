@@ -1,4 +1,4 @@
-"""Opt-in warnings use versioned reports without weakening input boundaries."""
+"""Opt-in warnings use one consistent report shape without weakening input boundaries."""
 
 import json
 from dataclasses import replace
@@ -36,7 +36,7 @@ def test_warning_only_passes_and_mixed_findings_still_fail(tmp_path: Path) -> No
     path = _config(tmp_path)
     report = check_commits(tmp_path, message="fix: correct behavior", config=path)
     assert report.valid and report.passed == 1 and report.failed == 0
-    assert report.warning_count == 1 and report.schema_version == 2
+    assert report.warning_count == 1
     diagnostic = report.results[0].diagnostics[0]
     assert diagnostic.code == "body.required" and diagnostic.severity is DiagnosticSeverity.WARNING
     mixed = check_commits(
@@ -44,7 +44,7 @@ def test_warning_only_passes_and_mixed_findings_still_fail(tmp_path: Path) -> No
     )
     assert not mixed.valid and mixed.failed == 1 and mixed.warning_count == 1
     document = json.loads(render_commit_report(mixed, CommitOutputFormat.JSON))
-    assert document["schema_version"] == 2 and document["warning_count"] == 1
+    assert document["schema_version"] == 1 and document["warning_count"] == 1
     assert {d["severity"] for d in document["commits"][0]["diagnostics"]} == {"error", "warning"}
     github = render_commit_report(mixed, CommitOutputFormat.GITHUB)
     assert "::warning title=" in github and "::error title=" in github
@@ -52,20 +52,20 @@ def test_warning_only_passes_and_mixed_findings_still_fail(tmp_path: Path) -> No
     assert "[warning] [body.required]" in text and "Warnings: 1" in text
 
 
-def test_schema_two_is_selected_even_without_findings(tmp_path: Path) -> None:
+def test_clean_warning_policy_uses_schema_one(tmp_path: Path) -> None:
     report = check_commits(tmp_path, message="fix: x\n\nExplain why", config=_config(tmp_path))
     document = json.loads(render_commit_report(report, CommitOutputFormat.JSON))
-    assert document["schema_version"] == 2 and document["warning_count"] == 0
+    assert document["schema_version"] == 1 and document["warning_count"] == 0
     assert document["valid"]
 
 
-def test_default_schema_keeps_severity_implicit(tmp_path: Path) -> None:
+def test_default_policy_has_explicit_severity_and_warning_count(tmp_path: Path) -> None:
     path = tmp_path / ".yaga.toml"
     path.write_text('[commit]\nbody-policy="required"\n', encoding="utf-8")
     report = check_commits(tmp_path, message="fix: x", config=path)
     document = json.loads(render_commit_report(report, CommitOutputFormat.JSON))
-    assert document["schema_version"] == 1 and "warning_count" not in document
-    assert "severity" not in document["commits"][0]["diagnostics"][0]
+    assert document["schema_version"] == 1 and document["warning_count"] == 0
+    assert document["commits"][0]["diagnostics"][0]["severity"] == "error"
     assert not report.valid
 
 
@@ -138,7 +138,7 @@ def test_annotation_truncation_never_hides_error_severity() -> None:
         for _ in range(50)
     )
     result = replace(result, diagnostics=(*warnings, Diagnostic("syntax.header", "error")))
-    report = ValidationReport((result,), None, report_version=2)
+    report = ValidationReport((result,), None)
     rendered = render_commit_report(report, CommitOutputFormat.GITHUB)
     lines = rendered.splitlines()
     assert len([line for line in lines if line.startswith("::")]) == 50
@@ -157,7 +157,7 @@ def test_pr_warning_report_and_author_skip_schema(tmp_path: Path) -> None:
     report = check_pull_request(event, repo)
     assert report.valid and report.warning_count == 2
     document = json.loads(render_pull_request_report(report, PullRequestOutputFormat.JSON))
-    assert document["schema_version"] == 2 and document["warning_count"] == 2
+    assert document["schema_version"] == 1 and document["warning_count"] == 2
     assert document["pull_request"]["proposed_message"]["diagnostics"][0]["severity"] == "warning"
     github = render_pull_request_report(report, PullRequestOutputFormat.GITHUB)
     assert "::warning" in github and "::error" not in github
@@ -166,17 +166,19 @@ def test_pr_warning_report_and_author_skip_schema(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     skipped = check_pull_request(event, repo)
-    assert skipped.schema_version == 2 and skipped.skipped == 3 and skipped.warning_count == 0
+    assert skipped.skipped == 3 and skipped.warning_count == 0
+    skipped_document = json.loads(render_pull_request_report(skipped, PullRequestOutputFormat.JSON))
+    assert skipped_document["schema_version"] == 1 and skipped_document["warning_count"] == 0
 
 
-def test_empty_selection_keeps_opted_in_report_version(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_empty_selection_has_zero_warnings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from yaga.commits import service
 
     monkeypatch.setattr(service, "_select_targets", lambda **kwargs: [])
     report = check_commits(tmp_path, config=_config(tmp_path))
-    assert report.schema_version == 2 and report.warning_count == 0 and report.valid
+    assert report.warning_count == 0 and report.valid
+    document = json.loads(render_commit_report(report, CommitOutputFormat.JSON))
+    assert document["schema_version"] == 1 and document["warning_count"] == 0
 
 
 def test_repository_warnings_preserve_nested_schema_and_error_precedence() -> None:
@@ -194,7 +196,7 @@ def test_repository_warnings_preserve_nested_schema_and_error_precedence() -> No
         Diagnostic("body.length", "warning", severity=DiagnosticSeverity.WARNING) for _ in range(60)
     )
     result = replace(result, diagnostics=warnings)
-    child = ValidationReport((result,), None, report_version=2)
+    child = ValidationReport((result,), None)
     check = RepositoryCheckResult(RepositoryProvider.COMMIT, report=child)
     aggregate = RepositoryReport((check,))
     assert aggregate.valid and aggregate.passed == 1
@@ -202,7 +204,7 @@ def test_repository_warnings_preserve_nested_schema_and_error_precedence() -> No
     assert "::warning" in rendered and "::error" not in rendered
     document = json.loads(render_repository_report(aggregate, RepositoryOutputFormat.JSON))
     assert document["schema_version"] == 1
-    assert document["checks"][0]["report"]["schema_version"] == 2
+    assert document["checks"][0]["report"]["schema_version"] == 1
     errored = RepositoryReport(
         (check, RepositoryCheckResult(RepositoryProvider.WORKFLOW, error=InputError("unavailable")))
     )

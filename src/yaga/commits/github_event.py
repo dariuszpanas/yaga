@@ -73,7 +73,6 @@ class PullRequestValidationReport:
     commits: tuple[CheckResult, ...]
     config_path: Path | None
     proposed_message: CheckResult | None = None
-    report_version: int = 1
 
     @property
     def warning_count(self) -> int:
@@ -81,11 +80,6 @@ class PullRequestValidationReport:
         return sum(
             d.severity is DiagnosticSeverity.WARNING for r in self.results for d in r.diagnostics
         )
-
-    @property
-    def schema_version(self) -> int:
-        """Select the opt-in warning-aware report contract."""
-        return 2 if self.report_version == 2 or self.warning_count else 1
 
     @property
     def results(self) -> tuple[CheckResult, ...]:
@@ -251,7 +245,6 @@ def check_pull_request(
         commits=commits,
         config_path=loaded.path,
         proposed_message=proposed_message,
-        report_version=2 if loaded.policy.warning_rules else 1,
     )
 
 

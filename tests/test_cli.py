@@ -423,12 +423,14 @@ def test_commit_check_json_preserves_footer_policy_diagnostics(tmp_path: Path) -
     assert document["commits"][0]["diagnostics"] == [
         {
             "code": "footer.required",
+            "severity": "error",
             "message": "required footer token 'Refs' is missing",
             "line": 1,
             "column": 1,
         },
         {
             "code": "footer.forbidden",
+            "severity": "error",
             "message": "footer token 'WIP' is forbidden by policy",
             "line": 3,
             "column": 1,

@@ -16,6 +16,7 @@ from yaga.commits.reporting import (
     MAX_DIAGNOSTIC_MESSAGE,
     MAX_DISPLAY_HEADER,
     MAX_DISPLAY_PATH,
+    SCHEMA_VERSION,
     json_text,
     render_error,
     render_report,
@@ -65,7 +66,7 @@ def _render_commit_github_report(report: ValidationReport) -> str:
         f"YAGA checked {len(report.results)} commit(s): {report.passed} passed, "
         f"{report.failed} failed, {report.skipped} skipped."
     )
-    if report.schema_version == 2:
+    if report.warning_count:
         lines.append(f"Warnings: {report.warning_count} (nonblocking).")
     finding_summary = _commit_finding_summary(report)
     if finding_summary is not None:
@@ -130,7 +131,7 @@ def _render_text_report(report: PullRequestValidationReport) -> str:
         f"{report.passed} passed, "
         f"{report.failed} failed, {report.skipped} skipped."
     )
-    if report.schema_version == 2:
+    if report.warning_count:
         lines.append(f"Warnings: {report.warning_count} (nonblocking).")
     if report.config_path is not None:
         lines.append(f"Config: {safe_text(str(report.config_path), maximum=MAX_DISPLAY_PATH)}")
@@ -161,10 +162,9 @@ def _result_lines(result: CheckResult, *, kind: str) -> list[str]:
 
 def _report_document(report: PullRequestValidationReport) -> dict[str, Any]:
     event = report.event
-    schema_version = report.schema_version
     return {
-        "schema_version": schema_version,
-        **({"warning_count": report.warning_count} if schema_version == 2 else {}),
+        "schema_version": SCHEMA_VERSION,
+        "warning_count": report.warning_count,
         "kind": "pull_request_commit_policy",
         "valid": report.valid,
         "checked": len(report.results),
@@ -191,16 +191,10 @@ def _report_document(report: PullRequestValidationReport) -> dict[str, Any]:
                 "id": event.author_id,
                 "type": event.author_type,
             },
-            "title": result_document(report.title, schema_version=schema_version),
-            "commits": [
-                result_document(result, schema_version=schema_version) for result in report.commits
-            ],
+            "title": result_document(report.title),
+            "commits": [result_document(result) for result in report.commits],
             **(
-                {
-                    "proposed_message": result_document(
-                        report.proposed_message, schema_version=schema_version
-                    )
-                }
+                {"proposed_message": result_document(report.proposed_message)}
                 if report.proposed_message is not None
                 else {}
             ),
@@ -220,7 +214,7 @@ def _render_github_report(report: PullRequestValidationReport) -> str:
     ):
         summary += f" Skip reason: {DEPENDABOT_PULL_REQUEST_SKIP_REASON}."
     lines.append(summary)
-    if report.schema_version == 2:
+    if report.warning_count:
         lines.append(f"Warnings: {report.warning_count} (nonblocking).")
     finding_summary = _finding_summary(report)
     if finding_summary is not None:

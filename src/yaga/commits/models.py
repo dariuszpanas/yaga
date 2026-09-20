@@ -315,7 +315,6 @@ class ValidationReport:
 
     results: tuple[CheckResult, ...]
     config_path: Path | None
-    report_version: int = 1
 
     @property
     def warning_count(self) -> int:
@@ -323,11 +322,6 @@ class ValidationReport:
         return sum(
             d.severity is DiagnosticSeverity.WARNING for r in self.results for d in r.diagnostics
         )
-
-    @property
-    def schema_version(self) -> int:
-        """Preserve v1 unless warnings are explicitly configured or present."""
-        return 2 if self.report_version == 2 or self.warning_count else 1
 
     @property
     def failed(self) -> int:
