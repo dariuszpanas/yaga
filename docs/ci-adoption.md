@@ -36,6 +36,12 @@ Inspect the target repository's existing policy before creating one. Run the sel
 known good and known failing inputs. Review findings and agree on policy before requiring the job.
 The [adoption recipes](recipes.md) provide concrete commands and policy examples.
 
+For commit adoption, choose a [workflow starter](commit-policy.md#workflow-starters-and-type-explanations)
+that matches how changes reach the main branch. Plain messages and Conventional Commits are explicit
+choices. Selected policy findings can begin as [warnings](commit-policy.md#gradual-enforcement) while
+input and operational failures remain blocking. If PR descriptions become merge messages, enable
+[proposed-message checks](github-actions.md#proposed-merge-messages) as well.
+
 Keep policy in the target repository. Reuse it in CI rather than duplicating policy arguments in
 workflow files. A [repository plan](repository-plans.md) is useful once several checks need the
 same selection; branch and change checks remain separate commands.

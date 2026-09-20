@@ -2,25 +2,27 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-20
+
 ### Added
 
 - Support explicit plain-message policy and a frozen `plain-v1` starter; print incomplete,
-  policy-guided drafts with `commit template` without changing files or Git (planned for 0.2.0).
+  policy-guided drafts with `commit template` without changing files or Git.
 
 - Introduce opt-in `warning-rules` for gradual policy adoption, with consistent schema-v1 commit
-  reports containing severity and warning counts, and nonblocking annotations (planned for 0.2.0).
+  reports containing severity and warning counts, and nonblocking annotations.
 
 - Require bounded work-item references and constrain exact footer values through opt-in
-  `required-issue-prefixes` and `footer-values` settings (planned for 0.2.0).
+  `required-issue-prefixes` and `footer-values` settings.
 
 - Add frozen editable workflow starters and `config show --type` explanations of effective
-  body/scope overrides, preserving the existing default starter (planned for 0.2.0).
+  body/scope overrides, preserving the existing default starter.
 
 - Validate proposed PR title-plus-description messages with opt-in `pull-request-message`,
-  reusing full commit policy and reporting the proposed message separately (planned for 0.2.0).
+  reusing full commit policy and reporting the proposed message separately.
 
 - Allow per-type body requirements with `body-policy-by-type` and cap total prose with
-  `body-max-length`, preserving existing defaults and independent title checks (planned for 0.2.0).
+  `body-max-length`, preserving existing defaults and independent title checks.
 
 ## [0.1.2] - 2026-09-20
 

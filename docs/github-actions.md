@@ -46,7 +46,7 @@ consumer's real-event qualification; they do not authorize a production cutover.
 Use ordinary unprivileged CI for repository checks. The write-capable review adapter has a
 separate [deployment guide](github-review-adapter.md); it is not required to use YAGA in CI.
 
-## Proposed merge messages (development toward 0.2.0)
+## Proposed merge messages
 
 Repositories using the PR title and description as the default commit message can opt in:
 
