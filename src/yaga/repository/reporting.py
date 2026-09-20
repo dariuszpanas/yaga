@@ -242,7 +242,8 @@ def _render_github_report(report: RepositoryReport) -> str:
             f"{omitted} additional repository diagnostic(s) omitted",
             maximum=MAX_DIAGNOSTIC_MESSAGE,
         )
-        lines.append(f"::error title={title}::{data}")
+        severity = "warning" if report.valid else "error"
+        lines.append(f"::{severity} title={title}::{data}")
     lines.append(_summary(report, prefix="YAGA repository checks"))
     return "\n".join(lines)
 
@@ -297,7 +298,7 @@ def _provider_annotations(
                     f"column {diagnostic.column}: {diagnostic.message}",
                     maximum=MAX_DISPLAY_HEADER + MAX_DIAGNOSTIC_MESSAGE,
                 )
-                annotations.append(f"::error title={title}::{data}")
+                annotations.append(f"::{diagnostic.severity.value} title={title}::{data}")
                 if len(annotations) == limit:
                     return tuple(annotations)
         return tuple(annotations)

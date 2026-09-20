@@ -32,6 +32,7 @@ from yaga.commits.models import (
     TyposConfig,
     TyposPolicy,
 )
+from yaga.commits.severity import WARNING_RULES
 from yaga.config_scope import global_config_path
 from yaga.errors import ConfigurationError
 from yaga.files import read_file_prefix
@@ -82,6 +83,7 @@ _COMMIT_KEYS = frozenset(
         "required-footer-tokens",
         "required-issue-prefixes",
         "footer-values",
+        "warning-rules",
         "forbidden-footer-tokens",
         "merge-commits",
         "ignored-headers",
@@ -355,7 +357,19 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
 
     issue_prefixes = _issue_prefixes(raw_commit, path)
     footer_values = _footer_values(raw_commit, path, forbidden_footer_tokens)
+    warning_rules = _string_list(
+        raw_commit.get("warning-rules", []),
+        "warning-rules",
+        path,
+        allow_empty=True,
+        max_item_length=64,
+    )
+    if len(set(warning_rules)) != len(warning_rules) or not set(warning_rules) <= WARNING_RULES:
+        raise ConfigurationError(
+            f"warning-rules must contain unique supported policy diagnostic codes in {path}"
+        )
     return CommitPolicy(
+        warning_rules=warning_rules,
         required_issue_prefixes=issue_prefixes,
         footer_values=footer_values,
         config_version=config_version,

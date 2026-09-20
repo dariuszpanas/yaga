@@ -132,6 +132,13 @@ class QualityInputMode(StrEnum):
     TITLE = "title"
 
 
+class DiagnosticSeverity(StrEnum):
+    """Whether a policy finding blocks validation."""
+
+    ERROR = "error"
+    WARNING = "warning"
+
+
 class OutputFormat(StrEnum):
     """Supported stable report formats."""
 
@@ -204,6 +211,7 @@ class CommitPolicy:
     pull_request_message: PullRequestMessagePolicy = PullRequestMessagePolicy.TITLE_ONLY
     required_issue_prefixes: tuple[str, ...] = ()
     footer_values: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    warning_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +259,7 @@ class Diagnostic:
     message: str
     line: int = 1
     column: int = 1
+    severity: DiagnosticSeverity = DiagnosticSeverity.ERROR
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,14 +291,14 @@ class CheckResult:
         """Return the stable report status."""
         if self.skipped_reason is not None:
             return "skipped"
-        if self.diagnostics:
+        if not self.valid:
             return "failed"
         return "passed"
 
     @property
     def valid(self) -> bool:
         """Return whether this target allows the invocation to succeed."""
-        return not self.diagnostics
+        return not any(d.severity is DiagnosticSeverity.ERROR for d in self.diagnostics)
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,6 +307,19 @@ class ValidationReport:
 
     results: tuple[CheckResult, ...]
     config_path: Path | None
+    report_version: int = 1
+
+    @property
+    def warning_count(self) -> int:
+        """Count nonblocking diagnostics, including those on failed targets."""
+        return sum(
+            d.severity is DiagnosticSeverity.WARNING for r in self.results for d in r.diagnostics
+        )
+
+    @property
+    def schema_version(self) -> int:
+        """Preserve v1 unless warnings are explicitly configured or present."""
+        return 2 if self.report_version == 2 or self.warning_count else 1
 
     @property
     def failed(self) -> int:

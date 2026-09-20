@@ -11,12 +11,11 @@ from yaga.commits.github_event import (
     DEPENDABOT_PULL_REQUEST_SKIP_REASON,
     PullRequestValidationReport,
 )
-from yaga.commits.models import CheckResult, OutputFormat, ValidationReport
+from yaga.commits.models import CheckResult, DiagnosticSeverity, OutputFormat, ValidationReport
 from yaga.commits.reporting import (
     MAX_DIAGNOSTIC_MESSAGE,
     MAX_DISPLAY_HEADER,
     MAX_DISPLAY_PATH,
-    SCHEMA_VERSION,
     json_text,
     render_error,
     render_report,
@@ -61,26 +60,13 @@ def render_commit_error(error: YagaError, output_format: CommitOutputFormat) -> 
 
 
 def _render_commit_github_report(report: ValidationReport) -> str:
-    diagnostics = [
-        safe_text(
-            f"{result.target.sha[:12] if result.target.sha else result.target.label}: "
-            f"[{diagnostic.code}] line {diagnostic.line}, column {diagnostic.column}: "
-            f"{diagnostic.message}",
-            maximum=MAX_DISPLAY_HEADER + MAX_DIAGNOSTIC_MESSAGE,
-        )
-        for result in report.results
-        for diagnostic in result.diagnostics
-    ]
-    visible = diagnostics[:MAX_GITHUB_ANNOTATIONS]
-    if len(diagnostics) > MAX_GITHUB_ANNOTATIONS:
-        visible[-1] = (
-            f"{len(diagnostics) - MAX_GITHUB_ANNOTATIONS + 1} additional policy diagnostic(s) omitted"
-        )
-    lines = [f"::error title=YAGA commit policy::{_workflow_data(message)}" for message in visible]
+    lines = _annotation_lines(report.results)
     lines.append(
         f"YAGA checked {len(report.results)} commit(s): {report.passed} passed, "
         f"{report.failed} failed, {report.skipped} skipped."
     )
+    if report.schema_version == 2:
+        lines.append(f"Warnings: {report.warning_count} (nonblocking).")
     finding_summary = _commit_finding_summary(report)
     if finding_summary is not None:
         lines.append(finding_summary)
@@ -144,6 +130,8 @@ def _render_text_report(report: PullRequestValidationReport) -> str:
         f"{report.passed} passed, "
         f"{report.failed} failed, {report.skipped} skipped."
     )
+    if report.schema_version == 2:
+        lines.append(f"Warnings: {report.warning_count} (nonblocking).")
     if report.config_path is not None:
         lines.append(f"Config: {safe_text(str(report.config_path), maximum=MAX_DISPLAY_PATH)}")
     return "\n".join(lines)
@@ -162,8 +150,9 @@ def _result_lines(result: CheckResult, *, kind: str) -> list[str]:
     if result.skipped_reason is not None:
         lines.append(f"               skipped: {result.skipped_reason}")
     for diagnostic in result.diagnostics:
+        warning_label = "[warning] " if diagnostic.severity is DiagnosticSeverity.WARNING else ""
         lines.append(
-            f"               [{diagnostic.code}] line {diagnostic.line}, "
+            f"               {warning_label}[{diagnostic.code}] line {diagnostic.line}, "
             f"column {diagnostic.column}: "
             f"{safe_text(diagnostic.message, maximum=MAX_DIAGNOSTIC_MESSAGE)}"
         )
@@ -172,8 +161,10 @@ def _result_lines(result: CheckResult, *, kind: str) -> list[str]:
 
 def _report_document(report: PullRequestValidationReport) -> dict[str, Any]:
     event = report.event
+    schema_version = report.schema_version
     return {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema_version,
+        **({"warning_count": report.warning_count} if schema_version == 2 else {}),
         "kind": "pull_request_commit_policy",
         "valid": report.valid,
         "checked": len(report.results),
@@ -200,10 +191,16 @@ def _report_document(report: PullRequestValidationReport) -> dict[str, Any]:
                 "id": event.author_id,
                 "type": event.author_type,
             },
-            "title": result_document(report.title),
-            "commits": [result_document(result) for result in report.commits],
+            "title": result_document(report.title, schema_version=schema_version),
+            "commits": [
+                result_document(result, schema_version=schema_version) for result in report.commits
+            ],
             **(
-                {"proposed_message": result_document(report.proposed_message)}
+                {
+                    "proposed_message": result_document(
+                        report.proposed_message, schema_version=schema_version
+                    )
+                }
                 if report.proposed_message is not None
                 else {}
             ),
@@ -212,27 +209,7 @@ def _report_document(report: PullRequestValidationReport) -> dict[str, Any]:
 
 
 def _render_github_report(report: PullRequestValidationReport) -> str:
-    diagnostics: list[str] = []
-    for result in report.results:
-        identity = result.target.sha[:12] if result.target.sha else result.target.label
-        for diagnostic in result.diagnostics:
-            message = safe_text(
-                f"{identity}: [{diagnostic.code}] line {diagnostic.line}, "
-                f"column {diagnostic.column}: {diagnostic.message}",
-                maximum=MAX_DISPLAY_HEADER + MAX_DIAGNOSTIC_MESSAGE,
-            )
-            diagnostics.append(message)
-
-    lines: list[str] = []
-    if len(diagnostics) > MAX_GITHUB_ANNOTATIONS:
-        visible = diagnostics[: MAX_GITHUB_ANNOTATIONS - 1]
-        omitted = len(diagnostics) - len(visible)
-        visible.append(f"{omitted} additional policy diagnostic(s) omitted")
-    else:
-        visible = diagnostics
-    lines.extend(
-        f"::error title=YAGA commit policy::{_workflow_data(message)}" for message in visible
-    )
+    lines = _annotation_lines(report.results)
     summary = (
         f"YAGA checked pull request #{report.event.number}: one title{_proposed_summary(report)} and "
         f"{len(report.commits)} commit(s); {report.failed} failed, "
@@ -243,10 +220,38 @@ def _render_github_report(report: PullRequestValidationReport) -> str:
     ):
         summary += f" Skip reason: {DEPENDABOT_PULL_REQUEST_SKIP_REASON}."
     lines.append(summary)
+    if report.schema_version == 2:
+        lines.append(f"Warnings: {report.warning_count} (nonblocking).")
     finding_summary = _finding_summary(report)
     if finding_summary is not None:
         lines.append(finding_summary)
     return "\n".join(lines)
+
+
+def _annotation_lines(results: tuple[CheckResult, ...]) -> list[str]:
+    diagnostics: list[tuple[DiagnosticSeverity, str]] = []
+    for result in results:
+        identity = result.target.sha[:12] if result.target.sha else result.target.label
+        for diagnostic in result.diagnostics:
+            message = safe_text(
+                f"{identity}: [{diagnostic.code}] line {diagnostic.line}, "
+                f"column {diagnostic.column}: {diagnostic.message}",
+                maximum=MAX_DISPLAY_HEADER + MAX_DIAGNOSTIC_MESSAGE,
+            )
+            diagnostics.append((diagnostic.severity, message))
+    visible = diagnostics[:MAX_GITHUB_ANNOTATIONS]
+    if len(diagnostics) > MAX_GITHUB_ANNOTATIONS:
+        omitted = diagnostics[MAX_GITHUB_ANNOTATIONS - 1 :]
+        severity = (
+            DiagnosticSeverity.ERROR
+            if any(s is DiagnosticSeverity.ERROR for s, _ in omitted)
+            else DiagnosticSeverity.WARNING
+        )
+        visible[-1] = (severity, f"{len(omitted)} additional policy diagnostic(s) omitted")
+    return [
+        f"::{severity.value} title=YAGA commit policy::{_workflow_data(message)}"
+        for severity, message in visible
+    ]
 
 
 def _finding_summary(report: PullRequestValidationReport) -> str | None:

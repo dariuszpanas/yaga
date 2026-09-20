@@ -10,6 +10,7 @@ from typing import Any
 
 from yaga.commits.models import CheckResult, CommitPolicy, Diagnostic, TyposConfig, TyposPolicy
 from yaga.commits.parser import MAX_MESSAGE_BYTES, normalize_message
+from yaga.commits.severity import apply_severity
 from yaga.errors import InputError, safe_error_text
 from yaga.git.runtime import run_bounded_process
 
@@ -33,7 +34,7 @@ def apply_typos(
         isolated=isolated,
         config_isolated=policy.typos_config is TyposConfig.ISOLATED,
     )
-    return replace(result, diagnostics=(*result.diagnostics, *diagnostics))
+    return apply_severity(replace(result, diagnostics=(*result.diagnostics, *diagnostics)), policy)
 
 
 def check_typos(

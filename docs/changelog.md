@@ -4,6 +4,9 @@
 
 ### Added
 
+- Introduce opt-in `warning-rules` for gradual policy adoption, with warning-aware commit report
+  schema v2, nonblocking warning annotations, and unchanged default schema v1 (planned for 0.2.0).
+
 - Require bounded work-item references and constrain exact footer values through opt-in
   `required-issue-prefixes` and `footer-values` settings (planned for 0.2.0).
 
