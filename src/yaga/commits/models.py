@@ -83,6 +83,13 @@ class DependabotPullRequestPolicy(StrEnum):
     SKIP = "skip"
 
 
+class PullRequestMessagePolicy(StrEnum):
+    """Which proposed pull-request message receives full commit checks."""
+
+    TITLE_ONLY = "title-only"
+    TITLE_AND_BODY = "title-and-body"
+
+
 class TyposPolicy(StrEnum):
     """Whether the optional Typos CLI checks each selected message."""
 
@@ -194,6 +201,7 @@ class CommitPolicy:
     typos_config: TyposConfig = TyposConfig.REPOSITORY
     body_policy_by_type: tuple[tuple[str, PresencePolicy], ...] = ()
     body_max_length: int | None = None
+    pull_request_message: PullRequestMessagePolicy = PullRequestMessagePolicy.TITLE_ONLY
 
 
 @dataclass(frozen=True, slots=True)

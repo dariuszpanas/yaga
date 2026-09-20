@@ -4,6 +4,9 @@
 
 ### Added
 
+- Validate proposed PR title-plus-description messages with opt-in `pull-request-message`,
+  reusing full commit policy and reporting the proposed message separately (planned for 0.2.0).
+
 - Allow per-type body requirements with `body-policy-by-type` and cap total prose with
   `body-max-length`, preserving existing defaults and independent title checks (planned for 0.2.0).
 

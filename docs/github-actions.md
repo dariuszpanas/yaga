@@ -28,7 +28,7 @@ at the newer main SHA fails closed. This mode does not support older server beha
 `pull_request_target` from a non-default target branch.
 
 Retain a revision-aware concurrency group containing both PR number and head SHA, and subscribe
-to `edited` as well as commit lifecycle events so title edits are checked. For django-ray,
+to `edited` as well as commit lifecycle events so title and body edits are checked. For django-ray,
 retain the required job name `Commit Messages`. A successful message comparison alone does not
 establish safe event/checkout integration.
 
@@ -45,6 +45,39 @@ consumer's real-event qualification; they do not authorize a production cutover.
 
 Use ordinary unprivileged CI for repository checks. The write-capable review adapter has a
 separate [deployment guide](github-review-adapter.md); it is not required to use YAGA in CI.
+
+## Proposed merge messages (development toward 0.2.0)
+
+Repositories using the PR title and description as the default commit message can opt in:
+
+```toml
+[tool.yaga.commit]
+pull-request-message = "title-and-body"
+body-policy = "required"
+body-min-words = 8
+```
+
+Use `[commit]` in `.yaga.toml`. The default `"title-only"` keeps existing behavior.
+The additional check composes the literal title, a blank line, and the description, then applies
+full commit policy: per-type body requirements, prose limits, breaking markers, footer rules,
+and optional spelling. A missing or null description is empty. Markdown and HTML comments are
+not stripped or interpreted; template text can satisfy structural limits without explaining a change.
+
+GitHub supports title plus description for both
+[squash commits](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/configuring-commit-squashing-for-pull-requests)
+and [merge commits](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/configuring-commit-merging-for-pull-requests).
+Choose this option to match your repository's intended message source. YAGA does not read or modify
+GitHub merge settings. Rebase merges use existing commit messages; multiple enabled merge methods,
+GitHub-generated text, and last-minute message edits can produce a different final commit.
+This check validates the proposed event text, not the final merged object.
+
+Subscribe to `edited` events as well as commit lifecycle events: changing a description does not
+change the PR head SHA. Preserve the workflow's concurrency and trusted-policy protections.
+The existing title and commit results remain separate. An enabled check adds `proposed_message`
+inside the schema-v1 JSON `pull_request` object and includes it in result counts; the key is absent
+in default mode. Text and GitHub summaries identify the additional proposed message explicitly.
+Author exemptions apply to it only after normal event, checkout, policy, and range validation.
+`merge-commits = "ignore"` does not skip it because no Git merge parents exist for proposed text.
 
 ## Pull-request checks in GitHub Actions
 
