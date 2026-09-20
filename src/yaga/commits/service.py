@@ -60,7 +60,6 @@ def check_commits(
         return ValidationReport(
             results=(result,),
             config_path=loaded.path,
-            report_version=2 if loaded.policy.warning_rules else 1,
         )
     if edit is not None:
         return _check_targets(
@@ -235,9 +234,7 @@ def _check_targets(
     repository: Path,
 ) -> ValidationReport:
     results = tuple(_check_target(target, policy, repository=repository) for target in targets)
-    return ValidationReport(
-        results=results, config_path=config_path, report_version=2 if policy.warning_rules else 1
-    )
+    return ValidationReport(results=results, config_path=config_path)
 
 
 def _check_target(target: CommitTarget, policy: CommitPolicy, *, repository: Path) -> CheckResult:

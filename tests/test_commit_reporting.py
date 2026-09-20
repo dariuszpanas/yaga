@@ -60,6 +60,7 @@ def test_breaking_marker_pair_diagnostic_is_stable_in_text_and_json_reports() ->
     assert document["commits"][0]["diagnostics"] == [
         {
             "code": "breaking.marker-pair",
+            "severity": "error",
             "message": "breaking changes must use both ! and a BREAKING CHANGE footer",
             "line": 1,
             "column": 1,
@@ -81,6 +82,7 @@ def test_body_word_count_diagnostic_is_stable_in_text_and_json_reports() -> None
     assert document["commits"][0]["diagnostics"] == [
         {
             "code": "body.word-count",
+            "severity": "error",
             "message": "body has 2 words; minimum is 3",
             "line": 3,
             "column": 1,
@@ -200,12 +202,14 @@ def test_footer_policy_diagnostics_are_stable_in_text_and_json_reports() -> None
     assert document["commits"][0]["diagnostics"] == [
         {
             "code": "footer.required",
+            "severity": "error",
             "message": "required footer token 'Signed-off-by' is missing",
             "line": 1,
             "column": 1,
         },
         {
             "code": "footer.forbidden",
+            "severity": "error",
             "message": "footer token 'WIP' is forbidden by policy",
             "line": 3,
             "column": 1,

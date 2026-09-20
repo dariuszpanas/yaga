@@ -387,20 +387,17 @@ into a successful check.
 
 ### Warning-aware report contract
 
-A nonempty `warning-rules` configuration explicitly selects **commit report schema v2**, even if
-there are no findings, the selection is empty, or all targets are skipped. JSON adds top-level
-`warning_count` and an `error` or `warning` severity to each diagnostic. Codes, locations, and order
-remain unchanged. `warning_count` counts diagnostics across all targets, including failed targets.
-A warning-only target has `status: "passed"` and `valid: true`; `passed`, `failed`, and `skipped`
-continue counting targets. Policy errors still produce exit 1, and warning-only results exit 0.
+Commit and pull-request JSON reports use schema v1 consistently. Every diagnostic includes an
+`error` or `warning` severity, and every report includes `warning_count`, including zero for clean,
+empty, or skipped selections. Configuring warnings changes enforcement, not the report format.
+Codes, locations, and order remain unchanged. `warning_count` counts diagnostics across all targets,
+including failed targets. A warning-only target has `status: "passed"` and `valid: true`; `passed`,
+`failed`, and `skipped` continue counting targets. Policy errors still produce exit 1, and warning-only
+results exit 0. Consumers should use severity rather than treating every diagnostic as an error.
 Text identifies warning findings and their count. GitHub output emits escaped `::warning`
 annotations for warnings and `::error` for errors, retaining bounded annotation output.
-
-An empty warning list preserves schema v1 and its implicit error severity. Configuration inspection,
-quality-advisory reports, and operational-error envelopes retain their existing schema v1 contracts.
-Repository JSON retains its aggregate schema v1, with the commit child report advertising its own
-schema v2. Consumers enabling warnings must handle the child's version and severity explicitly;
-counting every diagnostic as an error is no longer correct for schema v2.
+Repository reports embed the same commit report shape. Configuration inspection, quality-advisory
+reports, and operational-error envelopes retain their existing schema v1 contracts.
 
 ## Ordinary messages and authoring help (development toward 0.2.0)
 

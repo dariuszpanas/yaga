@@ -7,8 +7,8 @@
 - Support explicit plain-message policy and a frozen `plain-v1` starter; print incomplete,
   policy-guided drafts with `commit template` without changing files or Git (planned for 0.2.0).
 
-- Introduce opt-in `warning-rules` for gradual policy adoption, with warning-aware commit report
-  schema v2, nonblocking warning annotations, and unchanged default schema v1 (planned for 0.2.0).
+- Introduce opt-in `warning-rules` for gradual policy adoption, with consistent schema-v1 commit
+  reports containing severity and warning counts, and nonblocking annotations (planned for 0.2.0).
 
 - Require bounded work-item references and constrain exact footer values through opt-in
   `required-issue-prefixes` and `footer-values` settings (planned for 0.2.0).
