@@ -89,7 +89,7 @@ versions, joined by commas (all must match). Each numeric component has at most 
 no leading zeroes. The limit is eight comparisons and 256 characters. Wildcards, compatible-release
 operators, prereleases, URLs, and other Python packaging requirement syntax are not supported.
 
-This setting applies to commands that load this configuration: commit checks and quality, the
+This setting applies to commands that load this configuration: commit checks, templates, and quality, the
 GitHub commit adapter, repository checks selecting the commit provider, and `config show`.
 Explicit-policy providers such as `branch check` and `tree check` retain their no-discovery
 contract. Use `yaga config show --config pyproject.toml` as an explicit version preflight before
@@ -102,6 +102,11 @@ version. Pin the installation separately when CI must always use one exact relea
 
 | Key | Values and purpose |
 | --- | --- |
+| `message-format` | `conventional` (default) or `plain`; [format boundaries](commit-policy.md#ordinary-messages-and-authoring-help). |
+| `warning-rules` | Empty-default list of configurable diagnostic codes to report without blocking; [gradual enforcement](commit-policy.md#gradual-enforcement). |
+| `pull-request-message` | `title-only` (default) or `title-and-body`; [proposed merge messages](github-actions.md#proposed-merge-messages). |
+| `required-issue-prefixes` | Empty-default bounded reference prefixes; [matching rules](commit-policy.md#references-and-footer-values). |
+| `footer-values` | Empty-default exact allowed values by footer token; presence is configured separately. |
 | `allowed-types` | Optional nonempty ordered type tokens. Omit to allow any valid type. |
 | `type-case` | `any`, `lower`, or `upper`. |
 | `scope-policy` | `optional`, `required`, or `forbidden`. |
@@ -137,8 +142,8 @@ unique, non-overlapping, and cannot use `BREAKING CHANGE` or `BREAKING-CHANGE`.
 
 ### Body layout settings
 
-Development toward 0.2.0 adds `body-policy-by-type` and `body-max-length`; these options are not
-available in 0.1.2. A project can require an explanation for behavioral changes while keeping
+YAGA 0.2.0 adds `body-policy-by-type` and `body-max-length`. A project can require an
+explanation for behavioral changes while keeping
 documentation and maintenance bodies optional:
 
 ```toml

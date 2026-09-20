@@ -273,14 +273,14 @@ trusted mode: neither a PR's `_typos.toml` nor dirty files in the trusted checko
 Ordinary local checks and the default PR-head mode retain repository Typos configuration.
 Keep the tool version consistent when comparing local and CI spelling results.
 
-## Proposed PR messages (development toward 0.2.0)
+## Proposed PR messages
 
 `pull-request-message = "title-and-body"` opts into full commit policy for the PR title and
 description together. The default is `"title-only"`. This setting affects only event-aware
-PR checks; see [GitHub Actions](github-actions.md#proposed-merge-messages-development-toward-020)
+PR checks; see [GitHub Actions](github-actions.md#proposed-merge-messages)
 for merge settings, event triggers, reporting, and limitations.
 
-## Workflow starters and type explanations (development toward 0.2.0)
+## Workflow starters and type explanations
 
 Start with explicit, editable settings for your workflow:
 
@@ -315,7 +315,7 @@ configuration replaces the global fallback as a whole; fields are not merged bet
 For trusted Actions, inspect the committed default-branch policy used by that runner: a local
 `config show` does not reproduce a trusted Action's revision selection automatically.
 
-## References and footer values (development toward 0.2.0)
+## References and footer values
 
 To require a work-item reference and a controlled validation label in complete messages:
 
@@ -357,7 +357,7 @@ These options verify stored syntax only. A reference does not prove that an issu
 resolved. A `Validation: passed` label does not prove that tests ran. An allowed sign-off value
 would not prove identity, DCO compliance, or a cryptographic signature.
 
-## Gradual enforcement (development toward 0.2.0)
+## Gradual enforcement
 
 Keep a rule enabled while introducing it as a nonblocking warning:
 
@@ -399,7 +399,7 @@ annotations for warnings and `::error` for errors, retaining bounded annotation 
 Repository reports embed the same commit report shape. Configuration inspection, quality-advisory
 reports, and operational-error envelopes retain their existing schema v1 contracts.
 
-## Ordinary messages and authoring help (development toward 0.2.0)
+## Ordinary messages and authoring help
 
 Teams that want message policy without Conventional Commit prefixes can opt into plain format:
 

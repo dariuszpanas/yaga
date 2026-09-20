@@ -1,8 +1,7 @@
 # Commit policy direction for 0.2.0
 
-This is a development plan, not a list of features already released. The first implementation
-adds per-type body requirements and an optional total prose limit. Later items need their own
-design and validation before becoming public configuration.
+This records the design decisions behind YAGA 0.2.0. See [commit policy](commit-policy.md)
+for supported configuration and [the changelog](changelog.md) for release scope.
 
 ## The problem to solve
 
@@ -48,11 +47,9 @@ bounded processing, and shared local/CI reporting. Its trusted GitHub adapter ca
 event and checked-out objects before applying account exemptions. Those properties are worth
 preserving as customization grows.
 
-The main gaps are flexibility and usability: content requirements currently apply mostly to
-all commit types alike; staged adoption cannot distinguish warnings from errors; reference and
-footer-value policies are limited; and authors receive less help preparing messages than
-checking them. Conventional structure is also mandatory today, excluding projects that want
-readability checks on ordinary titles.
+The 0.2.0 work addresses flexibility and usability: per-type body requirements, nonblocking
+warnings, bounded references and footer values, and policy-guided authoring templates. An explicit
+plain-message format allows readability checks without requiring Conventional Commit structure.
 
 ## Defaults and customization
 
@@ -69,17 +66,17 @@ Add customization in bounded, named forms. Do not put commands, imports, message
 waivers, or unrestricted regular expressions into policy. Optional authoring assistance should
 preview changes; checking must never rewrite history or alter its input.
 
-## Work sequence
+## Implemented choices
 
 1. **Content requirements:** require bodies for selected types without skipping other checks;
    bound total prose independently of line wrapping. Preserve optional-body and title-only behavior.
 2. **Understandable configuration:** explain effective settings and overrides; offer editable
    starter policies for squash-title and full-message workflows.
-3. **References and trailers:** design bounded project-specific reference and footer-value
+3. **References and trailers:** use bounded project-specific reference and footer-value
    constraints. Token presence must never be presented as verified identity or completed testing.
-4. **Gradual enforcement:** design warning/error policy with an explicit report-version decision
-   and unchanged input-error precedence. Do not reinterpret existing failed reports as warnings.
-5. **Alternative message formats and authoring:** investigate an explicit ordinary-title mode and
+4. **Gradual enforcement:** configure warning/error policy with one schema-v1 report shape and
+   unchanged input-error precedence. Only explicitly selected policy findings become warnings.
+5. **Alternative message formats and authoring:** offer an explicit plain-message mode and
    configuration-derived message templates. Retain a clear conventional parser boundary.
 
 Full release/changelog automation, arbitrary plugin execution, and automatic commit rewriting are

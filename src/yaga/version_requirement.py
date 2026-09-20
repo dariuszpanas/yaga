@@ -7,7 +7,7 @@ import re
 from yaga.errors import ConfigurationError
 
 # Keep this equal to project.version; the build contract tests enforce that boundary.
-VERSION = "0.1.2"
+VERSION = "0.2.0"
 _RELEASE = r"(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})"
 _CLAUSE = re.compile(r"(>=|<=|==|!=|>|<)\s*" + _RELEASE, re.ASCII)
 

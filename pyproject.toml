@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "yaga-cli"
-version = "0.1.2"
+version = "0.2.0"
 description = "Configurable developer workflow checks for local use and GitHub Actions"
 readme = "README.md"
 license = "BSD-3-Clause"

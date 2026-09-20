@@ -10,7 +10,8 @@ or `yaga self update --dry-run` to verify a uv tool installation without updatin
 
 | Command | Input | Reference |
 | --- | --- | --- |
-| `yaga commit check` | One message, file, stdin, commit, or range | [Commit policy](commit-policy.md) |
+| `yaga commit check` | One title, message, editor file, file, stdin, commit, or range | [Commit policy](commit-policy.md) |
+| `yaga commit template` | Selected policy and explicit conventional type/scope, or plain format | [Authoring help](commit-policy.md#read-only-message-templates) |
 | `yaga config init` / `show` | Target repository or explicit configuration | [Configuration](configuration.md) |
 | `yaga branch check` | Explicit short branch name and policy | [Branch policy](branch-policy.md) |
 | `yaga change check` | Explicit Git range and policy | [Changed-path policy](change-policy.md) |
