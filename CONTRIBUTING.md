@@ -95,8 +95,14 @@ complete commit messages: the pull-request title adapter deliberately uses the h
 `body-min-words` is a schema-v1 integer from zero through 100000 with a zero default. It counts only
 Unicode-whitespace-delimited prose-body tokens containing a Unicode alphanumeric character;
 recognized final footers and punctuation-only or emoji-only tokens are excluded. A nonzero value
-does not require an absent optional body, and it is invalid with a forbidden body. Keep its
+does not require an absent optional body, and it is invalid when every reachable body policy
+is forbidden. Per-type forbidden bodies do not receive additional minimum findings. Keep its
 `body.word-count` diagnostic stable across text, JSON, and GitHub reports.
+`body-policy-by-type` is an empty-default schema-v1 mapping with the same bounded, case-insensitive
+type-key validation as scope overrides. It replaces body presence only; all other checks remain
+independent. `body-max-length` is an optional 1-through-100000 total prose limit in the configured
+length unit, excluding recognized final footers. Reject impossible length/word-minimum bounds,
+preserve `body.length`, and keep all body policies out of title-only checks.
 `required-footer-tokens` and `forbidden-footer-tokens` are schema-v1 presence policies for complete
 commits only; pull-request titles remain header-only. Match exact tokens case-insensitively in both
 `Token: value` and `Token #value` forms, allow repeats, and do not infer identity, DCO compliance,

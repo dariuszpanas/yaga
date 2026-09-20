@@ -116,7 +116,9 @@ version. Pin the installation separately when CI must always use one exact relea
 | `required-footer-tokens` | Up to 128 combined required/forbidden ASCII tokens. |
 | `forbidden-footer-tokens` | Exact case-insensitive presence prohibitions. |
 | `body-policy` | `optional`, `required`, or `forbidden`. |
+| `body-policy-by-type` | Empty-default mapping of up to 128 types to body presence overrides. |
 | `body-min-length` | Nonnegative prose-body character lower bound. |
+| `body-max-length` | Optional total prose-body limit from 1 through 100000; independent of line wrapping. |
 | `body-min-words` | Integer from 0 through 100000, counting prose tokens. |
 | `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
 | `body-paragraph-splitting` | `skip` (default) or `check` for likely sentence splits across blank lines. |
@@ -134,6 +136,28 @@ version. Pin the installation separately when CI must always use one exact relea
 unique, non-overlapping, and cannot use `BREAKING CHANGE` or `BREAKING-CHANGE`.
 
 ### Body layout settings
+
+Development toward 0.2.0 adds `body-policy-by-type` and `body-max-length`; these options are not
+available in 0.1.2. A project can require an explanation for behavioral changes while keeping
+documentation and maintenance bodies optional:
+
+```toml
+[commit]
+body-policy = "optional"
+body-min-length = 20
+body-max-length = 2000
+body-policy-by-type = { feat = "required", fix = "required" }
+```
+
+Each case-insensitive type override replaces only body presence, not the other checks. Values
+are `optional`, `required`, or `forbidden`; duplicate normalized keys and keys outside configured
+`allowed-types` are errors. Length and word minima apply when an allowed body exists; they do
+not require an optional body and do not create extra minimum findings for a forbidden body.
+All reachable body policies cannot be forbidden alongside a positive minimum.
+The total limit counts stripped prose, including internal newlines, in the configured
+`length-unit`; recognized final footers are excluded. It cannot be smaller than `body-min-length`
+or too small to contain `body-min-words` one-character words separated by whitespace.
+Both limits report `body.length`. No body requirement or limit applies to a standalone title.
 
 `body-max-line-length` is an optional wrapping limit; omitting it leaves body line length
 unlimited. `body-paragraph-splitting` is an explicit layout heuristic. `skip` (the default) allows

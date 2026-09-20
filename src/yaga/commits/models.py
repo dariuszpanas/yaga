@@ -192,6 +192,8 @@ class CommitPolicy:
     footer_syntax: FooterSyntax = FooterSyntax.CONVENTIONAL
     skip_pull_request_authors: tuple[str, ...] = ()
     typos_config: TyposConfig = TyposConfig.REPOSITORY
+    body_policy_by_type: tuple[tuple[str, PresencePolicy], ...] = ()
+    body_max_length: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

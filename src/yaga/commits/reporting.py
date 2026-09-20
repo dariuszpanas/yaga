@@ -350,6 +350,8 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "required_footer_tokens": _json_values(policy.required_footer_tokens, maximum=128),
         "forbidden_footer_tokens": _json_values(policy.forbidden_footer_tokens, maximum=128),
         "body_policy": policy.body_policy.value,
+        "body_policy_by_type": {key: value.value for key, value in policy.body_policy_by_type},
+        "body_max_length": policy.body_max_length,
         "body_min_length": policy.body_min_length,
         "body_min_words": policy.body_min_words,
         "body_max_line_length": policy.body_max_line_length,
