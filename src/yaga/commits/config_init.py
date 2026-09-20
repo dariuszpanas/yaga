@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from enum import StrEnum
 from pathlib import Path
 
 from yaga.commits.config import load_config
@@ -43,8 +44,54 @@ max-commits = 64
 _RECOMMENDED_CONFIG_BYTES = _RECOMMENDED_CONFIG.encode("utf-8")
 
 
-def initialize_config(repository: Path, *, dry_run: bool = False) -> LoadedConfig:
+class ConfigStarter(StrEnum):
+    """Frozen, editable starter choices; existing defaults remain unchanged."""
+
+    RECOMMENDED_V1 = "recommended-v1"
+    TITLE_V1 = "title-v1"
+    COMPLETE_MESSAGE_V1 = "complete-message-v1"
+
+
+_TITLE_CONFIG = """# Editable title-focused policy; YAGA still checks selected commits.
+config-version = 1
+
+[commit]
+type-case = "lower"
+header-max-length = 100
+description-ending = "allow"
+body-policy = "optional"
+pull-request-message = "title-only"
+merge-commits = "ignore"
+"""
+_COMPLETE_CONFIG = """# Explain feature and fix changes in full commit messages.
+# Enable pull-request-message = "title-and-body" separately if your merge workflow uses it.
+config-version = 1
+
+[commit]
+type-case = "lower"
+header-max-length = 100
+description-ending = "allow"
+body-policy = "optional"
+body-policy-by-type = {feat = "required", fix = "required"}
+pull-request-message = "title-only"
+merge-commits = "ignore"
+"""
+_STARTERS = {
+    ConfigStarter.RECOMMENDED_V1: _RECOMMENDED_CONFIG_BYTES,
+    ConfigStarter.TITLE_V1: _TITLE_CONFIG.encode("utf-8"),
+    ConfigStarter.COMPLETE_MESSAGE_V1: _COMPLETE_CONFIG.encode("utf-8"),
+}
+
+
+def initialize_config(
+    repository: Path,
+    *,
+    dry_run: bool = False,
+    starter: ConfigStarter = ConfigStarter.RECOMMENDED_V1,
+) -> LoadedConfig:
     """Create or preview one recommended standalone configuration without overwriting."""
+    if not isinstance(starter, ConfigStarter):
+        raise ConfigurationError("unknown configuration starter")
     try:
         resolved_repository = repository.expanduser().resolve()
     except (OSError, RuntimeError) as error:
@@ -73,7 +120,7 @@ def initialize_config(repository: Path, *, dry_run: bool = False) -> LoadedConfi
     _require_absent_target(target)
 
     try:
-        temporary = _write_complete_temporary_config(resolved_repository)
+        temporary = _write_complete_temporary_config(resolved_repository, _STARTERS[starter])
     except OSError as error:
         raise ConfigurationError(f"cannot prepare configuration {target}: {error}") from error
 
@@ -106,7 +153,7 @@ def _require_absent_target(target: Path) -> None:
         raise ConfigurationError(f"configuration target already exists: {target}")
 
 
-def _write_complete_temporary_config(repository: Path) -> Path:
+def _write_complete_temporary_config(repository: Path, content: bytes) -> Path:
     """Durably write the complete template to a private same-directory file."""
     descriptor, name = tempfile.mkstemp(
         prefix=f"{_CONFIG_FILENAME}.",
@@ -116,8 +163,8 @@ def _write_complete_temporary_config(repository: Path) -> Path:
     temporary = Path(name)
     try:
         with os.fdopen(descriptor, "wb") as stream:
-            written = stream.write(_RECOMMENDED_CONFIG_BYTES)
-            if written != len(_RECOMMENDED_CONFIG_BYTES):
+            written = stream.write(content)
+            if written != len(content):
                 raise OSError("configuration write was incomplete")
             stream.flush()
             os.chmod(temporary, 0o644)

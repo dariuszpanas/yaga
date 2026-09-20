@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add frozen editable workflow starters and `config show --type` explanations of effective
+  body/scope overrides, preserving the existing default starter (planned for 0.2.0).
+
 - Validate proposed PR title-plus-description messages with opt-in `pull-request-message`,
   reusing full commit policy and reporting the proposed message separately (planned for 0.2.0).
 
