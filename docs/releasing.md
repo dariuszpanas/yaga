@@ -26,7 +26,8 @@ it checks out no source and runs no build scripts. Keep that separation when edi
 
 Once the workflow is merged, select **Actions → Release → Run workflow** on the default branch.
 The manual route runs validation and uploads the `distributions` artifact to the workflow run.
-It never runs the PyPI upload job. Manual runs on other branches are skipped.
+It never runs the PyPI upload or GitHub Release jobs. It also retains the selected changelog
+section as a separate `release-notes` artifact. Manual runs on other branches are skipped.
 
 Download the artifact to inspect the wheel and source distribution. A rehearsal is build evidence,
 not proof that PyPI's publisher/environment setup works: OIDC authorization happens on publication.
@@ -54,10 +55,18 @@ package users. Twine's metadata check does not prove remote images or links are 
    package metadata and a dated changelog entry, and reruns `uv run make ci`. Only then does it
    offer the `pypi` environment approval and upload the validated distributions with attestations.
 5. Verify the PyPI project files and install `yaga-cli==0.1.0` from PyPI in a clean tool environment.
-   Confirm `yaga --help`, then create the GitHub Release and add the changelog comparison links.
+   Confirm `yaga --help` and the automatically created GitHub Release. Its wheel and source
+   archive must be the same artifacts published to PyPI.
 
-This workflow accepts final `vMAJOR.MINOR.PATCH` tags. It does not publish TestPyPI packages or
-create GitHub Releases automatically. Read the Docs configuration is independent of package upload.
+This workflow accepts final `vMAJOR.MINOR.PATCH` tags and does not publish TestPyPI packages.
+After PyPI publication succeeds, a separate job creates the GitHub Release from the validated
+changelog section and original distributions. Only that job has `contents: write`; it checks out
+no source and has no OIDC permission. The PyPI job retains its isolated `id-token: write` permission.
+Read the Docs configuration is independent of package upload.
+
+If only the GitHub Release job fails, repair or rerun that job without republishing to PyPI.
+If a release entry already exists after a partial failure, inspect its draft state and assets and
+complete it using the retained artifacts; the workflow deliberately refuses to overwrite an entry.
 
 If validation fails, fix the source and choose a new verified candidate before publishing. If an
 upload is interrupted, inspect PyPI before rerunning: package versions/files cannot be overwritten,
