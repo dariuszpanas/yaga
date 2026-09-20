@@ -1,5 +1,8 @@
 # Contributing
 
+See the [commit policy direction for 0.2.0](commit-policy-direction.md) for the current
+problem-led development scope and customization principles.
+
 The docs gate checks rendered local links and anchors, including README routes and the public
 logo, against the built site. Run `uv run make docs` after changing documentation or navigation.
 
