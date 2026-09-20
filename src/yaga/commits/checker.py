@@ -32,6 +32,7 @@ from yaga.commits.parser import (
     parse_message,
 )
 from yaga.commits.policy import resolve_presence_policy
+from yaga.commits.severity import apply_severity
 from yaga.errors import InputError
 
 _TERMINAL_PUNCTUATION = (".", "!", "?")
@@ -42,12 +43,12 @@ _HTTP_URL = re.compile(r"(?<![A-Za-z0-9_])https?://[^\s]+")
 
 def check_target(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
     """Validate one selected message with deterministic diagnostic ordering."""
-    return _check_target(target, policy, check_body=True)
+    return apply_severity(_check_target(target, policy, check_body=True), policy)
 
 
 def check_header(target: CommitTarget, policy: CommitPolicy) -> CheckResult:
     """Validate one standalone header without applying commit-body policy."""
-    return _check_target(target, policy, check_body=False)
+    return apply_severity(_check_target(target, policy, check_body=False), policy)
 
 
 def _check_target(

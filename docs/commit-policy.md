@@ -356,3 +356,48 @@ by `forbidden-footer-tokens` cannot have value constraints.
 These options verify stored syntax only. A reference does not prove that an issue exists or is
 resolved. A `Validation: passed` label does not prove that tests ran. An allowed sign-off value
 would not prove identity, DCO compliance, or a cryptographic signature.
+
+## Gradual enforcement (development toward 0.2.0)
+
+Keep a rule enabled while introducing it as a nonblocking warning:
+
+```toml
+[tool.yaga.commit]
+body-policy = "required"
+body-min-words = 8
+warning-rules = ["body.required", "body.word-count"]
+```
+
+`warning-rules` defaults to empty. Only the listed diagnostic codes become warnings; other findings
+remain errors. A warning does not enable a rule: configure its underlying policy as usual.
+Remove a code from the list when you want its findings to block validation. Messages cannot waive
+or change severity themselves. The same policy applies locally, in the read-only Action, to opted-in
+proposed PR messages, and in the commit provider of `repo check`.
+
+Supported codes are `type.allowed`, `type.case`, `scope.required`, `scope.forbidden`,
+`scope.allowed`, `scope.case`, `header.length`, `description.length`, `description.case`,
+`description.ending`, `breaking.marker-pair`, `body.required`, `body.forbidden`, `body.length`,
+`body.word-count`, `body.line-length`, `body.paragraph-format`, `footer.line-length`,
+`footer.required-colon`, `footer.required`, `footer.forbidden`, `footer.value`, `reference.required`,
+and `typos.word`. The list is closed, case-sensitive, and rejects duplicates. Structural diagnostics
+(`syntax.header`, `syntax.separator`), resource limits, and merge rejection cannot become warnings.
+Missing history, malformed configuration/input, unavailable tools, and other operational errors
+continue to exit 2. A configured warning for spelling never converts a missing or broken Typos tool
+into a successful check.
+
+### Warning-aware report contract
+
+A nonempty `warning-rules` configuration explicitly selects **commit report schema v2**, even if
+there are no findings, the selection is empty, or all targets are skipped. JSON adds top-level
+`warning_count` and an `error` or `warning` severity to each diagnostic. Codes, locations, and order
+remain unchanged. `warning_count` counts diagnostics across all targets, including failed targets.
+A warning-only target has `status: "passed"` and `valid: true`; `passed`, `failed`, and `skipped`
+continue counting targets. Policy errors still produce exit 1, and warning-only results exit 0.
+Text identifies warning findings and their count. GitHub output emits escaped `::warning`
+annotations for warnings and `::error` for errors, retaining bounded annotation output.
+
+An empty warning list preserves schema v1 and its implicit error severity. Configuration inspection,
+quality-advisory reports, and operational-error envelopes retain their existing schema v1 contracts.
+Repository JSON retains its aggregate schema v1, with the commit child report advertising its own
+schema v2. Consumers enabling warnings must handle the child's version and severity explicitly;
+counting every diagnostic as an error is no longer correct for schema v2.

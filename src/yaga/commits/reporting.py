@@ -11,6 +11,7 @@ from yaga.commits.config_explain import explain_type
 from yaga.commits.models import (
     CheckResult,
     CommitPolicy,
+    DiagnosticSeverity,
     LoadedConfig,
     OutputFormat,
     ValidationReport,
@@ -356,6 +357,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
             policy.required_colon_footer_tokens, maximum=128
         ),
         "breaking_markers": policy.breaking_markers.value,
+        "warning_rules": list(policy.warning_rules),
         "required_issue_prefixes": list(policy.required_issue_prefixes),
         "footer_values": {token: list(values) for token, values in policy.footer_values},
         "required_footer_tokens": _json_values(policy.required_footer_tokens, maximum=128),
@@ -411,8 +413,11 @@ def _render_text_report(report: ValidationReport) -> str:
         if result.skipped_reason is not None:
             lines.append(f"         skipped: {result.skipped_reason}")
         for diagnostic in result.diagnostics:
+            warning_label = (
+                "[warning] " if diagnostic.severity is DiagnosticSeverity.WARNING else ""
+            )
             lines.append(
-                f"         [{diagnostic.code}] line {diagnostic.line}, "
+                f"         {warning_label}[{diagnostic.code}] line {diagnostic.line}, "
                 f"column {diagnostic.column}: "
                 f"{safe_text(diagnostic.message, maximum=MAX_DIAGNOSTIC_MESSAGE)}"
             )
@@ -420,6 +425,8 @@ def _render_text_report(report: ValidationReport) -> str:
         f"Checked {len(report.results)} commit(s): {report.passed} passed, "
         f"{report.failed} failed, {report.skipped} skipped."
     )
+    if report.schema_version == 2:
+        lines.append(f"Warnings: {report.warning_count} (nonblocking).")
     if report.config_path is not None:
         lines.append(f"Config: {safe_text(str(report.config_path), maximum=MAX_DISPLAY_PATH)}")
     return "\n".join(lines)
@@ -427,8 +434,10 @@ def _render_text_report(report: ValidationReport) -> str:
 
 def commit_report_document(report: ValidationReport) -> dict[str, Any]:
     """Return the bounded JSON-ready Conventional Commit report."""
+    schema_version = report.schema_version
     return {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema_version,
+        **({"warning_count": report.warning_count} if schema_version == 2 else {}),
         "valid": report.valid,
         "checked": len(report.results),
         "passed": report.passed,
@@ -439,11 +448,13 @@ def commit_report_document(report: ValidationReport) -> dict[str, Any]:
             if report.config_path
             else None
         ),
-        "commits": [result_document(result) for result in report.results],
+        "commits": [
+            result_document(result, schema_version=schema_version) for result in report.results
+        ],
     }
 
 
-def result_document(result: CheckResult) -> dict[str, Any]:
+def result_document(result: CheckResult, *, schema_version: int = 1) -> dict[str, Any]:
     """Return the bounded JSON representation of one check result."""
     return {
         "source": json_text(result.target.label, maximum=MAX_DISPLAY_PATH),
@@ -457,6 +468,7 @@ def result_document(result: CheckResult) -> dict[str, Any]:
         "diagnostics": [
             {
                 "code": diagnostic.code,
+                **({"severity": diagnostic.severity.value} if schema_version == 2 else {}),
                 "message": json_text(
                     diagnostic.message,
                     maximum=MAX_DIAGNOSTIC_MESSAGE,

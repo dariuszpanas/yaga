@@ -57,7 +57,11 @@ def check_commits(
     if title is not None:
         target = CommitTarget("title", validate_title(title))
         result = apply_typos(check_header(target, loaded.policy), loaded.policy, repository=repo)
-        return ValidationReport(results=(result,), config_path=loaded.path)
+        return ValidationReport(
+            results=(result,),
+            config_path=loaded.path,
+            report_version=2 if loaded.policy.warning_rules else 1,
+        )
     if edit is not None:
         return _check_targets(
             [from_edit(edit, repository=repo)],
@@ -231,7 +235,9 @@ def _check_targets(
     repository: Path,
 ) -> ValidationReport:
     results = tuple(_check_target(target, policy, repository=repository) for target in targets)
-    return ValidationReport(results=results, config_path=config_path)
+    return ValidationReport(
+        results=results, config_path=config_path, report_version=2 if policy.warning_rules else 1
+    )
 
 
 def _check_target(target: CommitTarget, policy: CommitPolicy, *, repository: Path) -> CheckResult:

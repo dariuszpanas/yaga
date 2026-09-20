@@ -471,3 +471,10 @@ lookups. Footer values reuse the parser's final suffix and token boundaries, che
 trim outer whitespace, compare values exactly, and emit at most one footer.value finding per token.
 Presence remains separate. Preserve configuration bounds and reject forbidden/breaking token
 constraints; neither reference syntax nor footer labels prove external state or identity.
+
+Keep warning-rules empty by default and closed to the documented configurable diagnostic codes.
+Never demote syntax/resource/merge-selection failures or operational errors. A nonempty list selects
+commit report schema v2 even for clean, empty, and skipped results; default commit reports remain
+v1. Diagnostic identity/order is stable, warning-only targets pass, and warning_count counts findings,
+not targets. Preserve severity through spelling, PR checks, and aggregate repository annotations;
+repository/error/config/quality envelopes retain their independent existing schema contracts.

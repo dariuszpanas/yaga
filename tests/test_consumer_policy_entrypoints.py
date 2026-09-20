@@ -113,3 +113,14 @@ def test_content_policy_entrypoint_agreement(tmp_path: Path, text: str, expected
         'required-footer-tokens=["Validation"]\nfooter-values={Validation=["passed"]}\n'
     )
     _assert_entrypoint_agreement(tmp_path, text, expected, config)
+
+
+@pytest.mark.parametrize(
+    "text,expected", [("fix: correct behavior", 0), ("fix: x", 1), ("not conventional", 1)]
+)
+def test_warning_policy_entrypoint_agreement(tmp_path: Path, text: str, expected: int) -> None:
+    config = (
+        '[commit]\nbody-policy="required"\nwarning-rules=["body.required"]\n'
+        "description-min-length=5\n"
+    )
+    _assert_entrypoint_agreement(tmp_path, text, expected, config)
