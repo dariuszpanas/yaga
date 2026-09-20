@@ -356,6 +356,8 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
             policy.required_colon_footer_tokens, maximum=128
         ),
         "breaking_markers": policy.breaking_markers.value,
+        "required_issue_prefixes": list(policy.required_issue_prefixes),
+        "footer_values": {token: list(values) for token, values in policy.footer_values},
         "required_footer_tokens": _json_values(policy.required_footer_tokens, maximum=128),
         "forbidden_footer_tokens": _json_values(policy.forbidden_footer_tokens, maximum=128),
         "body_policy": policy.body_policy.value,

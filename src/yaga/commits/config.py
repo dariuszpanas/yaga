@@ -80,6 +80,8 @@ _COMMIT_KEYS = frozenset(
         "pull-request-message",
         "quality",
         "required-footer-tokens",
+        "required-issue-prefixes",
+        "footer-values",
         "forbidden-footer-tokens",
         "merge-commits",
         "ignored-headers",
@@ -351,7 +353,11 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             f"{token!r} in {path}"
         )
 
+    issue_prefixes = _issue_prefixes(raw_commit, path)
+    footer_values = _footer_values(raw_commit, path, forbidden_footer_tokens)
     return CommitPolicy(
+        required_issue_prefixes=issue_prefixes,
+        footer_values=footer_values,
         config_version=config_version,
         required_version=required_version,
         allowed_types=allowed_types,
@@ -603,6 +609,41 @@ def _optional_tokens(
             raise ConfigurationError(f"{key} contains duplicate token {value!r} in {path}")
         normalized.add(folded)
     return values
+
+
+def _issue_prefixes(table: Mapping[str, Any], path: Path) -> tuple[str, ...]:
+    key = "required-issue-prefixes"
+    values = _string_list(table.get(key, []), key, path, allow_empty=True, max_item_length=64)
+    if any(re.fullmatch(r"[A-Za-z#][A-Za-z0-9_-]*", value) is None for value in values):
+        raise ConfigurationError(f"{key} requires safe ASCII work-item prefixes in {path}")
+    if len(set(values)) != len(values):
+        raise ConfigurationError(f"{key} contains duplicate prefixes in {path}")
+    return values
+
+
+def _footer_values(
+    table: Mapping[str, Any], path: Path, forbidden: tuple[str, ...]
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    key = "footer-values"
+    raw = table.get(key, {})
+    if not isinstance(raw, dict):
+        raise ConfigurationError(f"{key} must be a table in {path}")
+    tokens = _footer_tokens({key: list(raw)}, key, path=path)
+    if {token.casefold() for token in tokens} & {token.casefold() for token in forbidden}:
+        raise ConfigurationError(f"{key} must not constrain forbidden footer tokens in {path}")
+    result = []
+    total = 0
+    for token in tokens:
+        values = _string_list(raw[token], key, path, allow_empty=False, max_item_length=256)
+        total += len(values)
+        if total > 256:
+            raise ConfigurationError(f"{key} exceeds 256 combined values in {path}")
+        if len(set(values)) != len(values) or any(value != value.strip() for value in values):
+            raise ConfigurationError(
+                f"{key} values must be unique and have no outer whitespace in {path}"
+            )
+        result.append((token, values))
+    return tuple(result)
 
 
 def _footer_tokens(

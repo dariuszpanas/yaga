@@ -7,6 +7,7 @@ import unicodedata
 from collections.abc import Iterable
 from fnmatch import fnmatchcase
 
+from yaga.commits.content_policy import check_content_policy
 from yaga.commits.models import (
     BreakingMarkerPolicy,
     CasePolicy,
@@ -329,6 +330,7 @@ def _check_target(
                 else ()
             )
             _check_footer_tokens(diagnostics, footers, policy)
+        diagnostics.extend(check_content_policy(parsed, policy))
 
     return CheckResult(target=target, header=header, diagnostics=tuple(diagnostics))
 

@@ -97,3 +97,19 @@ def _assert_entrypoint_agreement(tmp_path: Path, text: str, expected: int, confi
         check=False,
     )
     assert action.returncode == expected, action.stdout + action.stderr
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("fix: correct behavior\n\nRefs: #12\nValidation: passed", 0),
+        ("fix: correct behavior\n\nValidation: passed", 1),
+        ("fix: correct behavior\n\nRefs: #12\nValidation: TODO", 1),
+    ],
+)
+def test_content_policy_entrypoint_agreement(tmp_path: Path, text: str, expected: int) -> None:
+    config = (
+        '[commit]\nrequired-issue-prefixes=["#"]\n'
+        'required-footer-tokens=["Validation"]\nfooter-values={Validation=["passed"]}\n'
+    )
+    _assert_entrypoint_agreement(tmp_path, text, expected, config)
