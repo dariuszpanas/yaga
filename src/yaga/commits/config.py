@@ -65,6 +65,8 @@ _COMMIT_KEYS = frozenset(
         "footer-max-line-length",
         "required-colon-footer-tokens",
         "body-policy",
+        "body-policy-by-type",
+        "body-max-length",
         "body-min-length",
         "body-min-words",
         "body-max-line-length",
@@ -219,15 +221,16 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         "scope-policy",
         path,
     )
-    scope_policy_by_type = _scope_policy_by_type(
+    scope_policy_by_type = _presence_policy_by_type(
         raw_commit.get("scope-policy-by-type", {}),
+        key="scope-policy-by-type",
         allowed_types=allowed_types,
         path=path,
     )
-    reachable_scope_policies = _reachable_scope_policies(
+    reachable_scope_policies = _reachable_presence_policies(
         allowed_types=allowed_types,
-        scope_policy=scope_policy,
-        scope_policy_by_type=scope_policy_by_type,
+        default_policy=scope_policy,
+        policy_by_type=scope_policy_by_type,
     )
     if allowed_scopes == () and PresencePolicy.REQUIRED in reachable_scope_policies:
         raise ConfigurationError(
@@ -261,6 +264,20 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         "body-policy",
         path,
     )
+    body_policy_by_type = _presence_policy_by_type(
+        raw_commit.get("body-policy-by-type", {}),
+        key="body-policy-by-type",
+        allowed_types=allowed_types,
+        path=path,
+    )
+    reachable_body_policies = _reachable_presence_policies(
+        allowed_types=allowed_types,
+        default_policy=body_policy,
+        policy_by_type=body_policy_by_type,
+    )
+    body_max = _optional_integer(
+        raw_commit, "body-max-length", minimum=1, maximum=100_000, path=path
+    )
     body_min = _integer(
         raw_commit.get("body-min-length", 0),
         "body-min-length",
@@ -275,7 +292,13 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         100_000,
         path,
     )
-    if body_policy is PresencePolicy.FORBIDDEN and (body_min or body_min_words):
+    if body_max is not None and body_max < body_min:
+        raise ConfigurationError(f"body-max-length is smaller than body-min-length in {path}")
+    if body_max is not None and body_min_words and body_max < 2 * body_min_words - 1:
+        raise ConfigurationError(f"body-max-length cannot fit body-min-words in {path}")
+    if all(value is PresencePolicy.FORBIDDEN for value in reachable_body_policies) and (
+        body_min or body_min_words
+    ):
         incompatible = " and ".join(
             key
             for key, value in (
@@ -376,6 +399,8 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         ),
         required_colon_footer_tokens=required_colon_footer_tokens,
         body_policy=body_policy,
+        body_policy_by_type=body_policy_by_type,
+        body_max_length=body_max,
         body_min_length=body_min,
         body_min_words=body_min_words,
         body_max_line_length=_optional_integer(
@@ -600,16 +625,17 @@ def _footer_tokens(
     return values
 
 
-def _scope_policy_by_type(
+def _presence_policy_by_type(
     value: object,
     *,
+    key: str,
     allowed_types: tuple[str, ...] | None,
     path: Path,
 ) -> tuple[tuple[str, PresencePolicy], ...]:
     if not isinstance(value, dict):
-        raise ConfigurationError(f"scope-policy-by-type must be a table in {path}")
+        raise ConfigurationError(f"{key} must be a table in {path}")
     if len(value) > MAX_LIST_ITEMS:
-        raise ConfigurationError(f"scope-policy-by-type exceeds {MAX_LIST_ITEMS} entries in {path}")
+        raise ConfigurationError(f"{key} exceeds {MAX_LIST_ITEMS} entries in {path}")
 
     allowed = {commit_type.casefold() for commit_type in allowed_types or ()}
     normalized: set[str] = set()
@@ -621,40 +647,38 @@ def _scope_policy_by_type(
             or any(_unsafe_character(character) for character in commit_type)
             or _TYPE_TOKEN.fullmatch(commit_type) is None
         ):
-            raise ConfigurationError(
-                f"scope-policy-by-type contains invalid type token {commit_type!r} in {path}"
-            )
+            raise ConfigurationError(f"{key} contains invalid type token {commit_type!r} in {path}")
         folded = commit_type.casefold()
         if folded in normalized:
             raise ConfigurationError(
-                f"scope-policy-by-type contains duplicate type token {commit_type!r} in {path}"
+                f"{key} contains duplicate type token {commit_type!r} in {path}"
             )
         if allowed_types is not None and folded not in allowed:
             raise ConfigurationError(
-                f"scope-policy-by-type type {commit_type!r} is not in allowed-types in {path}"
+                f"{key} type {commit_type!r} is not in allowed-types in {path}"
             )
         normalized.add(folded)
         policies.append(
             (
                 commit_type,
-                _enum(raw_policy, PresencePolicy, f"scope-policy-by-type.{commit_type}", path),
+                _enum(raw_policy, PresencePolicy, f"{key}.{commit_type}", path),
             )
         )
     return tuple(policies)
 
 
-def _reachable_scope_policies(
+def _reachable_presence_policies(
     *,
     allowed_types: tuple[str, ...] | None,
-    scope_policy: PresencePolicy,
-    scope_policy_by_type: tuple[tuple[str, PresencePolicy], ...],
+    default_policy: PresencePolicy,
+    policy_by_type: tuple[tuple[str, PresencePolicy], ...],
 ) -> tuple[PresencePolicy, ...]:
-    overrides = {commit_type.casefold(): policy for commit_type, policy in scope_policy_by_type}
+    overrides = {commit_type.casefold(): policy for commit_type, policy in policy_by_type}
     if allowed_types is not None:
         return tuple(
-            overrides.get(commit_type.casefold(), scope_policy) for commit_type in allowed_types
+            overrides.get(commit_type.casefold(), default_policy) for commit_type in allowed_types
         )
-    return (scope_policy, *(policy for _, policy in scope_policy_by_type))
+    return (default_policy, *(policy for _, policy in policy_by_type))
 
 
 def _string_list(

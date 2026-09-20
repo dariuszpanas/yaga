@@ -27,8 +27,26 @@ from tests.test_commit_consumer_policy import BODY, HEADER, POLICY, message
     ],
 )
 def test_consumer_entrypoint_agreement(tmp_path: Path, text: str, expected: int) -> None:
+    _assert_entrypoint_agreement(tmp_path, text, expected, POLICY)
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("fix: correct behavior", 1),
+        ("fix: correct behavior\n\nBrief", 0),
+        ("docs: correct wording", 0),
+        ("docs: correct wording\n\nToo much prose", 1),
+    ],
+)
+def test_custom_body_entrypoint_agreement(tmp_path: Path, text: str, expected: int) -> None:
+    config = 'config-version=1\n[commit]\nbody-policy-by-type={fix="required"}\nbody-max-length=5\n'
+    _assert_entrypoint_agreement(tmp_path, text, expected, config)
+
+
+def _assert_entrypoint_agreement(tmp_path: Path, text: str, expected: int, config: str) -> None:
     repo, event, context = _action_fixture(
-        tmp_path, head_message=text, pull_request_title=HEADER, config=POLICY
+        tmp_path, head_message=text, pull_request_title=HEADER, config=config
     )
     executable = shutil.which("yaga")
     assert executable is not None

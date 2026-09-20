@@ -211,12 +211,15 @@ def _check_target(
                     message="breaking changes must use both ! and a BREAKING CHANGE footer",
                 )
             )
+        body_policy = {key.casefold(): value for key, value in policy.body_policy_by_type}.get(
+            parsed.commit_type.casefold(), policy.body_policy
+        )
         has_body = bool(parsed.body.strip())
-        if policy.body_policy is PresencePolicy.REQUIRED and not has_body:
+        if body_policy is PresencePolicy.REQUIRED and not has_body:
             diagnostics.append(
                 Diagnostic(code="body.required", message="a body is required by policy")
             )
-        if policy.body_policy is PresencePolicy.FORBIDDEN and has_body:
+        if body_policy is PresencePolicy.FORBIDDEN and has_body:
             diagnostics.append(
                 Diagnostic(
                     code="body.forbidden",
@@ -224,7 +227,11 @@ def _check_target(
                     line=parsed.body_start_line,
                 )
             )
-        if has_body and _text_length(parsed.body.strip(), policy) < policy.body_min_length:
+        if (
+            has_body
+            and body_policy is not PresencePolicy.FORBIDDEN
+            and _text_length(parsed.body.strip(), policy) < policy.body_min_length
+        ):
             diagnostics.append(
                 Diagnostic(
                     code="body.length",
@@ -235,7 +242,19 @@ def _check_target(
                     line=parsed.body_start_line,
                 )
             )
-        if has_body and policy.body_min_words:
+        if (
+            has_body
+            and policy.body_max_length is not None
+            and _text_length(parsed.body.strip(), policy) > policy.body_max_length
+        ):
+            diagnostics.append(
+                Diagnostic(
+                    code="body.length",
+                    message=f"body has {_text_length(parsed.body.strip(), policy)} characters; maximum is {policy.body_max_length}",
+                    line=parsed.body_start_line,
+                )
+            )
+        if has_body and body_policy is not PresencePolicy.FORBIDDEN and policy.body_min_words:
             body_word_count = _word_count_below_minimum(parsed.body, policy.body_min_words)
             if body_word_count is not None:
                 word_label = "word" if body_word_count == 1 else "words"

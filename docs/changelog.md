@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Allow per-type body requirements with `body-policy-by-type` and cap total prose with
+  `body-max-length`, preserving existing defaults and independent title checks (planned for 0.2.0).
+
 ## [0.1.2] - 2026-09-20
 
 ### Fixed
