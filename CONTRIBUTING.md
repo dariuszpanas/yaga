@@ -453,3 +453,9 @@ triggers, fixed environment names, action SHA, and absence of legacy writers.
 Run `uv run make ci` before every push. Use Conventional Commit subjects. Preserve behavior,
 motivation, security boundary, failure mode, migration impact, and validation in the retained commit
 and PR. Fold review fixes and CI repairs into the logical commit they correct.
+
+Keep `pull-request-message` closed to `title-only` (default) and `title-and-body`. The opt-in
+GitHub event check composes literal title, blank line, and bounded UTF-8 body; null/missing bodies
+are empty. Preserve the independent title result, optional schema-v1 `proposed_message` result,
+full policy and spelling checks, body-edit wakes, and pre-exemption event/range validation.
+Do not infer merge settings or claim the proposed text is the final merged commit.

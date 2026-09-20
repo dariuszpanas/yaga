@@ -135,15 +135,22 @@ def _render_text_report(report: PullRequestValidationReport) -> str:
         f"Pull request #{event.number}: {event.base_sha[:12]}..{event.head_sha[:12]}",
     ]
     lines.extend(_result_lines(report.title, kind="TITLE"))
+    if report.proposed_message is not None:
+        lines.extend(_result_lines(report.proposed_message, kind="MESSAGE"))
     for result in report.commits:
         lines.extend(_result_lines(result, kind="COMMIT"))
     lines.append(
-        f"Checked one title and {len(report.commits)} commit(s): {report.passed} passed, "
+        f"Checked one title{_proposed_summary(report)} and {len(report.commits)} commit(s): "
+        f"{report.passed} passed, "
         f"{report.failed} failed, {report.skipped} skipped."
     )
     if report.config_path is not None:
         lines.append(f"Config: {safe_text(str(report.config_path), maximum=MAX_DISPLAY_PATH)}")
     return "\n".join(lines)
+
+
+def _proposed_summary(report: PullRequestValidationReport) -> str:
+    return ", one proposed message" if report.proposed_message is not None else ""
 
 
 def _result_lines(result: CheckResult, *, kind: str) -> list[str]:
@@ -169,7 +176,7 @@ def _report_document(report: PullRequestValidationReport) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "kind": "pull_request_commit_policy",
         "valid": report.valid,
-        "checked": 1 + len(report.commits),
+        "checked": len(report.results),
         "passed": report.passed,
         "failed": report.failed,
         "skipped": report.skipped,
@@ -195,6 +202,11 @@ def _report_document(report: PullRequestValidationReport) -> dict[str, Any]:
             },
             "title": result_document(report.title),
             "commits": [result_document(result) for result in report.commits],
+            **(
+                {"proposed_message": result_document(report.proposed_message)}
+                if report.proposed_message is not None
+                else {}
+            ),
         },
     }
 
@@ -222,7 +234,7 @@ def _render_github_report(report: PullRequestValidationReport) -> str:
         f"::error title=YAGA commit policy::{_workflow_data(message)}" for message in visible
     )
     summary = (
-        f"YAGA checked pull request #{report.event.number}: one title and "
+        f"YAGA checked pull request #{report.event.number}: one title{_proposed_summary(report)} and "
         f"{len(report.commits)} commit(s); {report.failed} failed, "
         f"{report.skipped} skipped."
     )

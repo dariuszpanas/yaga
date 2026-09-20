@@ -272,3 +272,10 @@ parent, or global configuration discovery. Custom dictionaries are currently uns
 trusted mode: neither a PR's `_typos.toml` nor dirty files in the trusted checkout can weaken it.
 Ordinary local checks and the default PR-head mode retain repository Typos configuration.
 Keep the tool version consistent when comparing local and CI spelling results.
+
+## Proposed PR messages (development toward 0.2.0)
+
+`pull-request-message = "title-and-body"` opts into full commit policy for the PR title and
+description together. The default is `"title-only"`. This setting affects only event-aware
+PR checks; see [GitHub Actions](github-actions.md#proposed-merge-messages-development-toward-020)
+for merge settings, event triggers, reporting, and limitations.

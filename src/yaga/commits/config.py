@@ -24,6 +24,7 @@ from yaga.commits.models import (
     MergePolicy,
     ParagraphSplittingPolicy,
     PresencePolicy,
+    PullRequestMessagePolicy,
     QualityInputMode,
     QualityPolicy,
     QualityProvider,
@@ -76,6 +77,7 @@ _COMMIT_KEYS = frozenset(
         "skip-pull-request-authors",
         "typos",
         "typos-config",
+        "pull-request-message",
         "quality",
         "required-footer-tokens",
         "forbidden-footer-tokens",
@@ -450,6 +452,12 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             raw_commit.get("typos", TyposPolicy.SKIP.value),
             TyposPolicy,
             "typos",
+            path,
+        ),
+        pull_request_message=_enum(
+            raw_commit.get("pull-request-message", PullRequestMessagePolicy.TITLE_ONLY.value),
+            PullRequestMessagePolicy,
+            "pull-request-message",
             path,
         ),
         typos_config=_enum(

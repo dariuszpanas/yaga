@@ -12,8 +12,13 @@ from typing import Any
 from yaga.commits.checker import check_header, check_target
 from yaga.commits.config import load_config
 from yaga.commits.git import read_commit, read_range
-from yaga.commits.models import CheckResult, CommitTarget, DependabotPullRequestPolicy
-from yaga.commits.parser import header_from
+from yaga.commits.models import (
+    CheckResult,
+    CommitTarget,
+    DependabotPullRequestPolicy,
+    PullRequestMessagePolicy,
+)
+from yaga.commits.parser import MAX_MESSAGE_BYTES, header_from
 from yaga.commits.sources import MAX_TITLE_BYTES, validate_title
 from yaga.commits.trusted_policy import load_trusted_policy
 from yaga.commits.typos import apply_typos
@@ -55,6 +60,7 @@ class PullRequestEvent:
     author_type: str
     head_repository: str = ""
     default_branch: str | None = None
+    body: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,11 +71,13 @@ class PullRequestValidationReport:
     title: CheckResult
     commits: tuple[CheckResult, ...]
     config_path: Path | None
+    proposed_message: CheckResult | None = None
 
     @property
     def results(self) -> tuple[CheckResult, ...]:
-        """Return title first, followed by commits in oldest-first order."""
-        return (self.title, *self.commits)
+        """Return title, optional proposed message, then oldest-first commits."""
+        proposed = (self.proposed_message,) if self.proposed_message is not None else ()
+        return (self.title, *proposed, *self.commits)
 
     @property
     def failed(self) -> int:
@@ -166,6 +174,15 @@ def check_pull_request(
         label=f"pull request #{event.number} title",
         message=event.title,
     )
+    proposed_target = (
+        CommitTarget(
+            label=f"pull request #{event.number} proposed message",
+            message=f"{event.title}\n\n{event.body}",
+        )
+        if loaded.policy.pull_request_message is PullRequestMessagePolicy.TITLE_AND_BODY
+        else None
+    )
+    proposed_message = None
     dependabot_skip = (
         loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.SKIP
         and event.author_login == "dependabot[bot]"
@@ -188,8 +205,17 @@ def check_pull_request(
             else "Configured pull request author"
         )
         title = _skip_result(title_target, reason)
+        if proposed_target is not None:
+            proposed_message = _skip_result(proposed_target, reason)
         commits = tuple(_skip_result(target, reason) for target in targets)
     else:
+        if proposed_target is not None:
+            proposed_message = apply_typos(
+                check_target(proposed_target, loaded.policy),
+                loaded.policy,
+                repository=repo,
+                isolated=trusted,
+            )
         title = apply_typos(
             check_header(title_target, loaded.policy),
             loaded.policy,
@@ -210,6 +236,7 @@ def check_pull_request(
         title=title,
         commits=commits,
         config_path=loaded.path,
+        proposed_message=proposed_message,
     )
 
 
@@ -268,6 +295,17 @@ def load_pull_request_event(path: Path) -> PullRequestEvent:
     if action == "ready_for_review" and draft:
         raise InputError("ready_for_review event cannot describe a draft pull request")
     title = _title(pull_request.get("title"))
+    body = pull_request.get("body")
+    if body is None:
+        body = ""
+    if not isinstance(body, str):
+        raise InputError("pull request body must be a string or null")
+    try:
+        message_bytes = len(f"{title}\n\n{body}".encode())
+    except UnicodeEncodeError as error:
+        raise InputError("pull request body is not valid UTF-8") from error
+    if message_bytes > MAX_MESSAGE_BYTES:
+        raise InputError("proposed pull request message exceeds the hard message byte limit")
     base = _object(pull_request.get("base"), "pull request base")
     head = _object(pull_request.get("head"), "pull request head")
     base_repository = _object(base.get("repo"), "pull request base repository")
@@ -296,6 +334,7 @@ def load_pull_request_event(path: Path) -> PullRequestEvent:
         action=action,
         number=number,
         title=title,
+        body=body,
         base_sha=base_sha,
         head_sha=head_sha,
         base_ref=base_ref,
