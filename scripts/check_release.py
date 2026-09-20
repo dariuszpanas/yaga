@@ -23,13 +23,30 @@ def validate_release(tag: str, version: str, changelog: str) -> None:
     datetime.date.fromisoformat(dates[0])
 
 
+def release_notes(version: str, changelog: str) -> str:
+    """Extract only the validated release section for the GitHub announcement."""
+    validate_release(f"v{version}", version, changelog)
+    heading = re.search(
+        rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$", changelog, re.M
+    )
+    assert heading is not None
+    section = re.split(r"^## ", changelog[heading.end() :], maxsplit=1, flags=re.M)[0].strip()
+    if not section:
+        raise ValueError("release notes must describe the selected version")
+    return section + f"\n\n[PyPI](https://pypi.org/project/yaga-cli/{version}/)\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tag")
+    parser.add_argument("tag", nargs="?", help="default: the package metadata version")
+    parser.add_argument("--notes-file", type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    validate_release(args.tag, project["version"], (root / "docs/changelog.md").read_text("utf-8"))
+    changelog = (root / "docs/changelog.md").read_text("utf-8")
+    validate_release(args.tag or f"v{project['version']}", project["version"], changelog)
+    if args.notes_file is not None:
+        args.notes_file.write_text(release_notes(project["version"], changelog), encoding="utf-8")
 
 
 if __name__ == "__main__":

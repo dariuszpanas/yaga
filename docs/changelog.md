@@ -6,6 +6,9 @@
 
 ### Fixed
 
+- Create the GitHub Release automatically after successful PyPI publication, using the same
+  validated distributions and the selected changelog notes.
+
 - Honor optional Typos spelling checks for GitHub PR titles and commit messages, including the
   read-only Action; isolate trusted-mode spelling from ambient configuration and preserve tool errors.
 

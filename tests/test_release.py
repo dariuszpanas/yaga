@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.check_release import validate_release
+from scripts.check_release import release_notes, validate_release
 
 
 def test_release_accepts_exact_version_and_date() -> None:
@@ -48,3 +48,59 @@ def test_release_workflow_isolates_upload_from_source_and_manual_runs() -> None:
     assert any(
         'make ci BUILD_ARGS="--output-dir dist"' in step.get("run", "") for step in build["steps"]
     )
+
+
+def test_release_notes_select_only_the_requested_version() -> None:
+    changelog = """# Changelog
+
+## [Unreleased]
+
+Future changes.
+
+## [0.1.2] - 2026-09-20
+
+### Fixed
+
+- Preserve package artifacts.
+
+## [0.1.1] - 2026-09-19
+
+Old changes.
+"""
+    assert release_notes("0.1.2", changelog) == (
+        "### Fixed\n\n- Preserve package artifacts.\n\n"
+        "[PyPI](https://pypi.org/project/yaga-cli/0.1.2/)\n"
+    )
+
+
+def test_release_notes_reject_empty_section() -> None:
+    with pytest.raises(ValueError, match="must describe"):
+        release_notes("0.1.2", "## [0.1.2] - 2026-09-20\n\n## [0.1.1] - 2026-09-19\nOld changes.")
+
+
+def test_github_release_requires_successful_publish_and_separate_permissions() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.load(
+        (root / ".github/workflows/release.yml").read_text("utf-8"), yaml.BaseLoader
+    )
+    announce = workflow["jobs"]["github-release"]
+    assert announce["needs"] == ["build", "publish"]
+    assert announce["if"] == workflow["jobs"]["publish"]["if"]
+    assert "always()" not in announce["if"]
+    assert announce["permissions"] == {"contents": "write"}
+    assert all("checkout@" not in step.get("uses", "") for step in announce["steps"])
+    downloads = [step["with"]["name"] for step in announce["steps"] if "uses" in step]
+    assert downloads == ["distributions", "release-notes"]
+    command = announce["steps"][-1]
+    assert command["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert "--verify-tag" in command["run"]
+    assert "dist/*.whl dist/*.tar.gz" in command["run"]
+    assert "--notes-file release-notes/release-notes.md" in command["run"]
+    assert "${{" not in command["run"]
+    notes = [
+        step
+        for step in workflow["jobs"]["build"]["steps"]
+        if step.get("with", {}).get("name") == "release-notes"
+    ]
+    assert len(notes) == 1
+    assert notes[0]["with"]["path"] == "release-notes.md"
