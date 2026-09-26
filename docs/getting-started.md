@@ -41,7 +41,7 @@ execution policy. This follows [uv's Windows installation instructions](https://
 
 You can [inspect the shell script](install.sh) or [PowerShell script](install.ps1), download it,
 and execute the saved file instead. These convenience commands execute downloaded code.
-The bootstrap uses uv 0.12.7; an existing uv is reused. Set `YAGA_VERSION` to a published final
+The bootstrap installs the current stable uv release when needed; an existing uv is reused. Set `YAGA_VERSION` to a published final
 `X.Y.Z` release to pin YAGA, or omit it for the latest release. Set `YAGA_NO_MODIFY_PATH=1` to
 skip `uv tool update-shell`; then add the directory reported by `uv tool dir --bin` to `PATH`
 yourself. Standard uv environment variables, including `UV_TOOL_DIR` and `UV_TOOL_BIN_DIR`,
@@ -213,7 +213,8 @@ git clone https://github.com/dariuszpanas/yaga.git
 cd yaga
 ```
 
-Checkout commands require uv 0.12.7 or newer. CI pins its own version for reproducibility.
+Checkout commands require uv 0.12.7 or newer. CI uses the current stable release, with that
+minimum retained for lockfile and project compatibility.
 See [Contributing](contributing.md) for the development tool prerequisites.
 
 To install the current source as a user-wide tool:

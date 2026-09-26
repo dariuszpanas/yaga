@@ -8,8 +8,8 @@ gate is `agent-review`.
 ## Development
 
 Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) 0.12.7 or newer are required
-for the development workflow. CI pins uv separately for reproducibility; contributors may use
-newer uv releases:
+for the development workflow. CI and contributors use current stable uv releases; the minimum
+version protects compatibility with the committed lockfile and project configuration:
 
 ```bash
 uv sync --group dev

@@ -160,7 +160,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert ci.count('version: "0.12.7"') == 2
+    assert 'version: "0.12.7"' not in ci
+    assert ci.count("astral-sh/setup-uv@") == 2
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
     assert "yaga_message=\"$(printf '%s\\n\\n%s'" in ci

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Let setup-uv select the latest release satisfying the project's `>=0.12.7`
+  minimum instead of pinning CI to one uv patch version; use the official
+  current uv installer endpoints in both platform installers.
+
 ## [0.2.0] - 2026-09-20
 
 ### Added

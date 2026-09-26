@@ -15,7 +15,7 @@
         $installer = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName() + '.ps1')
         $previousInstall = $env:UV_UNMANAGED_INSTALL
         try {
-            Invoke-WebRequest -UseBasicParsing -Uri 'https://astral.sh/uv/0.12.7/install.ps1' -OutFile $installer -TimeoutSec 120
+            Invoke-WebRequest -UseBasicParsing -Uri 'https://astral.sh/uv/install.ps1' -OutFile $installer -TimeoutSec 120
             $env:UV_UNMANAGED_INSTALL = Join-Path $HOME '.local/bin'
             & ([scriptblock]::Create([IO.File]::ReadAllText($installer)))
             $uvExecutable = Join-Path $env:UV_UNMANAGED_INSTALL 'uv.exe'

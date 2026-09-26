@@ -22,10 +22,10 @@ install_yaga() (
         if command -v curl >/dev/null 2>&1; then
             curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
                 --connect-timeout 15 --max-time 120 \
-                https://astral.sh/uv/0.12.7/install.sh --output "$installer"
+                https://astral.sh/uv/install.sh --output "$installer"
         elif command -v wget >/dev/null 2>&1; then
             wget --https-only --timeout=120 --tries=1 \
-                --output-document "$installer" https://astral.sh/uv/0.12.7/install.sh
+                --output-document "$installer" https://astral.sh/uv/install.sh
         else
             echo 'Installing uv requires curl or wget; install either tool or uv, then retry.' >&2
             exit 2
