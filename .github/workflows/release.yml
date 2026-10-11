@@ -107,5 +107,5 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: >-
           gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz
-          --verify-tag --title "YAGA ${RELEASE_TAG#v} (Beta)"
+          --verify-tag --title "YAGA ${RELEASE_TAG#v}"
           --notes-file release-notes/release-notes.md

@@ -46,7 +46,8 @@ package users. Twine's metadata check does not prove remote images or links are 
    references. Tests require the Action runtime version to match package metadata. Convert the candidate changelog
    heading into `## [0.1.0] - YYYY-MM-DD`, using the actual release date, and retain `Unreleased`
    above it. The Beta classifier is a maturity label; version `0.1.0` is a normal PyPI version,
-   not the PEP 440 prerelease `0.1.0b1`.
+   not the PEP 440 prerelease `0.1.0b1`. Use `YAGA 0.1.0` as the GitHub Release title;
+   keep the maturity label in package metadata rather than appending `(Beta)` to the title.
 2. Merge the release changes and require all hosted CI lanes to pass for the exact commit,
    including Windows. Resolve dependency PR failures before choosing the candidate.
 3. After publication is explicitly authorized, create and push the matching `v0.1.0` tag at that
