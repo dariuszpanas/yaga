@@ -9,11 +9,13 @@ gate is `agent-review`.
 
 Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) 0.12.7 or newer are required
 for the development workflow. CI pins uv separately for reproducibility; contributors may use
-newer uv releases:
+newer uv releases. Use uv 0.13.0 or newer to download Python 3.15. CI tests Python 3.12
+through 3.15 on Linux and Python 3.12 and 3.15 on Windows against a non-editable package
+installation:
 
 ```bash
-uv sync --group dev
-uv run make ci
+uv sync --group dev --python 3.12
+uv run --python 3.12 make ci
 ```
 
 The full gate also needs Git, GNU Make, Bash, a running Docker engine using Linux containers,
@@ -36,6 +38,9 @@ The package build gate must execute the fresh wheel outside the checkout. Export
 runtime closure from `uv.lock`, require its hashes without building dependencies, install the wheel
 with dependency resolution disabled, run `uv pip check`, and execute the installed `yaga` entrypoint
 with project and Python environment leakage removed.
+
+That strict build gate runs on Python 3.12. The Python 3.15 test jobs permit PyYAML's source-build
+fallback because the locked PyYAML release does not publish Python 3.15 wheels.
 
 ## CLI and commit policy contract
 

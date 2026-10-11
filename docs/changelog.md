@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Declare Python 3.15 support and add blocking Linux and Windows test jobs. Run the
+  Python compatibility matrix against a non-editable package installation.
+
 ## [0.2.0] - 2026-09-20
 
 ### Added
