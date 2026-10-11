@@ -318,7 +318,7 @@ def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
         b"Requires-Dist: pyyaml<7,>=6.0.3\n"
         b"Requires-Dist: typer<1,>=0.27.2\n"
         b"Requires-Dist: boto3<2,>=1.37; extra == 'quality-bedrock'\n"
-        b"Requires-Dist: torch<3,>=2.6; extra == 'quality'\n"
+        b"Requires-Dist: torch<3,>=2.13; extra == 'quality'\n"
         b"Requires-Dist: transformers<6,>=5.10; extra == 'quality'\n"
         b"\n"
         b'<img src="https://dariuszpanas.github.io/yaga/assets/branding/'
@@ -331,6 +331,7 @@ def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
         valid.replace(b"Requires-Dist: typer<1,>=0.27.2\n", b""),
         valid.replace(b"pyyaml<7,>=6.0.3", b"pyyaml>=6.0.3"),
         valid.replace(b"typer<1,>=0.27.2", b"typer>=0.27.2"),
+        valid.replace(b"torch<3,>=2.13", b"torch<3,>=2.6"),
         valid.replace(
             b"Requires-Dist: typer<1,>=0.27.2",
             b"Requires-Dist: typer<1,>=0.27.2\nRequires-Dist: requests>=2",
