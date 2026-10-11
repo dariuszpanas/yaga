@@ -3,6 +3,10 @@
 This guide covers **YAGA 0.2.0 (Beta)**. YAGA requires Python 3.12 or newer. Install the **`yaga-cli`** distribution from PyPI;
 the executable and import package are **`yaga`**. The `yaga` distribution is an unrelated project.
 
+The core CLI is tested on Python 3.12 through 3.15. Python 3.15 installations currently use
+PyYAML's source-build fallback because PyYAML 6.0.3 does not publish Python 3.15 wheels.
+For optional model dependencies, see [commit quality installation](commit-quality.md).
+
 ## Install as a global tool
 
 A tool installer makes `yaga` available from any repository without adding it to each project's

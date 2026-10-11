@@ -28,7 +28,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
-          version: "0.12.7"
+          version: "0.13.0"
       - name: Cache Typos registry
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -137,10 +137,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13", "3.14"]
+        python-version: ["3.12", "3.13", "3.14", "3.15"]
         os: [ubuntu-latest]
         include:
           - python-version: "3.12"
+            os: windows-latest
+          - python-version: "3.15"
             os: windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -151,9 +153,9 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
-          version: "0.12.7"
-      - run: uv sync --frozen --group dev --python ${{ matrix.python-version }}
-      - run: uv run --frozen --python ${{ matrix.python-version }} pytest
+          version: "0.13.0"
+      - run: uv sync --frozen --group dev --no-editable --python ${{ matrix.python-version }}
+      - run: uv run --frozen --no-editable --python ${{ matrix.python-version }} pytest
 
   gate:
     name: CI Prerequisites

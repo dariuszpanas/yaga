@@ -27,6 +27,8 @@ YAGA does not require adopting the entire CLI at once.
 
 YAGA requires Python 3.12 or newer. Its PyPI distribution is **`yaga-cli`** and its command is
 **`yaga`**; the distribution named `yaga` is an unrelated project.
+The core CLI is tested on Python 3.12 through 3.15. Optional model dependencies have their own
+[installation requirements](https://dariuszpanas.github.io/yaga/commit-quality.html).
 
 - [Adoption recipes](https://dariuszpanas.github.io/yaga/recipes.html) — add checks to an existing workflow.
 - [Assess YAGA for CI](https://dariuszpanas.github.io/yaga/ci-adoption.html) — match your problem to a check and its prerequisites.

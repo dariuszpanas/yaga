@@ -4,6 +4,12 @@
 but may not explain a change clearly in a Git log. It is separate from `commit check`: deterministic
 policy remains the merge gate, while the model provides a bounded advisory signal.
 
+The optional `quality` extra depends on PyTorch wheels for the selected Python version and
+platform. The locked PyTorch 2.14.0 package from PyPI has no Python 3.15 wheels; use Python 3.12
+through 3.14 for this extra. The repository's Linux CPU index has Python 3.15 wheels, but that
+index selection is not part of the published wheel metadata. The core CLI and the separate
+`quality-bedrock` extra do not require PyTorch.
+
 ## When to use it
 
 Run both checks when exact policy enforcement and broader writing feedback are useful:
