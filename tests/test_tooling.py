@@ -32,8 +32,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         "typer>=0.27.2,<1",
     ]
     build_requirements = project["build-system"]["requires"]
-    assert build_requirements == ["hatchling==1.32.0"]
-    assert "hatchling==1.32.0" in project["dependency-groups"]["dev"]
+    assert build_requirements == ["hatchling==1.32.4"]
+    assert "hatchling==1.32.4" in project["dependency-groups"]["dev"]
     assert "pre-commit>=4.6.2,<5" in project["dependency-groups"]["dev"]
     assert project["tool"]["uv"]["required-version"] == ">=0.12.7"
     commit_policy = project["tool"]["yaga"]["commit"]

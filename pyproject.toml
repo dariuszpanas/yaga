@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling==1.32.0"]
+requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [project]
@@ -68,7 +68,7 @@ yaga = "yaga.cli:main"
 
 [dependency-groups]
 dev = [
-    "hatchling==1.32.0",
+    "hatchling==1.32.4",
     "pre-commit>=4.6.2,<5",
     "pytest>=8.3",
     "readme-renderer[md]>=46.0",
