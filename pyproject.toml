@@ -39,7 +39,7 @@ dependencies = [
 
 [project.optional-dependencies]
 quality = [
-    "torch>=2.6,<3",
+    "torch>=2.13,<3",
     "transformers>=5.10,<6",
 ]
 quality-bedrock = [

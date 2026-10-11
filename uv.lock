@@ -1234,8 +1234,8 @@ dev = [
 requires-dist = [
     { name = "boto3", marker = "extra == 'quality-bedrock'", specifier = ">=1.37,<2" },
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
-    { name = "torch", marker = "sys_platform == 'linux' and extra == 'quality'", specifier = ">=2.6,<3", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torch", marker = "sys_platform != 'linux' and extra == 'quality'", specifier = ">=2.6,<3" },
+    { name = "torch", marker = "sys_platform == 'linux' and extra == 'quality'", specifier = ">=2.13,<3", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "sys_platform != 'linux' and extra == 'quality'", specifier = ">=2.13,<3" },
     { name = "transformers", marker = "extra == 'quality'", specifier = ">=5.10,<6" },
     { name = "typer", specifier = ">=0.27.2,<1" },
 ]
