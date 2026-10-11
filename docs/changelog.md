@@ -2,10 +2,27 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-10
+
 ### Added
 
 - Declare Python 3.15 support and add blocking Linux and Windows test jobs. Run the
   Python compatibility matrix against a non-editable package installation.
+
+### Fixed
+
+- Update locked urllib3 to 2.8.0 for upstream proxy TLS and streaming denial-of-service fixes
+  in the optional Bedrock dependency chain.
+- Update locked virtualenv to 21.7.13 for upstream activation-script, configuration, and
+  seed-wheel verification security fixes in development tooling.
+- Align the Hatchling 1.32.4 build and development pins with the lockfile and tooling contract.
+- Raise the optional quality extra's PyTorch minimum to 2.13 to exclude older releases with
+  known security advisories; the locked PyTorch version remains 2.14.0.
+- Repair the pipx installation link in the getting-started guide.
+
+### Changed
+
+- Refresh CI tooling with setup-uv 10.2.0 and uv 0.13.0, including stable Python 3.15 downloads.
 
 ## [0.2.0] - 2026-09-20
 
