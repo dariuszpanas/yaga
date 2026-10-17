@@ -1,4 +1,4 @@
-# Phase-one policy/planner fixture; YAGA test commands and executors are not implemented yet.
+# Policy and CLI planning fixture; executor integration remains a later phase.
 # Adapt every path and runner binding before a consumer shadow rollout.
 # This is an illustrative application layout, not YAGA's own test inventory.
 test-policy-version = 1

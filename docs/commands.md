@@ -29,6 +29,8 @@ or `yaga self update --dry-run` to verify a uv tool installation without updatin
 | `yaga workflow security` | Versioned permission and checkout policies | [Workflow checks](workflow-checks.md) |
 | `yaga workflow lint` | Syntax checks through Docker actionlint | [Workflow checks](workflow-checks.md) |
 | `yaga github pull-request check` | Exact event-bound title and commit validation | [GitHub Actions](github-actions.md) |
+| `yaga test policy check` | Validate an explicit test-suite catalog and selection policy | [Test planning](test-planning.md) |
+| `yaga test plan` | Select suites and variants for an explicit Git source and profile | [Test planning](test-planning.md) |
 
 Evaluating YAGA for another repository? Start with [Assess and adopt in CI](ci-adoption.md).
 

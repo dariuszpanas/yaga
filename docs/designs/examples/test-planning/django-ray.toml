@@ -1,4 +1,4 @@
-# Phase-one policy/planner fixture; YAGA test commands and executors are not implemented yet.
+# Policy and CLI planning fixture; executor integration remains a later phase.
 # Source snapshot: django-ray 6b1688bf41189d6c5db5ae5d6a6125e202500260.
 # The five rules preserve every trigger from scripts/qualification_policy.json.
 # Full-on and unknown-path fallbacks deliberately make selection a conservative

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -77,6 +78,29 @@ print(json.dumps({
     "invalid_policy_rejected": invalid_policy_rejected,
 }))
 '''
+TEST_PLANNING_CLI_POLICY = b"""\
+test-policy-version = 1
+no-impact = ["tests/**"]
+[[suites]]
+id = "backend"
+binding = "pytest"
+variants = ["py315", "py312"]
+needs = ["build"]
+[[suites]]
+id = "build"
+binding = "docker"
+[[suites]]
+id = "frontend"
+binding = "npm"
+[profiles.development]
+mode = "selective"
+[profiles.integration]
+mode = "full"
+[[rules]]
+id = "backend"
+when-any = ["src/**"]
+select = ["backend"]
+"""
 
 
 def validate_wheel_metadata(raw: bytes) -> None:
@@ -175,7 +199,7 @@ def successful_json(
 
 
 def exercise_installed_test_planning(python: Path, *, consumer: Path, env: dict[str, str]) -> None:
-    """Exercise phase-one policy/planning APIs without inventing a test CLI."""
+    """Preserve the pure policy/planning API in the installed distribution."""
     completed = run_bounded(
         [str(python), "-I", "-c", TEST_PLANNING_SMOKE_SCRIPT], cwd=consumer, env=env
     )
@@ -188,6 +212,150 @@ def exercise_installed_test_planning(python: Path, *, consumer: Path, env: dict[
         "invalid_policy_rejected": True,
     }:
         raise SystemExit("installed wheel test planning API emitted the wrong selection")
+
+
+def exercise_installed_test_policy(
+    executable: Path, *, consumer: Path, env: dict[str, str]
+) -> Path:
+    """Validate explicit policy through the installed CLI outside any repository."""
+    policy = consumer.parent / "test-policy.toml"
+    policy.write_bytes(TEST_PLANNING_CLI_POLICY)
+    completed = run_bounded(
+        [
+            str(executable),
+            "test",
+            "policy",
+            "check",
+            "--file",
+            str(policy),
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=env,
+    )
+    document = successful_json(completed, operation="test policy check")
+    if document != {
+        "schema_version": 1,
+        "kind": "test_policy",
+        "status": "valid",
+        "valid": True,
+        "test-policy-version": 1,
+        "policy_sha256": hashlib.sha256(TEST_PLANNING_CLI_POLICY).hexdigest(),
+        "suites": 3,
+        "cells": 4,
+        "profiles": ["development", "integration"],
+        "rules": 1,
+    }:
+        raise SystemExit("installed wheel CLI test policy check emitted the wrong report contract")
+    return policy
+
+
+def exercise_installed_test_plan(
+    executable: Path,
+    *,
+    consumer: Path,
+    env: dict[str, str],
+    policy: Path,
+    base_sha: str,
+    head_sha: str,
+    tree_sha: str,
+) -> None:
+    """Require exact source-bound selections, digests, and error exits in the wheel."""
+    bindings_sha256 = "ab" * 32
+    for profile, source_option, source in (
+        ("development", "--range", f"{base_sha}..{head_sha}"),
+        ("integration", "--revision", head_sha),
+    ):
+        completed = run_bounded(
+            [
+                str(executable),
+                "test",
+                "plan",
+                "--policy",
+                str(policy),
+                "--profile",
+                profile,
+                source_option,
+                source,
+                "--bindings-sha256",
+                bindings_sha256,
+                "--format",
+                "json",
+            ],
+            cwd=consumer,
+            env=env,
+        )
+        document = successful_json(completed, operation=f"test plan {profile}")
+        plan = document.get("plan")
+        if not isinstance(plan, dict):
+            raise SystemExit("installed wheel CLI test plan omitted its semantic plan")
+        digest = hashlib.sha256(
+            json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        full = profile == "integration"
+        expected_selection = [
+            {"suite": "build", "variants": ["default"]},
+            {"suite": "backend", "variants": ["py312", "py315"]},
+        ]
+        if full:
+            expected_selection.append({"suite": "frontend", "variants": ["default"]})
+        inventory = plan.get("inventory")
+        if not (
+            set(document) == {"test-plan-version", "plan_digest", "plan"}
+            and document["test-plan-version"] == 1
+            and document["plan_digest"] == digest
+            and plan.get("test-plan-version") == 1
+            and plan.get("policy_sha256") == hashlib.sha256(TEST_PLANNING_CLI_POLICY).hexdigest()
+            and plan.get("bindings_sha256") == bindings_sha256
+            and plan.get("profile") == profile
+            and plan.get("requested_mode") == ("full" if full else "selective")
+            and plan.get("effective_mode") == ("full" if full else "selective")
+            and plan.get("source")
+            == {
+                "base_commit": None if full else base_sha,
+                "head_commit": None if full else head_sha,
+                "comparison_commit": None if full else base_sha,
+                "execution_commit": head_sha,
+                "execution_tree": tree_sha,
+            }
+            and plan.get("changed_paths")
+            == (None if full else ["src/package.py", "tests/test_package.py"])
+            and plan.get("selected") == expected_selection
+            and isinstance(inventory, list)
+            and [item.get("id") for item in inventory if isinstance(item, dict)]
+            == ["backend", "build", "frontend"]
+        ):
+            raise SystemExit("installed wheel CLI test plan emitted the wrong report contract")
+    invalid = run_bounded(
+        [
+            str(executable),
+            "test",
+            "plan",
+            "--policy",
+            str(policy),
+            "--profile",
+            "development",
+            "--range",
+            f"{base_sha}..missing-test-plan-revision",
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=env,
+    )
+    if invalid.returncode != 2 or invalid.stdout:
+        raise SystemExit("installed wheel CLI test plan accepted an invalid source")
+    error_document = json.loads(invalid.stderr.decode("utf-8"))
+    if not (
+        isinstance(error_document, dict)
+        and error_document.get("schema_version") == 1
+        and isinstance(error_document.get("error"), dict)
+        and error_document["error"].get("kind") == "git"
+    ):
+        raise SystemExit("installed wheel CLI test plan emitted the wrong error contract")
 
 
 def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
@@ -308,6 +476,9 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     child_environment["PYTHONNOUSERSITE"] = "1"
     child_environment["PYTHONSAFEPATH"] = "1"
     exercise_installed_test_planning(python, consumer=consumer, env=child_environment)
+    test_policy = exercise_installed_test_policy(
+        executable, consumer=consumer, env=child_environment
+    )
     branch_policy.write_text(
         'branch-policy-version = 1\nallowed-patterns = ["main", "feat/*", "fix/*"]\n',
         encoding="utf-8",
@@ -611,6 +782,15 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         [git, "-C", str(consumer), "rev-parse", f"{head_sha}^{{tree}}"],
         text=True,
     ).strip()
+    exercise_installed_test_plan(
+        executable,
+        consumer=consumer,
+        env=child_environment,
+        policy=test_policy,
+        base_sha=base_sha,
+        head_sha=head_sha,
+        tree_sha=tree_sha,
+    )
     size_expected_paths = sorted(
         (
             ".github/workflows/ci.yml",
@@ -1048,6 +1228,7 @@ def main() -> int:
                 "yaga/agent_review/runtime.py",
                 "yaga/agent_review/github/runtime.py",
                 "yaga/git/__init__.py",
+                "yaga/git/changes.py",
                 "yaga/git/process.py",
                 "yaga/git/runtime.py",
                 "yaga/git/tree.py",
@@ -1059,6 +1240,7 @@ def main() -> int:
                 "yaga/commands/repo.py",
                 "yaga/commands/path.py",
                 "yaga/commands/size.py",
+                "yaga/commands/test.py",
                 "yaga/commands/tree.py",
                 "yaga/commands/workflow.py",
                 "yaga/commits/checker.py",
@@ -1116,11 +1298,16 @@ def main() -> int:
                 "yaga/files.py",
                 "yaga/path_patterns.py",
                 "yaga/test_planning/__init__.py",
+                "yaga/test_planning/git.py",
                 "yaga/test_planning/limits.py",
                 "yaga/test_planning/models.py",
                 "yaga/test_planning/planner.py",
                 "yaga/test_planning/policy.py",
+                "yaga/test_planning/reporting.py",
+                "yaga/test_planning/reports.py",
                 "yaga/test_planning/selection.py",
+                "yaga/test_planning/service.py",
+                "yaga/test_planning/source.py",
                 "yaga/repository/checker.py",
                 "yaga/repository/models.py",
                 "yaga/repository/plan.py",

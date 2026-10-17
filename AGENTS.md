@@ -110,6 +110,17 @@ Agent review gate is the public review contract. Its current provider adapter re
   Git paths, visible gitlink changes, disabled rename/external-diff/textconv behavior,
   unique-pattern caching, and the shared 10,000,000-unit matcher-work ceiling. Keep it out of both
   Action import graphs.
+- Keep test planning installed-only under `src/yaga/test_planning/`. `test policy check` requires
+  one explicit file and no Git access. `test plan` requires explicit policy, profile, and exactly
+  one range or revision; revision-only planning requires a full profile. Never discover policy,
+  infer HEAD/event/branch/worktree state, fetch, or execute bindings. Keep the pure planner free
+  of I/O and collect Git sources through the shared bounded runtime and neutral changed-path
+  reader. Require complete range history, one three-dot merge base, and exact endpoint/comparison/
+  execution identities; allow shallow revision-only plans with the selected commit/tree present.
+  Reject graft overlays before and after collection. Preserve version-one semantic/envelope
+  contracts, exact policy-byte SHA-256, optional binding identity, canonical plan digests, complete
+  JSON within 4 MiB, at most 256 human reasons with exact omitted counts, and exits 0/2 only.
+  Planning never claims tests passed and stays outside repository plans and both Action graphs.
 - Keep `branch check` installed-only and require an explicit versioned policy plus exact short
   branch name. Never inspect Git, infer checkout or event state, discover policy, normalize full
   refs/remotes, or read environment in the domain layer. Schema v1 is a bounded ordered list of

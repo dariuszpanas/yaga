@@ -17,6 +17,7 @@ become another review conversation. Start with one check and adopt more as your 
 | Unwanted files, oversized blobs, or incompatible paths enter the repository | [Committed-file checks](https://dariuszpanas.github.io/yaga/repository-checks.html) for contents, sizes, names, and entry modes |
 | GitHub Actions workflows drift from your security and maintenance rules | [Workflow checks](https://dariuszpanas.github.io/yaga/workflow-checks.html) for immutable references, permission and checkout rules, and syntax |
 | Local checks and CI enforce different policies | An explicit [repository plan](https://dariuszpanas.github.io/yaga/repository-plans.html) used in both places |
+| A small change needs a clear test and qualification plan | [Test planning](https://dariuszpanas.github.io/yaga/test-planning.html) selects suites and required variants from explicit changed paths |
 
 Checks produce actionable findings and reports for automation. You choose the policies and checks;
 YAGA does not require adopting the entire CLI at once.

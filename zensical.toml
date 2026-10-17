@@ -29,6 +29,7 @@ nav = [
     { "Size policy" = "size-policy.md" },
     { "Workflow checks" = "workflow-checks.md" },
     { "Repository plans" = "repository-plans.md" },
+    { "Test planning" = "test-planning.md" },
     { "GitHub Actions" = "github-actions.md" },
   ] },
   { "Optional review tools" = [
@@ -40,7 +41,7 @@ nav = [
     { "Troubleshooting" = "troubleshooting.md" },
     { "Security model" = "security.md" },
     { "Contributing" = "contributing.md" },
-    { "Test planning proposal" = "designs/test-planning.md" },
+    { "Test planning design" = "designs/test-planning.md" },
     { "Releasing" = "releasing.md" },
   ] },
   { "Changelog" = "changelog.md" },

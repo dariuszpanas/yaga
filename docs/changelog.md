@@ -6,8 +6,13 @@
 
 - Add the internal version-one test qualification policy and pure selection planner, with
   strict bounded validation, additive path/tag rules, full-suite fallback, complete variants,
-  prerequisite ordering, and tested polyglot and django-ray examples. CLI and execution
-  integration remain planned.
+  prerequisite ordering, and tested polyglot and django-ray examples.
+
+- Add installed `test policy check` and `test plan` commands, with explicit policy/profile and
+  Git range or full-profile revision inputs. Plans bind exact commit/tree and policy identities,
+  carry deterministic version-one JSON digests, and explain selected suites and variants.
+  Git collection remains bounded and never fetches. Planning does not run tests or enable skips;
+  executor handoff and receipt evaluation remain planned.
 
 - Add the schema-v1 boolean `dependabot-require-github-signature`, defaulting to `true`.
   Each otherwise eligible Dependabot-skipped commit must verify offline against the pinned
