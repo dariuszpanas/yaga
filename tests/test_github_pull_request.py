@@ -42,6 +42,7 @@ def _repository(
     tmp_path: Path,
     *,
     head_message: str = "feat(cli): add pull request checks",
+    dependabot_commit: bool = False,
 ) -> tuple[Path, str, str]:
     repository = tmp_path / "repository"
     repository.mkdir()
@@ -49,6 +50,11 @@ def _repository(
     _git(repository, "config", "user.name", "YAGA Tests")
     _git(repository, "config", "user.email", "yaga@example.invalid")
     base = _commit(repository, "chore: establish baseline", "base")
+    if dependabot_commit:
+        _git(repository, "config", "user.name", "dependabot[bot]")
+        _git(
+            repository, "config", "user.email", "49699333+dependabot[bot]@users.noreply.github.com"
+        )
     head = _commit(repository, head_message, "head")
     return repository, base, head
 
@@ -134,13 +140,15 @@ def test_dependabot_pull_requests_are_checked_by_default(tmp_path: Path) -> None
     ["opened", "edited", "reopened", "ready_for_review", "synchronize"],
 )
 @pytest.mark.parametrize("author_id", [1, 9_223_372_036_854_775_807])
-def test_explicit_policy_skips_only_exact_dependabot_pull_request_identity(
+def test_signature_opt_out_skips_only_exact_dependabot_pull_request_identity(
     tmp_path: Path,
     action: str,
     author_id: int,
 ) -> None:
-    repository, base, head = _repository(tmp_path, head_message="not conventional")
-    config = _write_skip_config(repository)
+    repository, base, head = _repository(
+        tmp_path, head_message="not conventional", dependabot_commit=True
+    )
+    config = _write_skip_config(repository, extra="dependabot-require-github-signature = false\n")
     event_document = _event_document(
         base,
         head,
@@ -178,8 +186,10 @@ def test_dependabot_skip_does_not_admit_well_formed_identity_near_misses(
     tmp_path: Path,
     author: dict[str, object],
 ) -> None:
-    repository, base, head = _repository(tmp_path, head_message="not conventional")
-    _write_skip_config(repository)
+    repository, base, head = _repository(
+        tmp_path, head_message="not conventional", dependabot_commit=True
+    )
+    _write_skip_config(repository, extra="dependabot-require-github-signature = false\n")
     event_file = _write_event(
         tmp_path / "event.json",
         _event_document(base, head, title="also not conventional", author=author),

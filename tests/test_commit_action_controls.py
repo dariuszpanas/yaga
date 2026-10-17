@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
         ("typos-missing", 2),
         ("typos-broken", 2),
         ("typos-bot", 0),
+        ("typos-bot-unsigned", 2),
         ("typos-bot-lookalike", 1),
         ("typos-bot-fork", 1),
         ("typos-bot-branch", 1),
@@ -43,7 +44,14 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -> None:
     if (
         scenario.startswith("typos-")
-        and scenario not in {"typos-missing", "typos-broken", "typos-bot", "typos-bot-stale"}
+        and scenario
+        not in {
+            "typos-missing",
+            "typos-broken",
+            "typos-bot",
+            "typos-bot-unsigned",
+            "typos-bot-stale",
+        }
         and not shutil.which("typos")
     ):
         pytest.skip("Typos is unavailable")
@@ -92,8 +100,9 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
 
     if scenario in {"typos-message", "typos-title"}:
         assert "typos.word" in result.stdout
-    if scenario == "typos-missing":
+    if scenario in {"typos-missing", "typos-bot-unsigned"}:
         assert "not installed" in result.stdout + result.stderr
+        assert "Dependabot pull request" not in result.stdout
     if scenario == "typos-bot":
         assert "2 skipped" in result.stdout
 

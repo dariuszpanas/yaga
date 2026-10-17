@@ -1,0 +1,4 @@
+# Signed Git objects and the downloaded public key must preserve exact bytes.
+# Empty signature continuation lines contain a required space.
+*.commit -text -whitespace
+*.asc -text

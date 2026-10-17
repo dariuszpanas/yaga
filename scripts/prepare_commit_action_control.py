@@ -26,6 +26,7 @@ def main() -> None:
         "typos-missing",
         "typos-broken",
         "typos-bot",
+        "typos-bot-unsigned",
         "typos-bot-lookalike",
         "typos-bot-fork",
         "typos-bot-branch",
@@ -55,6 +56,9 @@ def main() -> None:
     if scenario.startswith("typos-"):
         with (repo / ".yaga.toml").open("a", encoding="utf-8") as policy:
             policy.write('typos = "check"\ndependabot-pull-requests = "skip"\n')
+    if scenario.startswith("typos-bot") and scenario != "typos-bot-unsigned":
+        with (repo / ".yaga.toml").open("a", encoding="utf-8") as policy:
+            policy.write("dependabot-require-github-signature = false\n")
     if scenario.startswith("typos-author-"):
         with (repo / ".yaga.toml").open("a", encoding="utf-8") as policy:
             policy.write('skip-pull-request-authors = ["renovate[bot]", "release-service"]\n')
@@ -86,6 +90,11 @@ def main() -> None:
         message += "\n\nFix teh spelling."
     if scenario.startswith("typos-author-"):
         message = "invalid teh message"
+    if scenario.startswith("typos-bot"):
+        # Synthetic unsigned commits exercise the explicit opt-out or normal-check
+        # fallback, as well as the per-commit metadata and event-author boundaries.
+        git("config", "user.name", "dependabot[bot]")
+        git("config", "user.email", "49699333+dependabot[bot]@users.noreply.github.com")
     git("commit", "--allow-empty", "-m", message)
     head = git("rev-parse", "HEAD")
     git(
@@ -164,7 +173,7 @@ def main() -> None:
     exports = "".join(
         f"        export {key}={shlex.quote(value)}\n" for key, value in context.items()
     )
-    if scenario in {"typos-missing", "typos-bot"}:
+    if scenario in {"typos-missing", "typos-bot", "typos-bot-unsigned"}:
         exports += (
             '        IFS=: read -ra control_paths <<< "$PATH"\n'
             "        control_path=''\n"

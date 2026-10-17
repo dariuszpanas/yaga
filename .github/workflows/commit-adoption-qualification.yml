@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [valid, invalid, stale, nondefault, nondefault-invalid, advanced-main, typos-valid, typos-message, typos-title, typos-missing, typos-broken, typos-bot, typos-author-bot, typos-author-unlisted, typos-author-stale]
+        scenario: [valid, invalid, stale, nondefault, nondefault-invalid, advanced-main, typos-valid, typos-message, typos-title, typos-missing, typos-broken, typos-bot, typos-bot-unsigned, typos-author-bot, typos-author-unlisted, typos-author-stale]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

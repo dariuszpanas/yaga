@@ -97,9 +97,22 @@ opt-in alternative. Apply it only in the event-aware `github pull-request check`
 read-only commit Action. Identify Dependabot from one strictly parsed PR author record with exact
 `dependabot[bot]` login, `Bot` type, and a bounded positive ID; never from Git author/committer
 metadata, a title, message, branch, actor, or footer. Complete event/context/checkout/config/range
-validation before returning skipped title and commit results with the stable reason `Dependabot
-pull request`. Ordinary `commit check` and repository plans keep checking, and every non-commit
-provider remains independent.
+validation before applying the stable `Dependabot pull request` skip reason. Narrow this already
+eligible quality exemption per commit with bounded exact author/committer metadata compatibility.
+`dependabot-require-github-signature` is a strict schema-v1 boolean defaulting to `true`; it affects
+only this opt-in exemption. Require offline verification of each candidate's exact object bytes
+against the pinned GitHub key using a trusted bounded `gpgv` process and private keyring. Missing
+or failed verification, unsupported signatures, and resource exhaustion run normal checks.
+An explicit `false` retains only the forgeable metadata filter. Check ordinary human additions
+and human rebases, and check titles/proposed messages in mixed PRs. Require metadata for exactly
+the previously selected SHA set, rejecting missing/duplicate records. Preserve that complete set
+in reports. The shared GitHub key does not prove exclusive Dependabot identity. Do not fetch keys,
+query live badges/revocation state, import REST/token code, or treat Signed-off-by as proof.
+The explicit `skip-pull-request-authors` list remains a broad independent exemption, including for
+human additions; do not generalize this option into Renovate/custom bot identity configuration.
+Never use these exemptions to skip tests/security checks. Ordinary `commit check` and repository
+plans keep checking, and every non-commit provider remains independent. Preserve frozen starter
+bytes: omitted signature settings inherit the new default without rewriting existing starters.
 `breaking-markers` is a schema-v1 enum with `either` as its default. `either` accepts a header `!`,
 a recognized final `BREAKING CHANGE:` or `BREAKING-CHANGE:` footer, or both; `paired` requires both
 markers or neither and reports `breaking.marker-pair` for exactly one. Apply marker pairing only to

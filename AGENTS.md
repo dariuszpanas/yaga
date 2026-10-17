@@ -27,9 +27,19 @@ Agent review gate is the public review contract. Its current provider adapter re
   read-only commit Action after complete event, runner-context, checkout, configuration, and range
   validation. Require an exact strictly parsed PR author login `dependabot[bot]`, type `Bot`, and
   bounded positive ID. Never infer trusted bot identity from Git author/committer data, messages,
-  titles, branches, actors, or footers. Emit skipped title and commit results with the stable
-  `Dependabot pull request` reason; ordinary commit/repository checks and every other provider keep
-  running.
+  titles, branches, actors, or footers. Narrow this already eligible quality exemption per commit
+  using bounded exact author/committer metadata compatibility. Keep the schema-v1 boolean
+  `dependabot-require-github-signature` defaulted to `true`: additionally verify each skipped
+  commit's exact object bytes offline against the pinned GitHub signing key using a trusted
+  bounded `gpgv` process and private keyring. Missing, failed, unsupported, or over-budget
+  verification runs normal checks. `false` retains the forgeable per-commit metadata filter only.
+  Ordinary human additions and human rebases must be checked, and mixed PR titles/proposed
+  messages must be checked. The shared GitHub key is not exclusive Dependabot identity; never
+  use a Signed-off-by footer as proof, query a live badge, fetch keys, or import REST/token code.
+  The separate `skip-pull-request-authors` list remains a broad independent explicit exemption;
+  do not turn this option into generic bot identity configuration. Preserve the complete selected
+  SHA set and stable `Dependabot pull request` skip reason; ordinary commit/repository checks and
+  every other provider keep running.
 - Keep `scope-policy-by-type` as an empty-default schema-v1 mapping with at most 128 safe,
   case-insensitively unique type keys and closed presence-policy values. Overrides replace the
   global scope policy for full commits and PR titles; `scope-case` and `allowed-scopes` remain

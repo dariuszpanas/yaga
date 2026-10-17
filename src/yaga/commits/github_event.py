@@ -11,6 +11,7 @@ from typing import Any
 
 from yaga.commits.checker import check_header, check_target
 from yaga.commits.config import load_config
+from yaga.commits.dependabot import filter_dependabot_commits
 from yaga.commits.git import read_commit, read_range
 from yaga.commits.models import (
     CheckResult,
@@ -191,7 +192,7 @@ def check_pull_request(
         else None
     )
     proposed_message = None
-    dependabot_skip = (
+    dependabot_eligible = (
         loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.SKIP
         and event.author_login == "dependabot[bot]"
         and event.author_type == "Bot"
@@ -206,16 +207,29 @@ def check_pull_request(
     configured_skip = event.author_login.casefold() in {
         login.casefold() for login in loaded.policy.skip_pull_request_authors
     }
-    if dependabot_skip or configured_skip:
+    # Narrow an already eligible PR-author exemption per commit. GitHub's shared
+    # signing key authenticates bytes, not exclusive Dependabot authorship.
+    dependabot_commits = (
+        filter_dependabot_commits(
+            repo,
+            base_sha=event.base_sha,
+            head_sha=event.head_sha,
+            targets=targets,
+            require_github_signature=loaded.policy.dependabot_require_github_signature,
+        )
+        if dependabot_eligible and not configured_skip
+        else frozenset()
+    )
+    all_dependabot_compatible = dependabot_eligible and len(dependabot_commits) == len(targets)
+    if all_dependabot_compatible or configured_skip:
         reason = (
             DEPENDABOT_PULL_REQUEST_SKIP_REASON
-            if dependabot_skip
+            if all_dependabot_compatible
             else "Configured pull request author"
         )
         title = _skip_result(title_target, reason)
         if proposed_target is not None:
             proposed_message = _skip_result(proposed_target, reason)
-        commits = tuple(_skip_result(target, reason) for target in targets)
     else:
         if proposed_target is not None:
             proposed_message = apply_typos(
@@ -230,15 +244,19 @@ def check_pull_request(
             repository=repo,
             isolated=trusted,
         )
-        commits = tuple(
-            apply_typos(
-                check_target(target, loaded.policy),
-                loaded.policy,
-                repository=repo,
-                isolated=trusted,
-            )
-            for target in targets
+    commits = tuple(
+        _skip_result(target, "Configured pull request author")
+        if configured_skip
+        else _skip_result(target, DEPENDABOT_PULL_REQUEST_SKIP_REASON)
+        if target.sha in dependabot_commits
+        else apply_typos(
+            check_target(target, loaded.policy),
+            loaded.policy,
+            repository=repo,
+            isolated=trusted,
         )
+        for target in targets
+    )
     return PullRequestValidationReport(
         event=event,
         title=title,

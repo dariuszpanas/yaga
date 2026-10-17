@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import stat
@@ -63,30 +64,45 @@ def open_repository(repository: Path) -> GitRepository:
         display = safe_error_text(directory, maximum=300)
         raise InputError(f"repository directory does not exist: {display}")
 
+    return GitRepository(
+        directory=directory, executable=_find_external_executable(directory, "git")
+    )
+
+
+def find_external_executable(repository: GitRepository, name: str) -> str:
+    """Locate one fixed tool outside enclosing worktrees and Git metadata stores."""
+    if not isinstance(repository, GitRepository):
+        raise TypeError("repository must be an open GitRepository")
+    if not name or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for char in name):
+        raise ValueError("executable name must be a fixed lowercase command name")
+    return _find_external_executable(repository.directory, name)
+
+
+def _find_external_executable(directory: Path, name: str) -> str:
     trust_boundaries = _repository_trust_boundaries(directory)
-    discovered_git = shutil.which("git")
+    discovered_git = shutil.which(name)
     if discovered_git is None:
-        raise GitError("git executable was not found")
+        raise GitError(f"{name} executable was not found")
     try:
         git_path = Path(discovered_git)
     except (TypeError, ValueError) as error:
-        raise GitError("git executable path cannot be resolved safely") from error
+        raise GitError(f"{name} executable path cannot be resolved safely") from error
     if not git_path.is_absolute():
-        raise GitError("git executable path must be absolute")
+        raise GitError(f"{name} executable path must be absolute")
     if any(_is_within(git_path, boundary) for boundary in trust_boundaries):
-        raise GitError("git executable must not be discovered inside the repository")
+        raise GitError(f"{name} executable must not be discovered inside the repository")
     try:
         resolved_git = git_path.resolve(strict=True)
         git_metadata = resolved_git.stat()
     except (OSError, RuntimeError, ValueError) as error:
-        raise GitError("git executable path cannot be resolved safely") from error
+        raise GitError(f"{name} executable path cannot be resolved safely") from error
     if not stat.S_ISREG(git_metadata.st_mode):
-        raise GitError("git executable is not a regular file")
+        raise GitError(f"{name} executable is not a regular file")
     if any(_is_within(resolved_git, boundary) for boundary in trust_boundaries):
-        raise GitError("git executable must not resolve inside the repository")
+        raise GitError(f"{name} executable must not resolve inside the repository")
     _require_no_windows_command_script(git_path)
     _require_no_windows_command_script(resolved_git)
-    return GitRepository(directory=directory, executable=str(resolved_git))
+    return str(resolved_git)
 
 
 def run_git(
@@ -94,6 +110,7 @@ def run_git(
     arguments: Sequence[str],
     *,
     stdout_limit: int,
+    timeout_seconds: float | None = None,
 ) -> ProcessResult:
     """Run one fixed Git operation without a shell, ambient config, or lazy fetch."""
     if not isinstance(repository, GitRepository):
@@ -104,6 +121,9 @@ def run_git(
         raise TypeError("git arguments must be a sequence of strings")
     if any("\0" in argument for argument in arguments):
         raise GitError("git arguments must not contain NUL bytes")
+    timeout = MAX_GIT_SECONDS if timeout_seconds is None else timeout_seconds
+    if not math.isfinite(timeout) or timeout <= 0 or timeout > MAX_GIT_SECONDS:
+        raise ValueError("git timeout must be positive and no greater than the shared hard limit")
     _require_no_windows_command_script(Path(repository.executable))
     command = [
         repository.executable,
@@ -118,13 +138,13 @@ def run_git(
             command,
             stdout_limit=stdout_limit,
             stderr_limit=MAX_GIT_ERROR_BYTES,
-            timeout_seconds=MAX_GIT_SECONDS,
+            timeout_seconds=timeout,
         )
     except (OSError, ValueError) as error:
         detail = safe_error_text(error, maximum=300)
         raise GitError(f"could not execute git: {detail}") from error
     if result.timed_out:
-        raise GitError(f"git command exceeded the hard {MAX_GIT_SECONDS:g}-second limit")
+        raise GitError(f"git command exceeded the hard {timeout:g}-second limit")
     if result.stdout_overflow:
         raise GitError(f"git output exceeds the hard {stdout_limit}-byte limit")
     if result.stderr_overflow:

@@ -166,7 +166,7 @@ def test_version_is_available_from_the_installed_command() -> None:
     assert result.stdout.strip() == "yaga 0.2.1"
 
 
-def test_github_pull_request_command_skips_multiline_dependabot_commit(
+def test_github_pull_request_command_requires_explicit_signature_opt_out_for_unsigned_bot(
     tmp_path: Path,
 ) -> None:
     repository = tmp_path / "repository"
@@ -175,6 +175,8 @@ def test_github_pull_request_command_skips_multiline_dependabot_commit(
     git(repository, "config", "user.name", "YAGA Tests")
     git(repository, "config", "user.email", "yaga@example.invalid")
     base = commit(repository, "chore: establish baseline")
+    git(repository, "config", "user.name", "dependabot[bot]")
+    git(repository, "config", "user.email", "49699333+dependabot[bot]@users.noreply.github.com")
     head = commit(
         repository,
         "feat(cli): check a pull request\n\n"
@@ -233,11 +235,23 @@ def test_github_pull_request_command_skips_multiline_dependabot_commit(
         "id": 49_699_333,
         "type": "Bot",
     }
+    event_file.write_text(json.dumps(event), encoding="utf-8")
+    for signature_policy in ("", "dependabot-require-github-signature = true\n"):
+        (repository / ".yaga.toml").write_text(
+            'config-version = 1\n[commit]\ndependabot-pull-requests = "skip"\n' + signature_policy,
+            encoding="utf-8",
+        )
+        unsigned = runner.invoke(app, arguments)
+        unsigned_document = json.loads(unsigned.stdout)
+        assert unsigned.exit_code == 1
+        assert unsigned_document["failed"] == 1
+        assert unsigned_document["skipped"] == 0
+
     (repository / ".yaga.toml").write_text(
-        'config-version = 1\n[commit]\ndependabot-pull-requests = "skip"\n',
+        'config-version = 1\n[commit]\ndependabot-pull-requests = "skip"\n'
+        "dependabot-require-github-signature = false\n",
         encoding="utf-8",
     )
-    event_file.write_text(json.dumps(event), encoding="utf-8")
     skipped = runner.invoke(app, arguments)
     skipped_document = json.loads(skipped.stdout)
     assert skipped.exit_code == 0

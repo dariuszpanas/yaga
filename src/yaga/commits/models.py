@@ -201,6 +201,7 @@ class CommitPolicy:
     forbidden_footer_tokens: tuple[str, ...] = ()
     scope_policy_by_type: tuple[tuple[str, PresencePolicy], ...] = ()
     dependabot_pull_requests: DependabotPullRequestPolicy = DependabotPullRequestPolicy.CHECK
+    dependabot_require_github_signature: bool = True
     typos: TyposPolicy = TyposPolicy.SKIP
     quality: QualityPolicy = QualityPolicy()
     body_paragraph_splitting: ParagraphSplittingPolicy = ParagraphSplittingPolicy.SKIP

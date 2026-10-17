@@ -1,0 +1,20 @@
+tree 994f4bc170b306c64a28653f421adb24cb2edf7a
+parent f61bbfa878447157239bb92ff67977bd64400afd
+author dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com> 1790522572 +0000
+committer Dariusz Panas <panachpl@gmail.com> 1791682475 -0700
+
+build(deps): bump astral-sh/setup-uv from 10.1.0 to 10.2.0
+
+Bumps [astral-sh/setup-uv](https://github.com/astral-sh/setup-uv) from 10.1.0 to 10.2.0.
+- [Release notes](https://github.com/astral-sh/setup-uv/releases)
+- [Commits](https://github.com/astral-sh/setup-uv/compare/bec219d24cd3e171d82865faccec33120bb574f4...c18668ad3cf93ea998bef934396af7bb5c839dc7)
+
+---
+updated-dependencies:
+- dependency-name: astral-sh/setup-uv
+  dependency-version: 10.2.0
+  dependency-type: direct:production
+  update-type: version-update:semver-minor
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>

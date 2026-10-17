@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from yaga.commits.checker import check_target
 from yaga.commits.models import (
     BreakingMarkerPolicy,
@@ -124,6 +126,19 @@ def test_config_reports_the_effective_dependabot_pull_request_policy() -> None:
 
     assert "dependabot-pull-requests: skip" in rendered
     assert document["config"]["dependabot_pull_requests"] == "skip"
+
+
+@pytest.mark.parametrize("required", [True, False])
+def test_config_reports_the_effective_dependabot_signature_requirement(required: bool) -> None:
+    loaded = LoadedConfig(
+        policy=CommitPolicy(dependabot_require_github_signature=required), path=None
+    )
+
+    rendered = render_config(loaded, OutputFormat.TEXT)
+    document = json.loads(render_config(loaded, OutputFormat.JSON))
+
+    assert f"dependabot-require-github-signature: {str(required).lower()}" in rendered
+    assert document["config"]["dependabot_require_github_signature"] is required
 
 
 def test_config_reports_the_effective_typos_policy() -> None:
