@@ -1,0 +1,37 @@
+tree 994f4bc170b306c64a28653f421adb24cb2edf7a
+parent f61bbfa878447157239bb92ff67977bd64400afd
+author dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com> 1790522572 +0000
+committer GitHub <noreply@github.com> 1790522572 +0000
+gpgsig -----BEGIN PGP SIGNATURE-----
+ 
+ wsFcBAABCAAQBQJquTTMCRC1aQ7uu5UhlAAAGqgQABle0EWTF+etF09qGyIgNpR9
+ 6sPKvJyeGxaU8kDXEsSRaMwlLhlKxCcnPHyv0p6ta/e6gCMM8Hh0Es4NSQ8dfzEP
+ Sn4VEb8EXFcq0HUvjtxc3suXIKuVWUswo16g2Ec/gbKl2zCeYrI0LAVDdKL1/HaN
+ BtSq0HtAS2W8NrTcxVeV2iIKhbq0+MwUo/zgQWjlCbUnbSn4DyoiivrNd/ZkMNIm
+ oRf3RqyUhRH7XKkqwTWhEcakVMj0sTTgVhlKePYNB/7bV0mz4j3tydu5kXeU9a0G
+ seBUQngOPHVEXkvSd2bcTKyLkw3X9XLJdi8izqFaXHSpzTrwWeJwWxk9kPqsHbl+
+ 8v3Eyy1XFOWXd7CO0Pln9xWgTk5EPf904WrIWSFB4jVoj6oAHeBOviOp1lwsf/1Q
+ RnJtxhrdAZVim+EuoAdn2Y/BKa7b/nKHCdLKh5LTJnnUzLGe20CxJsK4X++YiZjK
+ +7i9gVHGO0E1ASS9VCDUztcKJtonae9M4KIf1KdgReZ0g1UI4W/PsbYrURKhuKkN
+ 9IDR+maot1pKdAlR4/N38b0qlnBB/GSTYkmx/PUGrgDx0jQ6UKXT4dKz1Tg2f4bt
+ BROh8GAzZnA+89828gS+jUA44c46F7guDLre/PJ7EXYzm9rHU9//VWN79yJtE1fi
+ o7vP3dZcCdIafpdl081/
+ =xGKz
+ -----END PGP SIGNATURE-----
+ 
+
+build(deps): bump astral-sh/setup-uv from 10.1.0 to 10.2.0
+
+Bumps [astral-sh/setup-uv](https://github.com/astral-sh/setup-uv) from 10.1.0 to 10.2.0.
+- [Release notes](https://github.com/astral-sh/setup-uv/releases)
+- [Commits](https://github.com/astral-sh/setup-uv/compare/bec219d24cd3e171d82865faccec33120bb574f4...c18668ad3cf93ea998bef934396af7bb5c839dc7)
+
+---
+updated-dependencies:
+- dependency-name: astral-sh/setup-uv
+  dependency-version: 10.2.0
+  dependency-type: direct:production
+  update-type: version-update:semver-minor
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>

@@ -366,6 +366,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         and isinstance(initialized_types, list)
         and "feat" in initialized_types
         and initialized_policy.get("dependabot_pull_requests") == "check"
+        and initialized_policy.get("dependabot_require_github_signature") is True
         and initialized_policy.get("merge_commits") == "reject"
         and config.is_file()
     ):
@@ -1061,6 +1062,8 @@ def main() -> int:
                 "yaga/commands/tree.py",
                 "yaga/commands/workflow.py",
                 "yaga/commits/checker.py",
+                "yaga/commits/dependabot.py",
+                "yaga/commits/github_signature.py",
                 "yaga/commits/github_event.py",
                 "yaga/commits/github_reporting.py",
                 "yaga/commits/service.py",

@@ -32,7 +32,9 @@ from tests.test_commit_consumer_policy import HEADER, POLICY, message
         ("traversal", 2),
         ("shallow", 2),
         ("missing-base", 2),
-        ("bot", 0),
+        ("bot", 1),
+        ("bot-signature-opt-out", 0),
+        ("bot-pr-signature-opt-out", 1),
         ("bot-fork", 1),
         ("bot-branch", 1),
         ("bot-lookalike", 1),
@@ -44,6 +46,9 @@ def test_trusted_action_boundaries(tmp_path: Path, scenario: str, code: int) -> 
     (repo / ".yaga.toml").write_text(
         POLICY + 'dependabot-pull-requests = "skip"\n', encoding="utf-8"
     )
+    if scenario in {"bot-signature-opt-out", "bot-fork", "bot-branch", "bot-lookalike"}:
+        with (repo / ".yaga.toml").open("a", encoding="utf-8") as policy:
+            policy.write("dependabot-require-github-signature = false\n")
     _git(repo, "add", ".yaga.toml")
     if scenario == "invalid-policy":
         (repo / ".yaga.toml").write_text("not valid TOML!", encoding="utf-8")
@@ -55,6 +60,16 @@ def test_trusted_action_boundaries(tmp_path: Path, scenario: str, code: int) -> 
     if scenario == "pr-policy":
         (repo / ".yaga.toml").write_text("[commit]\n", encoding="utf-8")
         _git(repo, "add", ".yaga.toml")
+    if scenario == "bot-pr-signature-opt-out":
+        (repo / ".yaga.toml").write_text(
+            POLICY + 'dependabot-pull-requests = "skip"\n'
+            "dependabot-require-github-signature = false\n",
+            encoding="utf-8",
+        )
+        _git(repo, "add", ".yaga.toml")
+    if scenario.startswith("bot"):
+        _git(repo, "config", "user.name", "dependabot[bot]")
+        _git(repo, "config", "user.email", "49699333+dependabot[bot]@users.noreply.github.com")
     head = _commit(
         repo,
         "invalid"
@@ -139,5 +154,7 @@ def test_trusted_action_boundaries(tmp_path: Path, scenario: str, code: int) -> 
         check=False,
     )
     assert result.returncode == code, result.stdout + result.stderr
-    if scenario == "bot":
+    if scenario == "bot-signature-opt-out":
         assert "Dependabot pull request" in result.stdout
+    elif scenario in {"bot", "bot-pr-signature-opt-out"}:
+        assert "Dependabot pull request" not in result.stdout

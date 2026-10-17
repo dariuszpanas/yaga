@@ -9,6 +9,19 @@
   prerequisite ordering, and tested polyglot and django-ray examples. CLI and execution
   integration remain planned.
 
+- Add the schema-v1 boolean `dependabot-require-github-signature`, defaulting to `true`.
+  Each otherwise eligible Dependabot-skipped commit must verify offline against the pinned
+  GitHub signing key. Missing or failed verification runs normal checks. An explicit `false`
+  retains the per-commit metadata filter; explicit PR-author exemptions remain independent.
+
+### Fixed
+
+- Narrow the opt-in Dependabot commit-message exemption per commit, so ordinary human additions
+  and human rebases are checked even inside a Dependabot PR. Mixed PR titles and proposed
+  messages are checked too. Signature verification requires an available trusted `gpgv` and
+  adds no API or token access. The shared GitHub key does not prove exclusive bot authorship,
+  and this quality exemption does not authorize skipping other checks.
+
 ## [0.2.1] - 2026-10-10
 
 ### Added

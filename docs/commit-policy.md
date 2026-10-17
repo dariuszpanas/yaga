@@ -63,6 +63,7 @@ body-min-words = 8
 # Omit body-max-line-length unless this repository wants a wrapping limit.
 # Set body-paragraph-splitting = "check" to catch sentence-like prose split by blank lines.
 dependabot-pull-requests = "skip" # check or skip in event-aware PR checks
+dependabot-require-github-signature = true # default; applies only to the Dependabot skip
 merge-commits = "reject"         # ignore, check, or reject
 ignored-headers = ['Revert "*"'] # bounded, case-sensitive glob patterns
 max-commits = 64
@@ -78,10 +79,38 @@ policy evaluation only in `yaga github pull-request check` and the read-only com
 and only when the event's pull-request author is exactly the GitHub `dependabot[bot]` Bot account,
 following [GitHub's event-author guidance for Dependabot
 automation](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions?learn=dependency_version_updates).
-The adapter still validates the complete event and runner context, verifies the checked-out head,
-loads configuration, and enumerates the bounded exact commit range before returning a visible
-`Dependabot pull request` skip. It does not skip change, mode, path, size, tree, workflow, test, or
-review-gate checks.
+After validating the complete event, runner context, checkout, configuration, and exact commit
+range, the adapter filters each selected commit independently. An exemption requires exact
+`dependabot[bot]` author metadata with either `49699333+dependabot[bot]@users.noreply.github.com`
+or `dependabot[bot]@users.noreply.github.com`, plus a committer with that bot name/email or
+`GitHub <noreply@github.com>`. The default `dependabot-require-github-signature = true` additionally
+requires a valid signature over the exact selected commit object using the pinned GitHub signing
+key with full fingerprint `968479A1AFF927E37D1A566BB5690EEEBB952194`. YAGA verifies this offline
+with an available trusted `gpgv` executable and a private keyring containing
+[GitHub's published public key](https://github.com/web-flow.gpg). It does not call the GitHub API,
+accept a token, download keys during a check, or use the user's keyring.
+
+Missing signatures, unavailable verification tools, unsupported or invalid signatures, verification
+errors, and exhausted verification limits all run normal checks for the affected commits.
+Ordinary human additions and bot-authored commits rebased by a human are also checked. If any
+commit is ineligible for the exemption, the title and optional proposed message are checked too.
+Otherwise their exemption is retained. Skipped results retain the `Dependabot pull request`
+reason, and every selected commit remains in the report.
+
+This option is a strict schema-v1 boolean and affects only `dependabot-pull-requests = "skip"`.
+Explicitly setting `dependabot-require-github-signature = false` retains only the per-commit
+metadata filter. Those metadata fields are forgeable, so this opt-out permits a human who forges
+both identities inside an eligible Dependabot PR to evade the filter. `Signed-off-by` footers are
+never consulted as proof. With the default requirement, the signature proves that the payload
+was signed by the pinned GitHub key; that shared key alone does not establish exclusive Dependabot
+authorship. This offline check does not query GitHub's live verification badge or refresh key
+revocation information. Keep `dependabot-pull-requests = "check"` to check every commit message.
+The exemption never skips change, mode, path, size, tree, workflow, test, or review-gate checks.
+
+The separate [`skip-pull-request-authors`](configuration.md#explicit-pr-author-exemptions) list
+remains a broader explicit exemption for the entire PR and does not require this signature check.
+Adding Dependabot to that list therefore bypasses the narrower per-commit policy. Signature-based
+identity policies for Renovate or custom bots are not part of this option.
 
 Ordinary `commit check` and the `commit` provider inside `repo check` never infer Dependabot from a
 Git author name, email, message, or branch because those values are author-controlled. They keep
@@ -263,7 +292,7 @@ Typos configuration is used; direct message and Git-backed sources follow the sa
 
 With the commit Action's `trusted-config` mode, `typos = "check"` applies to both the
 PR title and every selected full commit message. Structural title checks remain header-only.
-Authentic Dependabot skips and existing skipped commit types also skip spelling checks.
+Eligible Dependabot commit exemptions and existing skipped commit types also skip spelling checks.
 Findings fail with exit `1`; a missing or broken tool fails with exit `2`.
 
 Install a pinned Typos executable outside the checkout before invoking the Action.

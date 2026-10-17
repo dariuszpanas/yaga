@@ -10,6 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from tests.test_dependabot_commit_filter import _enable_gpgv, _signed_repository
+from tests.test_github_pull_request import (
+    DEPENDABOT_AUTHOR,
+    _event_document,
+    _write_event,
+    _write_skip_config,
+)
 from yaga import commit_action_cli
 
 ROOT = Path(__file__).parents[1]
@@ -47,6 +54,7 @@ def _action_fixture(
     pull_request_title: str = "feat(action): check pull requests",
     config: str | None = None,
     author: dict[str, object] | None = None,
+    dependabot_commit: bool = False,
 ) -> tuple[Path, Path, dict[str, str]]:
     repository = tmp_path / "repository"
     repository.mkdir()
@@ -54,6 +62,11 @@ def _action_fixture(
     _git(repository, "config", "user.name", "YAGA Tests")
     _git(repository, "config", "user.email", "yaga@example.invalid")
     base = _commit(repository, "chore: establish baseline")
+    if dependabot_commit:
+        _git(repository, "config", "user.name", "dependabot[bot]")
+        _git(
+            repository, "config", "user.email", "49699333+dependabot[bot]@users.noreply.github.com"
+        )
     if config is not None:
         (repository / ".yaga.toml").write_text(config, encoding="utf-8")
         _git(repository, "add", ".yaga.toml")
@@ -200,19 +213,36 @@ def test_commit_action_runs_without_site_packages_or_installed_cli(
     assert "typer" not in completed.stdout.casefold()
 
 
-def test_isolated_commit_action_honors_explicit_dependabot_skip_policy(
+@pytest.mark.parametrize("signature_policy", [None, True, False])
+@pytest.mark.parametrize("human_addition", [False, True])
+def test_isolated_commit_action_requires_signature_unless_explicitly_disabled(
     tmp_path: Path,
+    signature_policy: bool | None,
+    human_addition: bool,
 ) -> None:
+    signature_config = (
+        ""
+        if signature_policy is None
+        else f"dependabot-require-github-signature = {str(signature_policy).lower()}\n"
+    )
     repository, event_file, action_environment = _action_fixture(
         tmp_path,
         head_message="not conventional\n\nDependabot updates are reviewed automatically.",
         pull_request_title="also not conventional",
         config=(
             'config-version = 1\n[commit]\nbody-policy = "required"\n'
-            'dependabot-pull-requests = "skip"\n'
+            'dependabot-pull-requests = "skip"\n' + signature_config
         ),
         author={"login": "dependabot[bot]", "id": 49_699_333, "type": "Bot"},
+        dependabot_commit=True,
     )
+    if human_addition:
+        _git(repository, "config", "user.name", "YAGA Tests")
+        _git(repository, "config", "user.email", "yaga@example.invalid")
+        human_head = _commit(repository, "also invalid\n\nA human added this commit.")
+        event = json.loads(event_file.read_text(encoding="utf-8"))
+        event["pull_request"]["head"]["sha"] = human_head
+        event_file.write_text(json.dumps(event), encoding="utf-8")
     environment = os.environ.copy()
     environment.update(action_environment)
     environment["PYTHONPATH"] = str(ROOT / "src")
@@ -243,11 +273,70 @@ def test_isolated_commit_action_honors_explicit_dependabot_skip_policy(
         text=True,
     )
 
-    assert completed.returncode == 0
     assert completed.stderr == ""
-    assert "0 failed, 2 skipped" in completed.stdout
+    if signature_policy is False:
+        assert completed.returncode == (1 if human_addition else 0)
+        counts = "2 failed, 1 skipped" if human_addition else "0 failed, 2 skipped"
+        assert counts in completed.stdout
+        assert "Skip reason: Dependabot pull request." in completed.stdout
+    else:
+        assert completed.returncode == 1
+        assert f"{3 if human_addition else 2} failed, 0 skipped" in completed.stdout
+        assert "Dependabot pull request" not in completed.stdout
+
+
+@pytest.mark.parametrize("addition", ["none", "human"])
+def test_isolated_commit_action_verifies_real_github_signature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, addition: str
+) -> None:
+    _enable_gpgv(monkeypatch)
+    repository, base, head = _signed_repository(tmp_path, addition=addition)
+    _write_skip_config(repository)
+    event_file = _write_event(
+        tmp_path / "event.json",
+        _event_document(base, head, title="invalid edited title", author=DEPENDABOT_AUTHOR),
+    )
+    environment = dict(
+        os.environ,
+        GITHUB_BASE_REF="main",
+        GITHUB_EVENT_NAME="pull_request",
+        GITHUB_HEAD_REF="feature",
+        GITHUB_REPOSITORY="owner/repository",
+        GITHUB_REPOSITORY_ID="100",
+        PYTHONPATH=str(ROOT / "src"),
+        YAGA_COMMIT_ACTION_RUNTIME="1",
+    )
+    environment.pop("YAGA_ACTION_RUNTIME", None)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            "-S",
+            "-m",
+            "yaga",
+            "github",
+            "pull-request",
+            "check",
+            "--event-file",
+            str(event_file),
+            "--repo",
+            str(repository),
+            "--format",
+            "github",
+        ],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert completed.returncode == (0 if addition == "none" else 1), completed.stdout
+    assert completed.stderr == ""
     assert "Skip reason: Dependabot pull request." in completed.stdout
-    assert "::error" not in completed.stdout
+    counts = "0 failed, 2 skipped" if addition == "none" else "2 failed, 1 skipped"
+    assert counts in completed.stdout
 
 
 def test_isolated_commit_action_reports_body_word_policy(tmp_path: Path) -> None:

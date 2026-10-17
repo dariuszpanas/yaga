@@ -119,9 +119,19 @@ def test_initialized_configuration_round_trips_to_the_recommended_policy(
     assert policy.body_max_line_length is None
     assert policy.body_paragraph_splitting.value == "check"
     assert policy.dependabot_pull_requests is DependabotPullRequestPolicy.CHECK
+    assert policy.dependabot_require_github_signature is True
     assert policy.merge_commits is MergePolicy.REJECT
     assert policy.ignored_headers == ()
     assert policy.max_commits == 64
+
+
+@pytest.mark.parametrize("starter", list(config_init.ConfigStarter))
+def test_frozen_starters_inherit_the_signature_requirement(
+    tmp_path: Path, starter: config_init.ConfigStarter
+) -> None:
+    loaded = initialize_config(repository(tmp_path / "repository"), starter=starter)
+
+    assert loaded.policy.dependabot_require_github_signature is True
 
 
 def test_plain_pyproject_is_allowed_and_left_untouched(tmp_path: Path) -> None:

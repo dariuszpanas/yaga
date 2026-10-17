@@ -372,6 +372,7 @@ def policy_document(policy: CommitPolicy) -> dict[str, Any]:
         "body_paragraph_splitting": policy.body_paragraph_splitting.value,
         "skip_pull_request_authors": _json_values(policy.skip_pull_request_authors, maximum=128),
         "dependabot_pull_requests": policy.dependabot_pull_requests.value,
+        "dependabot_require_github_signature": policy.dependabot_require_github_signature,
         "typos": policy.typos.value,
         "typos-config": policy.typos_config.value,
         "pull_request_message": policy.pull_request_message.value,
@@ -482,6 +483,8 @@ def result_document(result: CheckResult) -> dict[str, Any]:
 def _text_value(value: object) -> str:
     if value is None:
         return "unlimited"
+    if isinstance(value, bool):
+        return "true" if value else "false"
     if isinstance(value, dict):
         if not value:
             return "none"

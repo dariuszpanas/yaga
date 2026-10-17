@@ -48,6 +48,7 @@ def test_missing_configuration_uses_spec_only_defaults(tmp_path: Path) -> None:
     assert loaded.policy.required_footer_tokens == ()
     assert loaded.policy.forbidden_footer_tokens == ()
     assert loaded.policy.dependabot_pull_requests is DependabotPullRequestPolicy.CHECK
+    assert loaded.policy.dependabot_require_github_signature is True
     assert loaded.policy.typos is TyposPolicy.SKIP
     assert loaded.policy.merge_commits is MergePolicy.IGNORE
 
@@ -568,6 +569,46 @@ def test_dependabot_pull_requests_rejects_values_outside_its_closed_enum(
     project = write_pyproject(tmp_path, f"dependabot-pull-requests = {value}\n")
 
     with pytest.raises(ConfigurationError, match="dependabot-pull-requests must be"):
+        load_config(project)
+
+
+@pytest.mark.parametrize("configured", [True, False])
+@pytest.mark.parametrize("exemption", ["check", "skip"])
+@pytest.mark.parametrize("standalone", [False, True])
+def test_dependabot_signature_requirement_accepts_only_explicit_booleans(
+    tmp_path: Path, configured: bool, exemption: str, standalone: bool
+) -> None:
+    content = (
+        f'dependabot-pull-requests = "{exemption}"\n'
+        f"dependabot-require-github-signature = {str(configured).lower()}\n"
+    )
+    if standalone:
+        path = tmp_path / ".yaga.toml"
+        path.write_text("config-version = 1\n[commit]\n" + content, encoding="utf-8")
+    else:
+        path = write_pyproject(tmp_path, content)
+
+    policy = load_config(path).policy
+
+    assert policy.dependabot_require_github_signature is configured
+    assert policy.dependabot_pull_requests.value == exemption
+
+
+@pytest.mark.parametrize("exemption", ["check", "skip"])
+def test_dependabot_signature_requirement_defaults_to_true(tmp_path: Path, exemption: str) -> None:
+    path = write_pyproject(tmp_path, f'dependabot-pull-requests = "{exemption}"\n')
+
+    assert load_config(path).policy.dependabot_require_github_signature is True
+    assert CommitPolicy().dependabot_require_github_signature is True
+
+
+@pytest.mark.parametrize("value", ['"true"', '"false"', "1", "0", "1.0", "[]", "{}"])
+def test_dependabot_signature_requirement_rejects_non_booleans(tmp_path: Path, value: str) -> None:
+    project = write_pyproject(tmp_path, f"dependabot-require-github-signature = {value}\n")
+
+    with pytest.raises(
+        ConfigurationError, match="dependabot-require-github-signature must be a boolean"
+    ):
         load_config(project)
 
 

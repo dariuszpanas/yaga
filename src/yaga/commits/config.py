@@ -76,6 +76,7 @@ _COMMIT_KEYS = frozenset(
         "body-paragraph-splitting",
         "breaking-markers",
         "dependabot-pull-requests",
+        "dependabot-require-github-signature",
         "skip-pull-request-authors",
         "typos",
         "typos-config",
@@ -497,6 +498,11 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             "dependabot-pull-requests",
             path,
         ),
+        dependabot_require_github_signature=_boolean(
+            raw_commit.get("dependabot-require-github-signature", True),
+            "dependabot-require-github-signature",
+            path,
+        ),
         typos=_enum(
             raw_commit.get("typos", TyposPolicy.SKIP.value),
             TyposPolicy,
@@ -809,6 +815,12 @@ def _minimum_header_length(
 
 def _unsafe_character(value: str) -> bool:
     return unicodedata.category(value) in {"Cc", "Cf", "Cs", "Zl", "Zp"}
+
+
+def _boolean(value: object, key: str, path: Path) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigurationError(f"{key} must be a boolean in {path}")
+    return value
 
 
 def _integer(value: object, key: str, minimum: int, maximum: int, path: Path) -> int:

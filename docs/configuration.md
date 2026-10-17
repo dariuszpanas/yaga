@@ -128,7 +128,8 @@ version. Pin the installation separately when CI must always use one exact relea
 | `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
 | `body-paragraph-splitting` | `skip` (default) or `check` for likely sentence splits across blank lines. |
 | `skip-pull-request-authors` | Empty-default list of up to 128 explicit GitHub PR author logins exempt from title and commit checks. |
-| `dependabot-pull-requests` | `check` (default) or `skip` in event-aware PR checks only. |
+| `dependabot-pull-requests` | `check` (default) or a per-commit metadata/signature-filtered `skip` in eligible event-aware PR checks only. |
+| `dependabot-require-github-signature` | Boolean, default `true`. Requires offline verification against the pinned GitHub signing key for each Dependabot-skipped commit. Missing or failed verification runs normal checks. Only affects `dependabot-pull-requests = "skip"`; `false` retains the metadata filter alone. |
 | `typos` | `skip` (default) or `check` with an installed Typos CLI. |
 | `typos-config` | `repository` (default) discovers Typos settings; `isolated` disables discovery. Trusted Actions always isolate. |
 | `quality` | Nested non-secret defaults for `commit quality`; provider, task, model, revision, threshold, region, max-tokens, max-input-tokens, and input-mode. |
@@ -378,7 +379,15 @@ checkout, policy, and commit-range validation. Reports use `Configured pull requ
 It does not exempt ordinary `commit check`, repository checks, or other providers.
 Unlike the narrower `dependabot-pull-requests = "skip"` option in trusted mode, this explicit
 list applies regardless of head repository or branch. Listing an account opts into that scope.
-The existing Dependabot option retains its identity and trusted same-repository/branch checks.
+The Dependabot option retains its identity and trusted same-repository/branch checks, then narrows
+the exemption per commit with the [metadata and signature checks](commit-policy.md).
+`dependabot-require-github-signature` defaults to `true`; an unavailable `gpgv`, missing signature,
+or failed verification runs normal checks. Setting it to `false` retains a forgeable metadata
+filter. The pinned GitHub key is shared, and verification does not prove exclusive bot authorship
+or query live revocation state. Explicit author exemptions remain broader and intentionally skip
+the entire PR even when it contains human-added commits. They bypass the Dependabot signature
+requirement, including when `dependabot[bot]` itself appears in this list. This does not add a
+generic signature or identity policy for Renovate or custom bots.
 
 Use `trusted-config` when the exemption must come from the default-branch policy. Default
 PR-head mode intentionally reads PR policy, including this list; it is not trusted merge authority.

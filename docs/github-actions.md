@@ -36,6 +36,10 @@ In this trusted mode, `dependabot-pull-requests = "skip"` additionally requires 
 repository to equal the base repository and its branch to start with `dependabot/`. The exact
 `dependabot[bot]` login, `Bot` type, bounded positive author ID, configuration, and complete range
 validation remain mandatory. Forks, lookalikes, and other branches are checked normally.
+The default `dependabot-require-github-signature = true` also requires offline verification of
+each otherwise compatible commit against the pinned GitHub signing key. A trusted `gpgv`
+executable must be available for an exemption; missing tooling or verification failure runs
+normal checks. No token or API access is needed, and no keys are downloaded during the check.
 
 Without `trusted-config`, the existing `pull_request`/PR-head policy mode is unchanged.
 The `exit-code` output exposes 0 for success, 1 for policy findings, and 2 for invalid input.
@@ -88,10 +92,18 @@ title; all configured header, type, scope, and description rules do. Text, versi
 escaped `--format github` annotations share exit codes `0`, `1`, and `2` with `commit check`.
 
 When `dependabot-pull-requests = "skip"`, the adapter recognizes only a strictly parsed PR author
-with login `dependabot[bot]` and account type `Bot`. Both the title and every selected commit are
-reported as skipped with the reason `Dependabot pull request`, and the command exits `0`. A human
-PR, a near-match account, malformed event data, a checkout mismatch, missing history, or an
-over-limit range is never converted into a skip.
+with login `dependabot[bot]` and account type `Bot`. It then narrows the exemption per commit using
+the [bounded metadata and signature checks](commit-policy.md): ordinary human additions and human
+rebases are checked, while compatible commits with a verified pinned GitHub signature retain the
+reason `Dependabot pull request`. Missing or failed verification runs normal checks. Mixed PRs
+also check their title and optional proposed message. The command exits `1` if any checked result
+fails. The strict boolean `dependabot-require-github-signature` defaults to `true`; setting it to
+`false` keeps only the forgeable metadata filter. The GitHub signing key is shared, so its signature
+alone is not exclusive proof of Dependabot authorship. Verification is offline, without a live
+badge or revocation lookup. A human PR, a near-match account, malformed event data, a checkout
+mismatch, missing history, or an over-limit range is never converted into a Dependabot skip.
+The separate explicit `skip-pull-request-authors` exemption still skips whole PRs independently
+of this option; it is not a per-commit signature policy for other bots.
 
 For local diagnosis, save a `pull_request` event and check out its exact head before running:
 
