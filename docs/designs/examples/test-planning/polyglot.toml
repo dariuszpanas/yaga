@@ -1,0 +1,137 @@
+# Phase-one policy/planner fixture; YAGA test commands and executors are not implemented yet.
+# Adapt every path and runner binding before a consumer shadow rollout.
+# This is an illustrative application layout, not YAGA's own test inventory.
+test-policy-version = 1
+unknown-paths = "full"
+full-on = [
+  ".yaga/test-policy.toml",
+  ".github/workflows/**",
+  "ci/**",
+  "pyproject.toml",
+  "uv.lock",
+  "backend/pyproject.toml",
+  "backend/uv.lock",
+  "frontend/package.json",
+  "frontend/package-lock.json",
+  "Dockerfile",
+  ".dockerignore",
+  "compose.yaml",
+]
+# These paths suppress only the unknown-path fallback; they never cancel a rule.
+no-impact = ["LICENSE", "NOTICE"]
+
+[[suites]]
+id = "repository.smoke"
+binding = "repository-smoke"
+tags = ["smoke"]
+requires = ["linux"]
+
+[[suites]]
+id = "docs.check"
+binding = "docs-check"
+tags = ["docs"]
+
+[[suites]]
+id = "backend.unit"
+binding = "backend-unit"
+tags = ["backend", "unit"]
+variants = ["py312", "py315"]
+requires = ["linux", "python"]
+
+[[suites]]
+id = "backend.integration"
+binding = "backend-integration"
+tags = ["backend", "integration"]
+variants = ["py312-postgres"]
+requires = ["linux", "python", "postgres"]
+
+[[suites]]
+id = "frontend.unit"
+binding = "frontend-unit"
+tags = ["frontend", "unit"]
+variants = ["node-supported"]
+requires = ["node"]
+
+[[suites]]
+id = "frontend.browser"
+binding = "frontend-browser"
+tags = ["frontend", "browser"]
+variants = ["chromium"]
+requires = ["node", "browser"]
+
+[[suites]]
+id = "image.build"
+binding = "image-build"
+tags = ["container", "build"]
+variants = ["linux-amd64"]
+requires = ["linux", "docker"]
+
+[[suites]]
+id = "container.smoke"
+binding = "container-smoke"
+tags = ["container", "integration"]
+variants = ["linux-amd64"]
+needs = ["image.build"]
+requires = ["linux", "docker"]
+
+[[suites]]
+id = "infra.chainsaw"
+binding = "infra-chainsaw"
+tags = ["infrastructure", "kubernetes"]
+variants = ["kind-supported"]
+needs = ["image.build"]
+requires = ["linux", "docker", "kubernetes"]
+
+[[suites]]
+id = "qualification.ray"
+binding = "ray-qualification"
+tags = ["runtime", "qualification", "long"]
+variants = ["linux-ray-supported"]
+needs = ["image.build"]
+requires = ["linux", "docker", "ray"]
+
+[profiles.development]
+mode = "selective"
+always = ["repository.smoke"]
+
+[profiles.integration]
+mode = "full"
+
+[profiles.release]
+mode = "full"
+
+[[rules]]
+id = "documentation"
+when-any = ["README.md", "docs/**"]
+select = ["docs.check"]
+
+[[rules]]
+id = "backend"
+when-any = ["backend/src/**", "backend/tests/**", "backend/conftest.py"]
+select-tags = ["backend"]
+
+[[rules]]
+id = "frontend"
+when-any = ["frontend/**"]
+select-tags = ["frontend"]
+
+[[rules]]
+id = "api-contract"
+when-any = ["api/**", "schemas/**"]
+select-tags = ["backend", "frontend"]
+select = ["container.smoke"]
+
+[[rules]]
+id = "container"
+when-any = ["docker/**", "tests/container/**"]
+select = ["container.smoke", "infra.chainsaw", "qualification.ray"]
+
+[[rules]]
+id = "infrastructure"
+when-any = ["deploy/**", "helm/**", "tests/chainsaw/**"]
+select = ["infra.chainsaw"]
+
+[[rules]]
+id = "runtime"
+when-any = ["backend/src/runtime/**", "qualification/ray/**"]
+select = ["backend.unit", "backend.integration", "qualification.ray"]

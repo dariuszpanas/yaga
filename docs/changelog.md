@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add the internal version-one test qualification policy and pure selection planner, with
+  strict bounded validation, additive path/tag rules, full-suite fallback, complete variants,
+  prerequisite ordering, and tested polyglot and django-ray examples. CLI and execution
+  integration remain planned.
+
 ## [0.2.1] - 2026-10-10
 
 ### Added

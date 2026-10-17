@@ -30,6 +30,53 @@ EXPECTED_OPTIONAL_REQUIRES_DIST = [
     "torch<3,>=2.13; extra == 'quality'",
     "transformers<6,>=5.10; extra == 'quality'",
 ]
+TEST_PLANNING_SMOKE_SCRIPT = '''\
+import json
+
+from yaga.errors import ConfigurationError
+from yaga.test_planning.planner import plan_tests
+from yaga.test_planning.policy import parse_test_policy
+
+source = b"""
+test-policy-version = 1
+[[suites]]
+id = "backend"
+binding = "pytest"
+tags = ["python"]
+variants = ["py315", "py312"]
+needs = ["build"]
+[[suites]]
+id = "build"
+binding = "docker"
+[[suites]]
+id = "frontend"
+binding = "npm"
+[profiles.development]
+mode = "selective"
+[profiles.integration]
+mode = "full"
+[[rules]]
+id = "backend"
+when-any = ["src/**"]
+select-tags = ["python"]
+"""
+policy = parse_test_policy(source)
+selective = plan_tests(policy, profile="development", changed_paths=("src/module.py",))
+full = plan_tests(policy, profile="integration", changed_paths=None)
+fallback = plan_tests(policy, profile="development", changed_paths=("unknown.txt",))
+invalid_policy_rejected = False
+try:
+    parse_test_policy(source.replace(b"test-policy-version = 1", b"test-policy-version = 2"))
+except ConfigurationError:
+    invalid_policy_rejected = True
+print(json.dumps({
+    "selective": [[item.suite, list(item.variants)] for item in selective.selected],
+    "full": [item.suite for item in full.selected],
+    "fallback": [item.suite for item in fallback.selected],
+    "modes": [selective.effective_mode, full.effective_mode, fallback.effective_mode],
+    "invalid_policy_rejected": invalid_policy_rejected,
+}))
+'''
 
 
 def validate_wheel_metadata(raw: bytes) -> None:
@@ -125,6 +172,22 @@ def successful_json(
     if not isinstance(document, dict):
         raise SystemExit(f"installed wheel CLI {operation} emitted a non-object JSON report")
     return document
+
+
+def exercise_installed_test_planning(python: Path, *, consumer: Path, env: dict[str, str]) -> None:
+    """Exercise phase-one policy/planning APIs without inventing a test CLI."""
+    completed = run_bounded(
+        [str(python), "-I", "-c", TEST_PLANNING_SMOKE_SCRIPT], cwd=consumer, env=env
+    )
+    document = successful_json(completed, operation="test planning API smoke")
+    if document != {
+        "selective": [["build", ["default"]], ["backend", ["py312", "py315"]]],
+        "full": ["build", "backend", "frontend"],
+        "fallback": ["build", "backend", "frontend"],
+        "modes": ["selective", "full", "full"],
+        "invalid_policy_rejected": True,
+    }:
+        raise SystemExit("installed wheel test planning API emitted the wrong selection")
 
 
 def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
@@ -228,8 +291,11 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     size_policy = consumer / "size-policy.toml"
     tree_policy = consumer / "tree-policy.toml"
     executable = environment / ("Scripts/yaga.exe" if os.name == "nt" else "bin/yaga")
+    python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not executable.is_file():
         raise SystemExit("installed wheel does not expose the yaga executable")
+    if not python.is_file():
+        raise SystemExit("installed wheel environment does not expose its Python interpreter")
     child_environment = os.environ.copy()
     for variable in (
         "PYTHONHOME",
@@ -241,6 +307,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         child_environment.pop(variable, None)
     child_environment["PYTHONNOUSERSITE"] = "1"
     child_environment["PYTHONSAFEPATH"] = "1"
+    exercise_installed_test_planning(python, consumer=consumer, env=child_environment)
     branch_policy.write_text(
         'branch-policy-version = 1\nallowed-patterns = ["main", "feat/*", "fix/*"]\n',
         encoding="utf-8",
@@ -1044,6 +1111,13 @@ def main() -> int:
                 "yaga/paths/reporting.py",
                 "yaga/paths/service.py",
                 "yaga/files.py",
+                "yaga/path_patterns.py",
+                "yaga/test_planning/__init__.py",
+                "yaga/test_planning/limits.py",
+                "yaga/test_planning/models.py",
+                "yaga/test_planning/planner.py",
+                "yaga/test_planning/policy.py",
+                "yaga/test_planning/selection.py",
                 "yaga/repository/checker.py",
                 "yaga/repository/models.py",
                 "yaga/repository/plan.py",

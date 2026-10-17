@@ -50,6 +50,13 @@ Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Gi
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
 
+The internal phase-one test planner lives under `src/yaga/test_planning/`; see the
+[design and implementation status](docs/designs/test-planning.md). Keep explicit policy parsing
+separate from pure selection, reuse the neutral bounded matcher in `src/yaga/path_patterns.py`,
+and keep both examples executable in tests. The planner must not discover Git or environment
+state, execute bindings, or enter either Action runtime. The `test` CLI and source-bound reports
+belong to the next phase.
+
 All revision-bound providers use the dependency-free runtime under `src/yaga/git/`. Keep repository
 and executable discovery, metadata and alternate-object-store boundaries, process execution,
 environment isolation, time and output limits, object identity parsing, and complete-history checks
