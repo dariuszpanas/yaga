@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
-import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
+
+from yaga import path_patterns
 
 MAX_CHANGE_RULES = 32
 MAX_CHANGE_PATTERNS = 16
 MAX_CHANGE_RULE_NAME_CHARS = 64
 MAX_CHANGED_PATHS = 2_048
-MAX_CHANGED_PATH_BYTES = 4_096
-MAX_CHANGED_PATH_COMPONENTS = 64
+MAX_CHANGED_PATH_BYTES = path_patterns.MAX_PATH_BYTES
+MAX_CHANGED_PATH_COMPONENTS = path_patterns.MAX_PATH_COMPONENTS
 MAX_REVISION_RANGE_CHARS = 512
 CHANGE_REQUIRE_ANY_CODE = "change.require_any"
 
 _OBJECT_ID_LENGTHS = frozenset({40, 64})
 _LOWER_HEX = frozenset("0123456789abcdef")
+_unsafe_character = path_patterns._unsafe_character
 
 
 class ChangeRuleStatus(StrEnum):
@@ -245,26 +247,10 @@ def _validate_result_paths(value: tuple[str, ...], *, label: str) -> None:
 
 
 def _validate_changed_path(value: object) -> tuple[str, ...]:
-    if not isinstance(value, str) or not value or "\\" in value:
-        raise ValueError("changed path must be a canonical repository-relative POSIX path")
     try:
-        encoded = value.encode("utf-8")
-    except UnicodeEncodeError as error:
-        raise ValueError("changed path must be valid UTF-8") from error
-    path = PurePosixPath(value)
-    components = path.parts
-    if (
-        len(encoded) > MAX_CHANGED_PATH_BYTES
-        or len(components) > MAX_CHANGED_PATH_COMPONENTS
-        or not components
-        or path.is_absolute()
-        or bool(PureWindowsPath(value).drive)
-        or path.as_posix() != value
-        or any(component in {"", ".", ".."} for component in components)
-        or any(_unsafe_character(character) for character in value)
-    ):
-        raise ValueError("changed path must be a canonical repository-relative POSIX path")
-    return components
+        return path_patterns.validate_path(value)
+    except ValueError as error:
+        raise ValueError(f"changed {error}") from error
 
 
 def _is_object_id(value: object) -> bool:
@@ -273,7 +259,3 @@ def _is_object_id(value: object) -> bool:
         and len(value) in _OBJECT_ID_LENGTHS
         and all(character in _LOWER_HEX for character in value)
     )
-
-
-def _unsafe_character(value: str) -> bool:
-    return unicodedata.category(value) in {"Cc", "Cf", "Cs", "Zl", "Zp"}
