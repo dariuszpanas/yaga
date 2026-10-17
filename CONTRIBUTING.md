@@ -45,17 +45,24 @@ fallback because the locked PyYAML release does not publish Python 3.15 wheels.
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `mode`,
-`path`, `repo`, `self`, `size`, `tree`, `workflow`, and `gate`.
+`path`, `repo`, `self`, `size`, `test`, `tree`, `workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
 
-The internal phase-one test planner lives under `src/yaga/test_planning/`; see the
-[design and implementation status](docs/designs/test-planning.md). Keep explicit policy parsing
-separate from pure selection, reuse the neutral bounded matcher in `src/yaga/path_patterns.py`,
-and keep both examples executable in tests. The planner must not discover Git or environment
-state, execute bindings, or enter either Action runtime. The `test` CLI and source-bound reports
-belong to the next phase.
+Test planning lives under `src/yaga/test_planning/`; see the [command guide](docs/test-planning.md)
+and [design](docs/designs/test-planning.md). Keep explicit policy parsing separate from pure
+selection, reuse the neutral bounded matcher in `src/yaga/path_patterns.py`, and keep both examples
+executable in tests. `test policy check` requires one explicit file and no Git access; `test plan`
+requires policy, profile, and exactly one explicit range or revision. A revision-only plan requires
+a full profile. Keep Git collection in the source adapter, using `src/yaga/git/changes.py` and the
+shared bounded runtime; the pure planner must not discover Git or environment state. Range plans
+require complete history and exact endpoint/comparison/execution identities; revision plans need
+their selected commit and tree only. Both reject graft overlays and never fetch. Preserve exact
+policy-byte identity, optional binding SHA-256, canonical version-one plan digests, complete JSON
+within 4 MiB, and at most 256 human reasons with exact omitted counts. Emit successful output on
+stdout and bounded error envelopes on stderr, with exits 0/2 only. Planning never executes bindings
+or claims tests passed. Keep both commands outside repository plans and both Action runtimes.
 
 All revision-bound providers use the dependency-free runtime under `src/yaga/git/`. Keep repository
 and executable discovery, metadata and alternate-object-store boundaries, process execution,

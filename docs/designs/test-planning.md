@@ -1,8 +1,9 @@
 # Selective test and qualification planning
 
-**Status: phase 1 implemented, 2026-10-17.** The version-one policy model, strict loader, and
-pure selection planner are available as internal Python modules. Both example configurations
-are exercised by the test suite. The CLI, Git source binding, public plan format, executors,
+**Status: phases 1 and 2 implemented.** The version-one policy model, strict loader, pure
+selection planner, installed CLI, Git source binding, and versioned plan reports are available.
+Both example configurations are exercised by the test suite. See the
+[test planning guide](../test-planning.md) for current commands. Executor handoff, shadow pilots,
 and receipt evaluation below remain proposals; no consumer test skipping is enabled.
 
 YAGA should turn an explicit source change and qualification policy into a deterministic list of
@@ -93,7 +94,7 @@ regex, negation, interpolation, or brace expansion. Policy fields cannot contain
 secrets, permissions, or runner arguments. Duplicate patterns across
 different rules are allowed and compiled once; duplicates within a list are errors.
 
-Hard bounds for phase 1, with reporting and source limits specified for later phases:
+Hard bounds for policy validation and planning:
 
 | Input/work | Limit |
 | --- | --- |
@@ -105,8 +106,9 @@ Hard bounds for phase 1, with reporting and source limits specified for later ph
 | Changed paths | 2,048 canonical paths; 4,096 UTF-8 bytes and 64 components each; 4 MiB total including one delimiter byte per path |
 | Pattern work | One shared 10,000,000-unit budget per plan |
 | Semantic selection | 4 MiB as compact sorted-key UTF-8 JSON, including inventory and reasons; reject rather than truncate |
-| Later JSON plan/receipt | 4 MiB each, including their complete source/evidence envelope |
-| Later human diagnostics | At most 256 stored entries with exact total counts |
+| JSON plan | 4 MiB including the complete source envelope; reject rather than truncate |
+| Human plan reasons | At most 256 displayed entries with exact omitted counts |
+| Later receipt | Proposed 4 MiB including its complete evidence envelope |
 
 The phase-one bounds are locked by tests. Valid
 repositories exceeding them receive an explicit operational error; increasing bounds requires
@@ -189,13 +191,13 @@ inventory remains visible even when the selection is empty.
 profile, indicating that no comparison was supplied. Invalid paths or duplicate entries fail
 even for a full profile. Invalid policy, unknown profile, configured unknown-path errors, and
 resource exhaustion raise `ConfigurationError`; invalid path input raises `InputError`.
-These errors never return a partial plan. The current result carries no source identity,
-public wire-format version, execution receipt, or claim that tests passed. Phase 2 adds those
-source/report boundaries before exposing the planned CLI.
+These errors never return a partial plan. The pure result carries no source identity,
+public wire-format version, execution receipt, or claim that tests passed. The installed CLI
+adds source-bound reports around this unchanged pure interface.
 
 ## Source identity, policy authority, and CLI
 
-Proposed commands, available only after their implementation phases:
+Installed commands:
 
 ```bash
 yaga test policy check --file .yaga/test-policy.toml
@@ -207,6 +209,9 @@ Require `--policy`, `--profile`, and exactly one of `--range` or `--revision`. O
 to `.`; format defaults to text. `--revision` is legal only with a full profile. No implicit HEAD,
 event parsing, branch discovery, fetch, or dirty-worktree selection. `BASE`, `HEAD`, and `CANDIDATE`
 above are placeholders for explicit commit-ish arguments; resolve them once to exact object IDs.
+Both commands support `--format text|json` and `--quiet`; quiet suppresses successful output in
+either format while retaining errors.
+Policy checking requires `--file` and does not inspect Git or discover configuration.
 
 Planning also accepts optional `--bindings-sha256 DIGEST`, a lowercase 64-character SHA-256 digest
 of an adapter-owned immutable execution manifest. It identifies the binding registry implementation,
@@ -248,9 +253,10 @@ credentials, write permissions, cluster access, or weaker protected-branch requi
 
 ### Plan and exit contracts
 
-The proposed JSON envelope has `test-plan-version = 1`, a deterministic `plan_digest`, and a
+The JSON envelope has exactly `test-plan-version = 1`, a deterministic `plan_digest`, and a
 `plan` object. The object contains:
 
+- `test-plan-version = 1`: the semantic version included in the digest.
 - `policy_sha256`: SHA-256 of the exact supplied policy bytes; it is identity, not authentication.
 - `bindings_sha256`: the expected immutable execution-manifest digest, or null for a preview plan.
 - `profile`, `requested_mode`, and `effective_mode` (`selective` or `full`).
@@ -274,9 +280,10 @@ without changing this semantic payload.
 
 Use the existing plan-digest approach: SHA-256 over UTF-8 JSON of `plan`, with sorted object keys,
 compact separators, no ASCII escaping, no floating-point values, and canonical array orders.
-Include a semantic contract version inside `plan` as well as the envelope. Timestamps, absolute
+Include `test-plan-version = 1` inside `plan` as well as the envelope. Timestamps, absolute
 local paths, and display formatting do not participate. Exact policy-byte hashing intentionally
-invalidates plans after even a comment edit. Unknown fields/versions are errors.
+invalidates plans after even a comment edit. Phase 2 emits reports only; importing plans and
+validating receipt evidence belong to a later phase.
 
 Stable initial reason codes: `test.always`, `test.rule`, `test.profile-full`, `test.full-trigger`,
 `test.unknown-path`, `test.no-impact`, and `test.prerequisite`. Policy/Git/input errors use the existing error envelope;
@@ -292,7 +299,7 @@ and `2` for invalid evidence or operational errors, with error precedence over f
 Download [polyglot.toml](examples/test-planning/polyglot.toml) for an illustrative application with
 backend, frontend, Docker, Chainsaw, and custom Ray qualification. All entries use the same schema;
 there is no language enum. Paths and binding names must be adapted to the consumer repository.
-The internal phase-one loader and planner accept this fixture; the proposed CLI does not exist yet.
+The installed CLI and internal pure planner accept this fixture. Execution bindings remain examples.
 
 Its important rules include:
 
@@ -492,7 +499,7 @@ Do not weaken current required checks as part of adding the new feature.
 | --- | --- | --- |
 | 0: design fixtures | This proposal, complete TOML examples, expected selection cases | Review schema, trust split, inventory semantics, and examples; no runtime behavior changes |
 | 1: policy and pure planning (implemented) | `src/yaga/test_planning/{models,policy,selection,planner}.py` and shared `src/yaga/path_patterns.py`; focused parser/selection tests | Closed schema and limits; additive tag/rule selection; unknown/full behavior; DAG closure; both examples load and produce tested selections; no executors |
-| 2: installed CLI and Git | `src/yaga/commands/test.py`; `test_planning/{git,service,reporting}.py`; CLI registration | Exact source identities, stable JSON/digest and exits, bounded reports, fresh installed-wheel smoke, unchanged Action graphs; useful local/CI planning only |
+| 2: installed CLI and Git (implemented) | `src/yaga/commands/test.py`; `test_planning/{source,git,service,reports,reporting}.py`; shared `git/changes.py` | Exact source identities, stable JSON/digest and exits, bounded reports, fresh installed-wheel smoke, unchanged Action graphs; useful local/CI planning only |
 | 3: executor handoff and shadow pilot | Consumer fixed job mappings, required aggregate, documentation and recorded experiment results | All five execution categories demonstrated; planning/selection failures cannot pass; django-ray comparison and full same-source shadow runs; existing gates still authoritative |
 | 4: receipts and controlled activation | `test_planning/{results,evaluation}.py`; evaluate command and adapter conformance fixtures | Exact selected cells/attempt/source correlation; malformed/stale/missing/cancelled/cleanup failures tested; activate only after shadow criteria and required gates are verified |
 | 5: optional impact providers | Independently versioned evidence format and optional collectors for Python/JS/build systems | Whole-suite fallback on absent/incompatible evidence; known-regression replay and seeded dependency changes; no removal of mandatory/full-profile obligations |

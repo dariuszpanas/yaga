@@ -243,7 +243,9 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/commands/mode.py"' in build_gate
     assert '"yaga/commands/size.py"' in build_gate
     assert '"yaga/commands/path.py"' in build_gate
+    assert '"yaga/commands/test.py"' in build_gate
     assert '"yaga/git/__init__.py"' in build_gate
+    assert '"yaga/git/changes.py"' in build_gate
     assert '"yaga/git/process.py"' in build_gate
     assert '"yaga/git/runtime.py"' in build_gate
     assert '"yaga/git/tree.py"' in build_gate
@@ -294,6 +296,27 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"yaga/paths/policy.py"' in build_gate
     assert '"yaga/paths/reporting.py"' in build_gate
     assert '"yaga/paths/service.py"' in build_gate
+    for module in (
+        "__init__",
+        "git",
+        "limits",
+        "models",
+        "planner",
+        "policy",
+        "reporting",
+        "reports",
+        "selection",
+        "service",
+        "source",
+    ):
+        assert f'"yaga/test_planning/{module}.py"' in build_gate
+    assert 'operation="test policy check"' in build_gate
+    assert 'operation=f"test plan {profile}"' in build_gate
+    assert build_gate.index("test_policy = exercise_installed_test_policy(") < build_gate.index(
+        '("init", "--initial-branch=main")'
+    )
+    assert "tree_sha=tree_sha" in build_gate
+    assert "invalid.returncode != 2 or invalid.stdout" in build_gate
     assert '"yaga/repository/checker.py"' in build_gate
     assert '"yaga/repository/plan.py"' in build_gate
     assert '"yaga/workflows/inputs.py"' in build_gate
@@ -375,6 +398,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "from yaga.trees" not in source, path
         assert "from yaga.sizes" not in source, path
         assert "from yaga.paths" not in source, path
+        assert "from yaga.test_planning" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.commits" not in source, path
         assert "from yaga.workflows" not in source, path
@@ -383,6 +407,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "import yaga.trees" not in source, path
         assert "import yaga.sizes" not in source, path
         assert "import yaga.paths" not in source, path
+        assert "import yaga.test_planning" not in source, path
 
 
 def test_commit_action_publishes_a_sanitized_step_summary() -> None:
@@ -425,6 +450,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "from yaga.trees" not in source, path
         assert "from yaga.sizes" not in source, path
         assert "from yaga.paths" not in source, path
+        assert "from yaga.test_planning" not in source, path
         assert "from yaga.commands" not in source, path
         assert "from yaga.agent_review.github" not in source, path
         assert "from yaga.workflows" not in source, path
@@ -434,4 +460,5 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "import yaga.trees" not in source, path
         assert "import yaga.sizes" not in source, path
         assert "import yaga.paths" not in source, path
+        assert "import yaga.test_planning" not in source, path
         assert "GITHUB_TOKEN" not in source, path

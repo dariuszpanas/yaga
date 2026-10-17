@@ -8,12 +8,21 @@ from dataclasses import asdict, replace
 
 from yaga.errors import ConfigurationError, InputError, safe_error_text
 from yaga.path_patterns import compile_pattern, match_compiled, validate_path
-from yaga.test_planning.limits import MAX_PLAN_BYTES, MAX_TOKEN_BYTES
-from yaga.test_planning.models import QualificationPolicy, SelectionMode, Suite, UnknownPathPolicy
+from yaga.test_planning.limits import (
+    MAX_CHANGED_PATH_BYTES_TOTAL,
+    MAX_CHANGED_PATHS,
+    MAX_PLAN_BYTES,
+    MAX_TOKEN_BYTES,
+)
+from yaga.test_planning.models import (
+    Profile,
+    QualificationPolicy,
+    SelectionMode,
+    Suite,
+    UnknownPathPolicy,
+)
 from yaga.test_planning.selection import SelectedSuite, SelectionPlan, SelectionReason
 
-MAX_CHANGED_PATHS = 2_048
-MAX_CHANGED_PATH_BYTES_TOTAL = 4 * 1024 * 1024
 MAX_MATCH_WORK = 10_000_000
 MAX_SELECTION_BYTES = MAX_PLAN_BYTES
 
@@ -83,6 +92,21 @@ class _Reasons:
         self.values.add(reason)
 
 
+def resolve_profile(policy: QualificationPolicy, profile: str) -> Profile:
+    """Validate one explicit profile name without inspecting source or runner state."""
+    if not isinstance(policy, QualificationPolicy):
+        raise TypeError("policy must be a QualificationPolicy")
+    if type(profile) is not str or not 1 <= len(profile) <= MAX_TOKEN_BYTES:
+        raise ConfigurationError(
+            f"test profile must be an explicit string of 1 through {MAX_TOKEN_BYTES} characters"
+        )
+    selected_profile = next((item for item in policy.profiles if item.name == profile), None)
+    if selected_profile is None:
+        display = safe_error_text(profile, maximum=100)
+        raise ConfigurationError(f"unknown test profile: {display!r}")
+    return selected_profile
+
+
 def plan_tests(
     policy: QualificationPolicy,
     *,
@@ -95,16 +119,7 @@ def plan_tests(
     profile. An empty tuple is an explicit complete empty change. Neither form
     discovers or executes tests.
     """
-    if not isinstance(policy, QualificationPolicy):
-        raise TypeError("policy must be a QualificationPolicy")
-    if type(profile) is not str or not 1 <= len(profile) <= MAX_TOKEN_BYTES:
-        raise ConfigurationError(
-            f"test profile must be an explicit string of 1 through {MAX_TOKEN_BYTES} characters"
-        )
-    selected_profile = next((item for item in policy.profiles if item.name == profile), None)
-    if selected_profile is None:
-        display = safe_error_text(profile, maximum=100)
-        raise ConfigurationError(f"unknown test profile: {display!r}")
+    selected_profile = resolve_profile(policy, profile)
     paths = _validate_paths(changed_paths)
     reasons = _Reasons()
 

@@ -15,6 +15,7 @@ from yaga.changes.models import (
 )
 from yaga.errors import GitError, InputError
 from yaga.git import GitRepository, ProcessResult
+from yaga.git import changes as shared_change_git
 from yaga.git import runtime as git_runtime
 
 
@@ -197,7 +198,7 @@ def test_legacy_grafts_cannot_change_a_linked_worktree_merge_base(
         "HEAD\u202e..tip",
         "HEAD^@..tip",
         "HEAD..tip^!",
-        "x" * (change_git.MAX_REVISION_CHARS + 1),
+        "x" * (shared_change_git.MAX_REVISION_CHARS + 1),
     ],
 )
 def test_range_requires_one_safe_exact_two_dot_or_three_dot_expression(
@@ -318,7 +319,7 @@ def test_three_dot_rejects_ambiguous_merge_bases(repository: tuple[Path, str]) -
 
 
 def test_path_parser_sorts_exact_paths() -> None:
-    assert change_git._parse_changed_paths(b"z.txt\0a.txt\0") == (
+    assert shared_change_git._parse_changed_paths(b"z.txt\0a.txt\0") == (
         "a.txt",
         "z.txt",
     )
@@ -326,7 +327,7 @@ def test_path_parser_sorts_exact_paths() -> None:
 
 def test_path_parser_rejects_duplicate_native_records() -> None:
     with pytest.raises(GitError, match="duplicate changed path"):
-        change_git._parse_changed_paths(b"same.txt\0same.txt\0")
+        shared_change_git._parse_changed_paths(b"same.txt\0same.txt\0")
 
 
 def test_path_parser_accepts_public_path_and_count_boundaries() -> None:
@@ -334,10 +335,10 @@ def test_path_parser_accepts_public_path_and_count_boundaries() -> None:
     deepest = "/".join("x" for _ in range(MAX_CHANGED_PATH_COMPONENTS))
     paths = tuple(f"files/{index:04}.txt" for index in range(MAX_CHANGED_PATHS))
 
-    assert change_git._parse_changed_paths(longest.encode() + b"\0") == (longest,)
-    assert change_git._parse_changed_paths(deepest.encode() + b"\0") == (deepest,)
+    assert shared_change_git._parse_changed_paths(longest.encode() + b"\0") == (longest,)
+    assert shared_change_git._parse_changed_paths(deepest.encode() + b"\0") == (deepest,)
     output = b"\0".join(path.encode() for path in reversed(paths)) + b"\0"
-    assert change_git._parse_changed_paths(output) == paths
+    assert shared_change_git._parse_changed_paths(output) == paths
 
 
 @pytest.mark.parametrize(
@@ -366,14 +367,14 @@ def test_path_parser_rejects_malformed_utf8_and_hostile_paths(
     message: str,
 ) -> None:
     with pytest.raises(GitError, match=message):
-        change_git._parse_changed_paths(output)
+        shared_change_git._parse_changed_paths(output)
 
 
 def test_path_parser_rejects_raw_path_count_before_deduplication() -> None:
     output = b"same.txt\0" * (MAX_CHANGED_PATHS + 1)
 
     with pytest.raises(GitError, match=rf"hard {MAX_CHANGED_PATHS}-path limit"):
-        change_git._parse_changed_paths(output)
+        shared_change_git._parse_changed_paths(output)
 
 
 def test_git_diff_output_is_stopped_at_the_hard_byte_limit(
@@ -382,7 +383,7 @@ def test_git_diff_output_is_stopped_at_the_hard_byte_limit(
 ) -> None:
     path, base = repository
     head = commit_paths(path, "feat: add long path", {"x" * 100: "content\n"})
-    monkeypatch.setattr(change_git, "MAX_GIT_DIFF_BYTES", 32)
+    monkeypatch.setattr(shared_change_git, "MAX_GIT_DIFF_BYTES", 32)
 
     with pytest.raises(GitError, match="hard 32-byte limit"):
         change_git.read_changed_paths(path, f"{base}..{head}")
@@ -402,14 +403,14 @@ def test_diff_command_disables_renames_external_diff_and_textconv(
     ) -> ProcessResult:
         assert selected == repository
         captured.append(arguments)
-        assert stdout_limit == change_git.MAX_GIT_DIFF_BYTES
+        assert stdout_limit == shared_change_git.MAX_GIT_DIFF_BYTES
         return ProcessResult(0, b"", b"", False, False, False)
 
-    monkeypatch.setattr(change_git, "run_git", fake_run)
+    monkeypatch.setattr(shared_change_git, "run_git", fake_run)
     base = "a" * 40
     head = "b" * 40
 
-    assert change_git._read_changed_path_output(repository, base, head) == ()
+    assert shared_change_git._read_changed_path_output(repository, base, head) == ()
     assert captured == [
         [
             "diff",
@@ -418,6 +419,7 @@ def test_diff_command_disables_renames_external_diff_and_textconv(
             "--no-renames",
             "--no-ext-diff",
             "--no-textconv",
+            "--no-relative",
             "--ignore-submodules=none",
             base,
             head,
@@ -440,7 +442,7 @@ def test_merge_base_command_requests_all_candidates(monkeypatch: pytest.MonkeyPa
     ) -> ProcessResult:
         assert selected == repository
         captured.append(arguments)
-        assert stdout_limit == change_git._MAX_MERGE_BASE_BYTES
+        assert stdout_limit == shared_change_git._MAX_MERGE_BASE_BYTES
         return ProcessResult(
             0,
             ("c" * 40 + "\n").encode(),
@@ -450,7 +452,50 @@ def test_merge_base_command_requests_all_candidates(monkeypatch: pytest.MonkeyPa
             False,
         )
 
-    monkeypatch.setattr(change_git, "run_git", fake_run)
+    monkeypatch.setattr(shared_change_git, "run_git", fake_run)
 
-    assert change_git._resolve_unique_merge_base(repository, base, head) == "c" * 40
+    assert shared_change_git._resolve_unique_merge_base(repository, base, head) == "c" * 40
     assert captured == [["merge-base", "--all", base, head]]
+
+
+def test_repository_relative_diff_cannot_hide_changes_outside_requested_subdirectory(
+    repository: tuple[Path, str],
+) -> None:
+    path, base = repository
+    head = commit_paths(
+        path,
+        "feat: add paths across repository",
+        {"nested/inside.txt": "inside\n", "outside.txt": "outside\n"},
+    )
+    git(path, "config", "diff.relative", "true")
+
+    selected = change_git.read_changed_paths(path / "nested", f"{base}..{head}")
+
+    assert selected.paths == ("nested/inside.txt", "outside.txt")
+
+
+@pytest.mark.parametrize("operation", ["endpoint", "merge-base", "diff"])
+def test_successful_git_commands_reject_unexpected_stderr(
+    monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    repository = GitRepository(Path("repo"), "git")
+
+    def fake_run(
+        _selected: GitRepository, _arguments: list[str], *, stdout_limit: int
+    ) -> ProcessResult:
+        return ProcessResult(0, b"a" * 40 + b"\n", b"warning", False, False, False)
+
+    monkeypatch.setattr(shared_change_git, "run_git", fake_run)
+    with pytest.raises(GitError, match="unexpected error output"):
+        if operation == "endpoint":
+            shared_change_git._resolve_commitish(
+                repository, "HEAD", source="range head", strict_output=True
+            )
+        elif operation == "merge-base":
+            shared_change_git._resolve_unique_merge_base(
+                repository, "a" * 40, "b" * 40, strict_output=True
+            )
+        else:
+            shared_change_git._read_changed_path_output(
+                repository, "a" * 40, "b" * 40, strict_output=True
+            )
