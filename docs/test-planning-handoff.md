@@ -9,7 +9,7 @@ Phase 3 supplies this Python API, runnable examples, and a django-ray shadow-pil
 Historical selection replay and one full same-source qualification run are recorded; actual
 selective feedback-time measurements and the adoption decision remain pending. Existing required
 CI checks remain enabled and authoritative.
-Generic receipt evaluation and selective-execution activation are later work.
+Phase 4B adds offline normalized receipt evaluation. Selective-execution activation remains later work.
 Phase 4A adds pure selection diagnostics and reviewed application-test ownership mappings.
 
 ## Build a fixed registry
@@ -68,8 +68,62 @@ identity. Declaration order does not. Supply this identity when creating the pla
 
 Handoff rejects preview plans with null binding identity, mismatched policy/source/registry
 identities, missing or extra mappings, changed bindings/variants, and missing capabilities.
-Invalid inputs fail before any dispatch document is returned. There is no new execution command,
-plan-file importer, shell interpolation, or generic result consumer in this phase.
+Invalid inputs fail before any dispatch document is returned. There is no execution command or
+shell interpolation. The separate evaluator imports retained plans and normalized results offline.
+
+## Normalize and evaluate receipts
+
+The pure APIs live in `yaga.test_planning.results` and `yaga.test_planning.evaluation`:
+
+```python
+from yaga.test_planning.evaluation import encode_evaluation, evaluate_results
+from yaga.test_planning.results import parse_results_document
+
+# The adapter has already performed bounded JSON acquisition, duplicate-key rejection,
+# provenance checks, and each executor's custom acceptance and cleanup validation.
+results = parse_results_document(normalized_document)
+evaluation = evaluate_results(
+    planned,
+    results,
+    expected_policy_sha256=trusted_policy_sha256,
+    expected_bindings_sha256=registry.sha256,
+    expected_execution_commit=expected_commit,
+    expected_execution_tree=expected_tree,
+    expected_run_id=expected_run_id,
+    expected_attempt=expected_attempt,
+)
+report_bytes = encode_evaluation(evaluation)
+```
+
+`CellResult`, `ResultOutcome`, and `TestResults` also support validated direct construction.
+`results_document` and `encode_results` produce canonical output sorted by suite and variant.
+The evaluation's `results_sha256` hashes that canonical result document without its trailing
+newline. Reordering received cells does not change the fingerprint. Input parsers and output
+encoders reject unsupported versions, malformed fields, and over-budget documents; see the
+[complete CLI and wire contract](test-planning.md#evaluate-normalized-results).
+
+The generic evaluator checks only the normalized contract. Consumers must verify these conditions
+before emitting a passed cell:
+
+| Executor | Adapter-owned acceptance |
+| --- | --- |
+| Backend/frontend tests | Expected collection and environment, successful assertions, no prohibited skips, and server/fixture cleanup |
+| Docker checks | Correct immutable image/environment, scenario assertions, and owned-container cleanup |
+| Chainsaw | Complete expected scenarios and assertions plus the declared cluster/resource cleanup or restoration contract |
+| django-ray qualifications | Source-owned application, native, latency, cancellation, and monitoring receipt assertions for every selected variant, cold phases where applicable, and owned cleanup |
+
+Keep raw evidence and its digest, exact source/manifest, authenticated run and final authorized
+job attempt, and retry lineage. A provider's green job or artifact name alone cannot produce a
+passed result. Missing evidence files are operational errors. Failed assertions or cleanup must
+produce a failed cell or an operational error; a selected job that was skipped is blocked. Do not pick a passing
+attempt from a different run or use older source receipts after an acceptance contract changes.
+
+The django-ray phase 4B consumer is developed separately from the active 0.7 release. Its offline
+normalizer does not replace the existing shadow aggregate, alter workflow conditions, or dispatch
+jobs. Before adoption, reconcile it with the eventual release source, including new application
+lease-policy and runtime-environment-maintenance facts and upgraded schema assertions. Its
+separate experiment observations retain unavailable timings explicitly. The retained full pilot
+informs regression fixtures, but is not evidence that a new source or adapter was executed.
 
 ## Version-one handoff
 

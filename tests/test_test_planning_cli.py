@@ -118,8 +118,8 @@ def test_help_exposes_only_installed_planning_commands() -> None:
     assert "test" in root.stdout
     group = runner.invoke(app, ["test", "--help"])
     assert group.exit_code == 0
-    assert "policy" in group.stdout and "plan" in group.stdout
-    for deferred in ("evaluate", "execute", "collect"):
+    assert all(command in group.stdout for command in ("policy", "plan", "evaluate"))
+    for deferred in ("execute", "collect"):
         assert deferred not in group.stdout
     help_result = runner.invoke(app, ["test", "plan", "--help"])
     assert help_result.exit_code == 0

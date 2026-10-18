@@ -392,6 +392,16 @@ def exercise_installed_test_plan(
             == ["backend", "build", "frontend"]
         ):
             raise SystemExit("installed wheel CLI test plan emitted the wrong report contract")
+        if not full:
+            exercise_installed_test_evaluate(
+                executable,
+                consumer=consumer,
+                env=env,
+                plan_document=document,
+                head_sha=head_sha,
+                tree_sha=tree_sha,
+                bindings_sha256=bindings_sha256,
+            )
     invalid = run_bounded(
         [
             str(executable),
@@ -419,6 +429,95 @@ def exercise_installed_test_plan(
         and error_document["error"].get("kind") == "git"
     ):
         raise SystemExit("installed wheel CLI test plan emitted the wrong error contract")
+
+
+def exercise_installed_test_evaluate(
+    executable: Path,
+    *,
+    consumer: Path,
+    env: dict[str, str],
+    plan_document: dict[str, object],
+    head_sha: str,
+    tree_sha: str,
+    bindings_sha256: str,
+) -> None:
+    """Exercise installed receipt evaluation exits against independent fixture identities."""
+    plan_path = consumer.parent / "evaluation-plan.json"
+    results_path = consumer.parent / "evaluation-results.json"
+    plan_path.write_text(json.dumps(plan_document), encoding="utf-8")
+    policy_sha256 = hashlib.sha256(TEST_PLANNING_CLI_POLICY).hexdigest()
+    results = {
+        "test-results-version": 1,
+        "plan_digest": plan_document["plan_digest"],
+        "policy_sha256": policy_sha256,
+        "bindings_sha256": bindings_sha256,
+        "execution_commit": head_sha,
+        "execution_tree": tree_sha,
+        "run_id": "installed-wheel-smoke",
+        "attempt": 1,
+        "results": [
+            {"suite": "backend", "variant": "py312", "binding": "pytest", "outcome": "passed"},
+            {"suite": "backend", "variant": "py315", "binding": "pytest", "outcome": "passed"},
+            {"suite": "build", "variant": "default", "binding": "docker", "outcome": "passed"},
+        ],
+    }
+    results_path.write_text(json.dumps(results), encoding="utf-8")
+    arguments = [
+        str(executable),
+        "test",
+        "evaluate",
+        "--plan",
+        str(plan_path),
+        "--results",
+        str(results_path),
+        "--policy-sha256",
+        policy_sha256,
+        "--bindings-sha256",
+        bindings_sha256,
+        "--execution-commit",
+        head_sha,
+        "--execution-tree",
+        tree_sha,
+        "--run-id",
+        "installed-wheel-smoke",
+        "--attempt",
+        "1",
+        "--format",
+        "json",
+    ]
+    completed = run_bounded(arguments, cwd=consumer, env=env)
+    passed = successful_json(completed, operation="test evaluate passed")
+    if not (
+        passed.get("test-evaluation-version") == 1
+        and passed.get("status") == "passed"
+        and passed.get("passed") is True
+        and passed.get("complete") is True
+    ):
+        raise SystemExit("installed wheel CLI test evaluate emitted the wrong passing report")
+    results["results"] = results["results"][:-1]
+    results_path.write_text(json.dumps(results), encoding="utf-8")
+    incomplete = run_bounded([*arguments, "--quiet"], cwd=consumer, env=env)
+    if incomplete.returncode != 1 or incomplete.stderr:
+        raise SystemExit("installed wheel CLI test evaluate accepted missing prerequisite results")
+    incomplete_document = json.loads(incomplete.stdout.decode("utf-8"))
+    if not (
+        isinstance(incomplete_document, dict)
+        and incomplete_document.get("status") == "incomplete"
+        and incomplete_document.get("passed") is False
+        and incomplete_document.get("complete") is False
+    ):
+        raise SystemExit("installed wheel CLI test evaluate hid an incomplete result")
+    arguments[arguments.index("--run-id") + 1] = "displaced-run"
+    invalid = run_bounded(arguments, cwd=consumer, env=env)
+    if invalid.returncode != 2 or invalid.stdout:
+        raise SystemExit("installed wheel CLI test evaluate accepted a displaced identity")
+    error_document = json.loads(invalid.stderr.decode("utf-8"))
+    if not (
+        isinstance(error_document, dict)
+        and error_document.get("kind") == "test_evaluation"
+        and error_document.get("status") == "error"
+    ):
+        raise SystemExit("installed wheel CLI test evaluate emitted the wrong error contract")
 
 
 def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
@@ -1361,6 +1460,9 @@ def main() -> int:
                 "yaga/files.py",
                 "yaga/path_patterns.py",
                 "yaga/test_planning/__init__.py",
+                "yaga/test_planning/diagnostics.py",
+                "yaga/test_planning/evaluation.py",
+                "yaga/test_planning/evaluation_service.py",
                 "yaga/test_planning/git.py",
                 "yaga/test_planning/handoff.py",
                 "yaga/test_planning/limits.py",
@@ -1369,6 +1471,7 @@ def main() -> int:
                 "yaga/test_planning/policy.py",
                 "yaga/test_planning/reporting.py",
                 "yaga/test_planning/reports.py",
+                "yaga/test_planning/results.py",
                 "yaga/test_planning/selection.py",
                 "yaga/test_planning/service.py",
                 "yaga/test_planning/source.py",

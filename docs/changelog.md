@@ -12,7 +12,7 @@
   Git range or full-profile revision inputs. Plans bind exact commit/tree and policy identities,
   carry deterministic version-one JSON digests, and explain selected suites and variants.
   Git collection remains bounded and never fetches. Planning does not run tests or enable skips;
-  receipt evaluation remains planned.
+  normalized receipt evaluation is available separately.
 
 - Add a pure version-one executor registry and handoff API with complete fixed job mappings,
   binding/source/policy identity checks, exact variant preservation, capability preflight,
@@ -25,6 +25,12 @@
   source/policy identities, fallback causes, selection breadth, unclassified paths, and explicit
   baseline comparisons. Add optional separate replay diagnostics without changing existing plan
   or comparison formats. Complete reports stay within 4 MiB and make no execution claims.
+
+- Add version-one normalized test results and pure evaluation, plus installed `test evaluate`
+  with explicit plan/results files and independent policy, manifest, source, run, and attempt
+  identities. Missing prerequisites or variants and non-passed outcomes block success; malformed,
+  stale, duplicate, or extra results fail validation. Preserve bounded reports, offline operation,
+  both Action import boundaries, and existing required CI. Selective activation remains pending.
 
 - Add the schema-v1 boolean `dependabot-require-github-signature`, defaulting to `true`.
   Each otherwise eligible Dependabot-skipped commit must verify offline against the pinned

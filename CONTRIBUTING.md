@@ -82,6 +82,15 @@ plan semantics and canonical digests; callers still own bounded JSON reads and d
 rejection. Complete diagnostic reports must fit within 4 MiB including the final newline.
 Recorded reasons are not proof of dependency coverage, trusted origin, or runtime savings.
 
+Keep version-one normalized test results and evaluation separate from frozen plan/handoff formats.
+`test evaluate` requires explicit bounded plan/results files plus independent expected policy,
+manifest, source, run, and aggregate-attempt identities. Keep the evaluator pure and validate every
+selected variant and prerequisite; missing or non-passed work returns 1, malformed or mismatched
+inputs return 2, and only complete passed obligations return 0. Bound complete JSON to 4 MiB and
+diagnostics to 256 with exact omitted counts. Adapters own provenance, custom acceptance, cleanup,
+and retry lineage; an artifact hash or green job alone cannot prove these. No execution, discovery,
+Git access, provider API, required-CI changes, or selective activation belongs in evaluation.
+
 All revision-bound providers use the dependency-free runtime under `src/yaga/git/`. Keep repository
 and executable discovery, metadata and alternate-object-store boundaries, process execution,
 environment isolation, time and output limits, object identity parsing, and complete-history checks
