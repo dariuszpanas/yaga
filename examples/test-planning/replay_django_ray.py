@@ -28,9 +28,11 @@ from yaga.git import (
     resolve_committed_tree,
     run_git,
 )
+from yaga.test_planning.diagnostics import diagnose_selection, parse_plan_document
 
 MAX_BYTES = 4 * 1024 * 1024
 OID = re.compile(r"[0-9a-f]{40}", re.ASCII)
+JOBS = frozenset({"application", "cancellation", "latency", "monitoring", "native"})
 
 
 def verify_consumer_checkout(consumer: Path, adapter_commit: str, adapter_tree: str) -> Path:
@@ -172,6 +174,185 @@ def replay(adapter: Any, cohort: object, **inputs: Any) -> dict[str, Any]:
     }
 
 
+def replay_diagnostics(document: dict[str, Any]) -> dict[str, Any]:
+    """Explain a complete replay independently of its frozen version-one envelope.
+
+    Recorded plan reasons describe only classification the planner performed.
+    A full trigger can bypass rule/unknown evaluation; absent unknown reasons do
+    not prove that every changed path has an owner. Nothing here rematches paths,
+    changes selection, executes historical code, or establishes failure coverage.
+    """
+    replay_bytes = encode_replay(document)
+    if (
+        type(document.get("experiment_version")) is not int
+        or document["experiment_version"] != 1
+        or document.get("repository") != "dariuszpanas/django-ray"
+        or document.get("mode") != "historical-selection-replay"
+        or document.get("activation") != "disabled"
+    ):
+        raise ValueError("diagnostics require an unchanged version-one historical replay")
+    cohort = validate_cohort(document.get("cohort"))
+    observations = document.get("observations")
+    if type(observations) is not list or len(observations) != len(cohort):
+        raise ValueError("diagnostics require every cohort observation exactly once")
+    results = []
+    identities = set()
+    for revision, raw_observation in zip(cohort, observations, strict=True):
+        if type(raw_observation) is not dict or set(raw_observation) != {
+            "revision",
+            "comparison",
+            "plan",
+        }:
+            raise ValueError("diagnostic observations must preserve the complete cohort order")
+        observation = cast(dict[str, Any], raw_observation)
+        if observation["revision"] != revision:
+            raise ValueError("diagnostic observations must preserve the complete cohort order")
+        planned = parse_plan_document(observation["plan"])
+        source = planned.source
+        if (
+            source.base_commit != revision["base"]
+            or source.comparison_commit != revision["base"]
+            or source.head_commit != revision["head"]
+            or source.execution_commit != revision["head"]
+            or source.execution_tree != revision["tree"]
+            or {suite.id for suite in planned.selection.inventory}
+            != {"qualification." + job for job in JOBS}
+        ):
+            raise ValueError("diagnostic plan differs from the cohort source or fixed catalog")
+        comparison = observation["comparison"]
+        baseline = _job_selection(comparison, "baseline_selected")
+        proposed = _job_selection(comparison, "planned_selected")
+        missing = _job_selection(comparison, "missing")
+        additional = _job_selection(comparison, "additional")
+        diagnostic = diagnose_selection(
+            planned, baseline_suites=tuple("qualification." + job for job in sorted(baseline))
+        )
+        if (
+            type(comparison.get("test-shadow-version")) is not int
+            or comparison["test-shadow-version"] != 1
+            or comparison.get("status") != "compared"
+            or comparison.get("effective_mode") != planned.selection.effective_mode.value
+            or proposed
+            != {item.suite.removeprefix("qualification.") for item in planned.selection.selected}
+            or missing != baseline - proposed
+            or additional != proposed - baseline
+            or comparison.get("plan_digest") != diagnostic["plan_digest"]
+            or comparison.get("policy_sha256") != planned.policy_sha256
+            or comparison.get("bindings_sha256") != planned.bindings_sha256
+            or comparison.get("source") != diagnostic["source"]
+            or comparison.get("activation") != "disabled"
+        ):
+            raise ValueError("diagnostic comparison does not agree with its exact plan")
+        adapter = comparison.get("adapter_source")
+        baseline_digest = comparison.get("baseline_policy_sha256")
+        if (
+            type(adapter) is not dict
+            or set(adapter) != {"commit", "tree"}
+            or any(
+                type(value) is not str or OID.fullmatch(value) is None for value in adapter.values()
+            )
+            or type(baseline_digest) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", baseline_digest) is None
+        ):
+            raise ValueError("diagnostics require exact adapter and baseline policy identities")
+        identities.add(
+            (
+                planned.policy_sha256,
+                planned.bindings_sha256,
+                baseline_digest,
+                adapter["commit"],
+                adapter["tree"],
+            )
+        )
+        results.append({"revision": revision, "diagnostics": diagnostic})
+    if len(identities) != 1:
+        raise ValueError(
+            "diagnostics cannot combine different policy, registry or adapter identities"
+        )
+    policy, bindings, baseline_policy, adapter_commit, adapter_tree = identities.pop()
+    summaries = [item["diagnostics"] for item in results]
+    comparison_rows = [item["comparison"] for item in summaries]
+    report = {
+        "test-replay-diagnostics-version": 1,
+        "repository": "dariuszpanas/django-ray",
+        "activation": "disabled",
+        "scope": "recorded selection reasons and baseline comparison; not dependency coverage",
+        "source_replay_sha256": hashlib.sha256(replay_bytes).hexdigest(),
+        "policy_sha256": policy,
+        "bindings_sha256": bindings,
+        "baseline_policy_sha256": baseline_policy,
+        "adapter_source": {"commit": adapter_commit, "tree": adapter_tree},
+        "summary": {
+            "revisions": len(cohort),
+            "selection_breadth": {
+                key: sum(item["selection_breadth"] == key for item in summaries)
+                for key in ("all", "partial", "empty")
+            },
+            "fallback_causes": {
+                key: sum(item["fallback_cause"] == key for item in summaries)
+                for key in ("profile-full", "full-trigger", "unknown-path", "selective")
+            },
+            "baseline_dispatches": sum(len(item["baseline"]) for item in comparison_rows),
+            "planned_dispatches": sum(len(item["selected"]) for item in comparison_rows),
+            "additional_dispatches": sum(len(item["additional"]) for item in comparison_rows),
+            "omitted_dispatches": sum(len(item["missing"]) for item in comparison_rows),
+            "additional_selection_revisions": sum(
+                bool(item["additional"]) for item in comparison_rows
+            ),
+            "omission_revisions": sum(bool(item["missing"]) for item in comparison_rows),
+            "test_runtime_observations": 0,
+            "feedback_time_reduction": None,
+        },
+        "path_revisions": {
+            key: _rank_paths(summaries, key)
+            for key in (
+                "full_trigger_paths",
+                "unknown_paths",
+                "no_impact_paths",
+                "paths_without_recorded_classification",
+            )
+        },
+        "suite_revisions": [
+            {
+                "suite": "qualification." + job,
+                **{
+                    key: sum("qualification." + job in item[key] for item in comparison_rows)
+                    for key in ("baseline", "selected", "additional", "missing")
+                },
+            }
+            for job in sorted(JOBS)
+        ],
+        "observations": results,
+    }
+    encode_replay(report)  # Complete output, including newline, must fit; never truncate.
+    return report
+
+
+def _job_selection(comparison: object, field: str) -> set[str]:
+    if type(comparison) is not dict:
+        raise ValueError("diagnostics require a comparison object")
+    values = comparison.get(field)
+    if (
+        type(values) is not list
+        or len(values) > len(JOBS)
+        or any(type(value) is not str or value not in JOBS for value in values)
+        or len(set(values)) != len(values)
+    ):
+        raise ValueError("diagnostics require unique known comparison jobs")
+    return set(cast(list[str], values))
+
+
+def _rank_paths(summaries: list[dict[str, Any]], field: str) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for summary in summaries:
+        for path in summary[field] or ():
+            counts[path] = counts.get(path, 0) + 1
+    return [
+        {"path": path, "revisions": count}
+        for path, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--consumer", type=Path, required=True)
@@ -179,7 +360,18 @@ def main() -> int:
     parser.add_argument("--adapter-commit", required=True)
     parser.add_argument("--adapter-tree", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--diagnostics-output",
+        type=Path,
+        help="also retain a separate bounded selection-only diagnostics report",
+    )
     args = parser.parse_args()
+    if args.diagnostics_output is not None and (
+        args.diagnostics_output.resolve() == args.output.resolve()
+        or args.output.exists()
+        or args.diagnostics_output.exists()
+    ):
+        parser.error("replay and diagnostic outputs must name distinct new files")
     for value in (args.adapter_commit, args.adapter_tree):
         if OID.fullmatch(value) is None:
             parser.error("adapter identities must be exact Git objects")
@@ -219,10 +411,18 @@ def main() -> int:
         parser.error("consumer checkout changed while replaying the cohort")
     try:
         encoded = encode_replay(document)
-    except ValueError:
-        parser.error("complete replay exceeds the output limit")
+        diagnostic_bytes = (
+            encode_replay(replay_diagnostics(document))
+            if args.diagnostics_output is not None
+            else None
+        )
+    except (ValueError, YagaError):
+        parser.error("replay or diagnostics are invalid or exceed the output limit")
     with args.output.open("xb") as stream:
         stream.write(encoded)
+    if diagnostic_bytes is not None:
+        with args.diagnostics_output.open("xb") as stream:
+            stream.write(diagnostic_bytes)
     print(json.dumps(document["summary"], sort_keys=True))
     return 1 if document["summary"]["omissions"] else 0
 

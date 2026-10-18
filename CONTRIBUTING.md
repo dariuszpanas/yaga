@@ -74,6 +74,14 @@ Keep shadow comparisons advisory and full shadow jobs isolated from required CI 
 Do not claim measured savings or enable skips before actual observations, a documented adoption
 threshold, and complete-result gating. See the [handoff guide](docs/test-planning-handoff.md).
 
+Keep selection diagnostics pure and separate from the frozen plan/handoff/comparison documents.
+Retain exact source and policy/registry/plan identities, distinguish selection breadth from the
+reason for full mode, and expose paths bypassed by early full decisions. A missing baseline is
+different from an explicitly empty selection. Strict offline decoding checks closed version-one
+plan semantics and canonical digests; callers still own bounded JSON reads and duplicate-key
+rejection. Complete diagnostic reports must fit within 4 MiB including the final newline.
+Recorded reasons are not proof of dependency coverage, trusted origin, or runtime savings.
+
 All revision-bound providers use the dependency-free runtime under `src/yaga/git/`. Keep repository
 and executable discovery, metadata and alternate-object-store boundaries, process execution,
 environment isolation, time and output limits, object identity parsing, and complete-history checks

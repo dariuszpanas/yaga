@@ -1,0 +1,242 @@
+{
+  "activation": "disabled",
+  "activation_threshold": "measure-first-decide-before-activation",
+  "application_source_archive_sha256": "4d146eb8de2db6ef008e593a4fd372c375942d622b75b7d0909c390be8d43191",
+  "artifacts": [
+    {
+      "api_digest": "sha256:349e70445fb30cb4d276ab6c4b15b1e072785b8e99404947d7e3578a3d11338f",
+      "bytes": 27236,
+      "id": 12123505670,
+      "name": "application-core-39090724517",
+      "sha256": "349e70445fb30cb4d276ab6c4b15b1e072785b8e99404947d7e3578a3d11338f"
+    },
+    {
+      "api_digest": "sha256:f3620490d32237466688a4e5c2535d11f76c4cd5249f36c237594687ad3ad158",
+      "bytes": 1453,
+      "id": 12122114962,
+      "name": "cancellation-qualification",
+      "sha256": "f3620490d32237466688a4e5c2535d11f76c4cd5249f36c237594687ad3ad158"
+    },
+    {
+      "api_digest": "sha256:87c57511adf6fc728c331e64d4cb512e218e6983edc1cd5ee5e8db899d1f5552",
+      "bytes": 8176,
+      "id": 12122990812,
+      "name": "job-latency-qualification",
+      "sha256": "87c57511adf6fc728c331e64d4cb512e218e6983edc1cd5ee5e8db899d1f5552"
+    },
+    {
+      "api_digest": "sha256:f2a2cbf8ebba1cb7f3d8b47f948d9093183d286e6f06d7dd0f85089ddf59e4d8",
+      "bytes": 4672,
+      "id": 12122996679,
+      "name": "monitoring-qualification-39090724517",
+      "sha256": "f2a2cbf8ebba1cb7f3d8b47f948d9093183d286e6f06d7dd0f85089ddf59e4d8"
+    },
+    {
+      "api_digest": "sha256:a4a7cf8b9cfb35485e5e8f41d24a173a939ce0b1546f23cb631a792bbf73ead8",
+      "bytes": 5045,
+      "id": 12122682209,
+      "name": "test-planning-shadow-39090724517-1",
+      "sha256": "a4a7cf8b9cfb35485e5e8f41d24a173a939ce0b1546f23cb631a792bbf73ead8"
+    },
+    {
+      "api_digest": "sha256:17329953730d4c9715b7bc3ce2c4d5c70b9057f3a4be65ffbbb14ddf1c2e1f0f",
+      "bytes": 617,
+      "id": 12122503692,
+      "name": "test-planning-shadow-aggregate-39090724517-1",
+      "sha256": "17329953730d4c9715b7bc3ce2c4d5c70b9057f3a4be65ffbbb14ddf1c2e1f0f"
+    },
+    {
+      "api_digest": "sha256:c88c2d1950ff92bcb583c671b8ab1bdf19fbc723e5b1e9f47b25aac0b560dc61",
+      "bytes": 4179,
+      "id": 12123495070,
+      "name": "upgrade-native-qualification-core-loss",
+      "sha256": "c88c2d1950ff92bcb583c671b8ab1bdf19fbc723e5b1e9f47b25aac0b560dc61"
+    },
+    {
+      "api_digest": "sha256:1624b294c7d3f743a6cbb41bc3f2f316df1f4b581a19f641ab15f72b2b7b6ba5",
+      "bytes": 4307,
+      "id": 12123101600,
+      "name": "upgrade-native-qualification-jobs",
+      "sha256": "1624b294c7d3f743a6cbb41bc3f2f316df1f4b581a19f641ab15f72b2b7b6ba5"
+    },
+    {
+      "api_digest": "sha256:b2c4d0638fbf323ee82cc6819ea42cdee85fe04bbe3ff300e7ea933ef07792b6",
+      "bytes": 4352,
+      "id": 12122908518,
+      "name": "upgrade-native-qualification-jobs-crash",
+      "sha256": "b2c4d0638fbf323ee82cc6819ea42cdee85fe04bbe3ff300e7ea933ef07792b6"
+    },
+    {
+      "api_digest": "sha256:79803477f283129ffe549e43bc7aff468e7a6f78f105dd0ed3d9a429f6ad46a2",
+      "bytes": 4244,
+      "id": 12122986258,
+      "name": "upgrade-native-qualification-native",
+      "sha256": "79803477f283129ffe549e43bc7aff468e7a6f78f105dd0ed3d9a429f6ad46a2"
+    }
+  ],
+  "attempt": 1,
+  "base_commit": "34ef6d2f400fbc7aa59994b7cdfc15b31fd4479e",
+  "evidence_note": "Portable summary of the completed original run and independently audited retained artifacts. Original ZIPs, logs, metadata and receipts remain in the local evidence archive; this summary does not replace them.",
+  "execution_commit": "e4f1ccc0be7944272ebbe82d8524d8a1bd09d8c9",
+  "execution_tree": "272fde67c04c975e35d2bb3f09207fbfb67c357b",
+  "experiment_version": 1,
+  "limitations": [
+    "One full-shadow observation; no selective speedup or missed-failure rate established.",
+    "Historical replay 31 revisions omitted zero baseline obligations but selected full qualification for 28 revisions.",
+    "Application/native retained scopes are narrower than full deployed-application/upgrade acceptance. Independent transaction, data-upgrade, release-artifact and deployment gates remain separate.",
+    "Later runtime changes require their own exact-source qualification; this evidence is never relabeled for another commit."
+  ],
+  "merged_prs": [
+    "https://github.com/dariuszpanas/yaga/pull/223",
+    "https://github.com/dariuszpanas/django-ray/pull/640"
+  ],
+  "observations": {
+    "all_eight_cells_record_exact_ci_checkpoint": true,
+    "artifact_archives_digest_verified": 10,
+    "artifact_invariants_verified": 83,
+    "committed_source_blob_identities_rechecked": 9,
+    "exact_source_ci_checkpoint": {
+      "ci_attempt": 1,
+      "ci_run_id": 39089696446,
+      "source_sha": "e4f1ccc0be7944272ebbe82d8524d8a1bd09d8c9",
+      "status": "passed",
+      "workflow": ".github/workflows/ci.yml"
+    },
+    "failed_jobs": 0,
+    "invalid_evidence": 0,
+    "job_logs_retained": 10,
+    "missing_evidence": 0,
+    "owned_cleanup_steps": "all successful; inner cleanup and retained infrastructure receipts also audited",
+    "qualification_cells_passed": 8,
+    "reruns": 0,
+    "total_jobs_passed": 10,
+    "workflow_suites_passed": 5
+  },
+  "retained_indexes_sha256": {
+    "INDEX.json": "3bbedf1a664993ada19979464da5801cfbcc1ed15c2ddac3da9366b4334a2605",
+    "acquisition-index.json": "73ee78ec0ede6df3664dd598c9954f03c2a842d1524522940c1b57c19277cf8c"
+  },
+  "review_scope": "Development evidence only; coordinated with the django-ray 0.7 pre-freeze review. No release freeze or publication performed.",
+  "run_id": 39090724517,
+  "run_url": "https://github.com/dariuszpanas/django-ray/actions/runs/39090724517",
+  "scope": "Five existing django-ray qualification workflows; independent required CI remains enabled",
+  "selection": {
+    "additional": [
+      "application",
+      "cancellation",
+      "latency",
+      "monitoring",
+      "native"
+    ],
+    "baseline_selected": [],
+    "effective_mode": "full",
+    "historical_replay": {
+      "full_selection_revisions": 28,
+      "omissions": 0,
+      "revisions": 31,
+      "test_runtime_observations": 0
+    },
+    "missing": [],
+    "planned_selected": [
+      "application",
+      "cancellation",
+      "latency",
+      "monitoring",
+      "native"
+    ]
+  },
+  "status": "full-shadow-passed",
+  "timings": {
+    "created_at": "2026-10-18T02:37:00Z",
+    "elapsed_creation_to_last_job_seconds": 1674,
+    "elapsed_display": "27m 54s",
+    "github_run_updated_at": "2026-10-18T03:04:55Z",
+    "interpretation": "Overall elapsed includes scheduling, setup, execution, cleanup and aggregate; summed job wall time is not GitHub billing. Planning time excludes those workflow costs.",
+    "job_elapsed": [
+      {
+        "completed_at": "2026-10-18T02:37:15Z",
+        "conclusion": "success",
+        "elapsed_seconds": 12,
+        "job_id": 117566710723,
+        "name": "Shadow Plan Comparison",
+        "started_at": "2026-10-18T02:37:03Z"
+      },
+      {
+        "completed_at": "2026-10-18T02:42:22Z",
+        "conclusion": "success",
+        "elapsed_seconds": 304,
+        "job_id": 117566754548,
+        "name": "latency / latency",
+        "started_at": "2026-10-18T02:37:18Z"
+      },
+      {
+        "completed_at": "2026-10-18T03:04:44Z",
+        "conclusion": "success",
+        "elapsed_seconds": 1647,
+        "job_id": 117566754553,
+        "name": "application / Application Core (Linux)",
+        "started_at": "2026-10-18T02:37:17Z"
+      },
+      {
+        "completed_at": "2026-10-18T02:39:50Z",
+        "conclusion": "success",
+        "elapsed_seconds": 153,
+        "job_id": 117566754619,
+        "name": "native / Upgrade Native (native)",
+        "started_at": "2026-10-18T02:37:17Z"
+      },
+      {
+        "completed_at": "2026-10-18T03:02:01Z",
+        "conclusion": "success",
+        "elapsed_seconds": 211,
+        "job_id": 117566754631,
+        "name": "native / Upgrade Native (core-loss)",
+        "started_at": "2026-10-18T02:58:30Z"
+      },
+      {
+        "completed_at": "2026-10-18T02:44:19Z",
+        "conclusion": "success",
+        "elapsed_seconds": 422,
+        "job_id": 117566754637,
+        "name": "monitoring / Monitoring Qualification (Linux)",
+        "started_at": "2026-10-18T02:37:17Z"
+      },
+      {
+        "completed_at": "2026-10-18T02:48:37Z",
+        "conclusion": "success",
+        "elapsed_seconds": 525,
+        "job_id": 117566754639,
+        "name": "native / Upgrade Native (jobs)",
+        "started_at": "2026-10-18T02:39:52Z"
+      },
+      {
+        "completed_at": "2026-10-18T02:39:27Z",
+        "conclusion": "success",
+        "elapsed_seconds": 130,
+        "job_id": 117566754677,
+        "name": "cancellation / Cancellation Qualification",
+        "started_at": "2026-10-18T02:37:17Z"
+      },
+      {
+        "completed_at": "2026-10-18T02:58:28Z",
+        "conclusion": "success",
+        "elapsed_seconds": 589,
+        "job_id": 117566754708,
+        "name": "native / Upgrade Native (jobs-crash)",
+        "started_at": "2026-10-18T02:48:39Z"
+      },
+      {
+        "completed_at": "2026-10-18T03:04:54Z",
+        "conclusion": "success",
+        "elapsed_seconds": 8,
+        "job_id": 117571546177,
+        "name": "Shadow Experiment Aggregate",
+        "started_at": "2026-10-18T03:04:46Z"
+      }
+    ],
+    "last_job_completed_at": "2026-10-18T03:04:54+00:00",
+    "planning_seconds": 0.032225,
+    "summed_job_elapsed_seconds": 4001
+  },
+  "yaga_pin": "e359bd13d26516231585f7dba4d8f509d1d66989"
+}

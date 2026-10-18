@@ -36,9 +36,11 @@ import hashlib
 import json
 
 from yaga.errors import ConfigurationError, InputError
+from yaga.test_planning.diagnostics import diagnose_selection, encode_diagnostics, parse_plan_document
 from yaga.test_planning.handoff import ExecutorRegistry, SuiteExecutor, create_handoff
 from yaga.test_planning.planner import plan_tests
 from yaga.test_planning.policy import parse_test_policy
+from yaga.test_planning.reporting import test_plan_document
 from yaga.test_planning.reports import PlannedTests
 from yaga.test_planning.source import PlanSource
 
@@ -88,6 +90,9 @@ expected = dict(
     expected_execution_tree="c" * 40,
 )
 handoff = create_handoff(planned, registry, **expected)
+diagnostics = diagnose_selection(planned, baseline_suites=("backend", "frontend"))
+diagnostic_bytes = encode_diagnostics(diagnostics)
+round_trip = parse_plan_document(test_plan_document(planned)) == planned
 rejected_handoffs = []
 for candidate in (
     PlannedTests(policy_sha256, None, source_identity, selective),
@@ -111,6 +116,13 @@ print(json.dumps({
     "dispatch": handoff["dispatch"],
     "cells": [[cell["suite"], cell["variant"]] for cell in handoff["cells"]],
     "rejected_handoffs": rejected_handoffs,
+    "diagnostics": {
+        "version": diagnostics["test-selection-diagnostics-version"],
+        "breadth": diagnostics["selection_breadth"],
+        "cause": diagnostics["fallback_cause"],
+        "comparison": diagnostics["comparison"],
+        "round_trip": round_trip and json.loads(diagnostic_bytes) == diagnostics,
+    },
 }))
 '''
 TEST_PLANNING_CLI_POLICY = b"""\
@@ -249,6 +261,18 @@ def exercise_installed_test_planning(python: Path, *, consumer: Path, env: dict[
         "dispatch": {"backend": True, "build": True, "frontend": False},
         "cells": [["build", "default"], ["backend", "py312"], ["backend", "py315"]],
         "rejected_handoffs": [True, True, True],
+        "diagnostics": {
+            "version": 1,
+            "breadth": "partial",
+            "cause": "selective",
+            "comparison": {
+                "baseline": ["backend", "frontend"],
+                "selected": ["backend", "build"],
+                "additional": ["build"],
+                "missing": ["frontend"],
+            },
+            "round_trip": True,
+        },
     }:
         raise SystemExit("installed wheel test planning API emitted the wrong selection")
 

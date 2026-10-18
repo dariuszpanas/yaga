@@ -180,6 +180,9 @@ and human formatting do not. Identical policy bytes, source identities, binding 
 produce an identical digest. A comment edit changes the policy hash and therefore the digest.
 The CLI emits plans; it does not import plan documents or evaluate execution results. The
 [executor handoff API](test-planning-handoff.md) accepts freshly computed validated plans.
+The separate [selection diagnostics API](test-planning-handoff.md#explain-selection-without-changing-the-plan)
+can inspect a validated plan or strictly decode an existing version-one plan for offline analysis.
+It explains recorded selection and baseline differences without authorizing execution.
 
 | Exit | Meaning |
 | --- | --- |

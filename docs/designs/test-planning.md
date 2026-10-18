@@ -1,13 +1,14 @@
 # Selective test and qualification planning
 
-**Status: phases 1 and 2 implemented; phase 3 historical replay recorded, full shadow runs pending.** The version-one policy
+**Status: phases 1 through 3 and phase 4A diagnostics/example mappings implemented; one full shadow pilot passed.**
+Phases 4B through 4D remain proposed. The version-one policy
 model, strict loader, pure selection planner, installed CLI, Git source binding, and versioned plan
 reports are available.
 Both example configurations are exercised by the test suite. See the
 [test planning guide](../test-planning.md) for current commands and the
 [handoff guide](../test-planning-handoff.md) for fixed executor preflight, runnable mappings, and
-the django-ray pilot. Historical selection replay is recorded; full same-source pilot observations
-and the adoption decision remain pending;
+the django-ray pilot. Historical selection replay and one full same-source observation are recorded;
+actual selective feedback-time measurements and the adoption decision remain pending;
 receipt evaluation remains proposed, and no consumer test skipping is enabled.
 
 YAGA should turn an explicit source change and qualification policy into a deterministic list of
@@ -504,8 +505,8 @@ Do not weaken current required checks as part of adding the new feature.
 | 0: design fixtures | This proposal, complete TOML examples, expected selection cases | Review schema, trust split, inventory semantics, and examples; no runtime behavior changes |
 | 1: policy and pure planning (implemented) | `src/yaga/test_planning/{models,policy,selection,planner}.py` and shared `src/yaga/path_patterns.py`; focused parser/selection tests | Closed schema and limits; additive tag/rule selection; unknown/full behavior; DAG closure; both examples load and produce tested selections; no executors |
 | 2: installed CLI and Git (implemented) | `src/yaga/commands/test.py`; `test_planning/{source,git,service,reports,reporting}.py`; shared `git/changes.py` | Exact source identities, stable JSON/digest and exits, bounded reports, fresh installed-wheel smoke, unchanged Action graphs; useful local/CI planning only |
-| 3: executor handoff and shadow pilot (historical replay recorded; full shadow runs pending) | `test_planning/handoff.py`, runnable fixed job maps, installed-wheel smoke, django-ray advisory comparison and manual full-shadow adapter | All five execution categories demonstrated; planning/selection failures cannot pass; django-ray comparison and full same-source shadow runs required; record observed results before claiming savings; existing gates remain authoritative |
-| 4: receipts and controlled activation | `test_planning/{results,evaluation}.py`; evaluate command and adapter conformance fixtures | Exact selected cells/attempt/source correlation; malformed/stale/missing/cancelled/cleanup failures tested; activate only after shadow criteria and required gates are verified |
+| 3: executor handoff and shadow pilot (implemented; one full observation passed) | `test_planning/handoff.py`, runnable fixed job maps, installed-wheel smoke, django-ray advisory comparison and manual full-shadow adapter | All five execution categories demonstrated; 31-revision comparison and one full same-source run recorded; no measured selective benefit or activation claim; existing gates remain authoritative |
+| 4: selection quality, receipts, and measured advisory feedback (proposed) | `test_planning/{results,evaluation}.py`; evaluate command; adapter conformance, selection audit, and experiment reports | Correct dependency/ownership mappings; exact selected cells/attempt/source correlation; controlled feedback measurements and held-out validation; owner adoption decision; required CI remains unchanged |
 | 5: optional impact providers | Independently versioned evidence format and optional collectors for Python/JS/build systems | Whole-suite fallback on absent/incompatible evidence; known-regression replay and seeded dependency changes; no removal of mandatory/full-profile obligations |
 
 Implementation dependencies are linear through phase 3. Receipt format work can proceed during
@@ -563,6 +564,218 @@ activation. A single trusted switch to the full profile provides rollback withou
 
 Continue scheduled full audits after activation. Passing a finite cohort does not prove absence of
 false negatives, so consolidated/release full qualification remains mandatory under its policy.
+
+## Pilot review and next-phase delivery plan
+
+This section records the phase-three result and proposes implementation work. It does not change
+the policy, dispatch experiments, enable skipping, or approve a numeric adoption threshold.
+
+### Observed baseline
+
+The [full shadow run](https://github.com/dariuszpanas/django-ray/actions/runs/39090724517)
+completed on 2026-10-17 in America/Los_Angeles, attempt 1, at django-ray commit
+`e4f1ccc0be7944272ebbe82d8524d8a1bd09d8c9`, tree
+`272fde67c04c975e35d2bb3f09207fbfb67c357b`. It used YAGA
+`e359bd13d26516231585f7dba4d8f509d1d66989` and explicit comparison base
+`34ef6d2f400fbc7aa59994b7cdfc15b31fd4479e`. The
+[portable result summary](experiments/django-ray-full-shadow-result.json) retains those identities,
+job timings, artifact IDs/digests, and raw-byte hashes for the original `INDEX.json` and
+`acquisition-index.json` evidence inventories.
+
+| Observation | Result | Interpretation |
+| --- | --- | --- |
+| Qualification cells | 8/8 passed across five workflows | Includes all four serial native variants |
+| Planning and aggregate | Both passed; 10 total successful jobs | No reruns |
+| Receipt checks | 83 passed; no missing/invalid evidence | Original archives, source identities, and cleanup independently reviewed |
+| Full-shadow elapsed | 27m 54s | Run creation through final job completion, including setup and cleanup |
+| Application job elapsed | 27m 27s | Dominated this run's completion time |
+| Native matrix span | 24m 44s | Serial matrix span; not four parallel jobs |
+| Summed job elapsed | 4,001 seconds | Resource observation, not elapsed feedback time or billing |
+| Planner / planning job | 0.032225 seconds / 12 seconds | Planner time alone excludes workflow overhead |
+| Current selector / proposed selector | Empty / full catalog for this change | This forced-full pilot is not a performance comparison against current CI |
+
+Required `Commit Messages`, `CI Gate`, and `Qualification Gate` remained active; no branch-rule
+changes were made. The observation covers this catalog's bounded application/native acceptance,
+not every release, data-upgrade, transaction, or deployed-environment obligation. Later django-ray
+runtime changes need new source-bound evidence. Keep the original pilot immutable.
+
+The [historical replay](experiments/django-ray-shadow-replay.md) contains 31 revisions: 28 full
+selections and three empty selections, with no partial selections. Its 17 explicit full triggers
+partition into 13 workflow-touch changes, three dependency-only changes, and one Makefile/taxonomy
+change. The other 11 full selections came from unknown paths: 28 occurrences, of which 26 were
+tests and two were `scripts/verify_wheel.py`.
+
+The existing selector requested 50 workflow dispatches across that cohort; YAGA requested 140.
+Zero omitted baseline obligations demonstrates a conservative superset, not complete dependency
+coverage or zero missed regressions. The replay and live pilot used unchanged policy content, but
+their exact policy-byte hashes differ because the Windows replay read CRLF checkout bytes and the
+Linux pilot read LF bytes. Preserve both recorded identities rather than normalizing old evidence.
+
+### First selection changes to review
+
+1. **Correct shared dependencies before narrowing.** At the pilot source,
+   [latency's scenario](https://github.com/dariuszpanas/django-ray/blob/e4f1ccc0be7944272ebbe82d8524d8a1bd09d8c9/qualification/latency/scenario.py#L11)
+   imports and calls `qualification/docker/scenario.py`. Both current selectors omit latency for
+   an isolated change to that helper; the pure YAGA planner confirms only native and cancellation.
+   Phase 4A adds explicit latency ownership and a regression fixture to the YAGA example.
+   Review other shared helpers,
+   fixtures, environment inputs, and image dependencies for the same gap. This is a demonstrated
+   dependency-map gap, not an observed missed failing qualification. The django-ray 0.7 hardening
+   work owns this additive consumer repair and its regression coverage. Phase 4 must verify the
+   merged correction at its selected source rather than duplicate that pending implementation.
+2. **Assign exact test ownership.** Phase 4A maps these application qualification tests to explicit
+   application selection: `test_application_chainsaw.py`, `test_application_core.py`,
+   `test_application_generation.py`, `test_application_result_presentation.py`,
+   `test_application_runtime_env_refusal.py`, `test_application_profile.py`,
+   `test_application_api_runner.py`, and `test_application_workflow_runner.py`, all under
+   `tests/unit/`. Do not blanket-exclude `tests/**` or `scripts/**`.
+3. **Keep uncertainty conservative.** Retain unknown-path full fallback, policy/registry/gate
+   full triggers, shared dependency/lockfile triggers, complete native variants, and current
+   acceptance/cleanup behavior. Review wheel-verifier and workflow ownership separately; a
+   green replay alone cannot justify treating them as no-impact.
+4. **Only then examine granularity.** Keep the five current qualification bindings intact first.
+   If application remains on the critical path, add independently verifiable fast backend or
+   frontend feedback suites using real existing test targets and the checked taxonomy. A browser
+   or Chainsaw slice needs its own acceptance, fixtures, prerequisites, and receipts before it
+   becomes an independent suite. Do not relabel a partial application run as full acceptance or
+   split native variants into four invocations of the existing complete matrix. Coverage/import
+   evidence can suggest mappings later; it is not permission to omit obligations.
+
+An in-memory pure-planner replay adding only those eight application-test paths changes PRs
+625, 619, 623, 614, and 595 from five selected workflows to application alone. It reduces the
+cohort from 28 to 23 full selections and from 140 to 120 dispatches. That initial counterfactual
+changed no policy file or executor and ran no qualification. Phase 4A now includes these exact
+mappings and complete-path regression cases in the example policy; original replay observations
+remain unchanged. This selection-only result still exceeds the current
+selector's 50 dispatches and retains the expensive application job: it establishes neither a
+safe migration nor feedback-time savings.
+
+Regression fixtures must include those five exact ranges, the shared Docker helper, frontend
+assets with their tests, shared fixtures, renamed/deleted/new paths, mixed application tests plus
+`uv.lock`, and all explicit full triggers. Keep policy tuning on this discovery cohort; reserve
+fresh revisions for validation.
+
+### Focused implementation sequence
+
+| Delivery | Ownership and scope | Exit condition |
+| --- | --- | --- |
+| 4A: selection diagnostics and ownership corrections | Pure YAGA diagnostics API and optional replay report; exact application-test mappings and regression fixtures; coordinated django-ray release policy changes | Correct shared-helper selection, reviewed exact ownership mappings, unchanged unknown/full semantics, both selectors compared on complete paths |
+| 4B: result evaluation and measurement contract | YAGA pure versioned result/evaluation model and installed `test evaluate`; django-ray fixed receipt normalizers and independent experiment report | All selected cells and prerequisites verified against expected source/policy/manifest/run/attempt; malformed, stale, missing, skipped, cancelled, and failed-cleanup cases block success |
+| 4C: bounded selected-versus-current experiments | django-ray manual, non-required adapter; fixed dispatch map, isolated resource/concurrency identities, immutable plans and original receipts | Actual selected execution measured against same-source current selection and a full-catalog failure oracle; required jobs never cancelled or replaced; capacity isolation or measured interference limits |
+| 4D: held-out evaluation and adoption decision | Reviewed report and explicit owner decision; trusted full-profile rollback | All safety criteria pass and measured benefit satisfies the threshold fixed before confirmation; otherwise remain in shadow mode |
+
+Phase 4A is implemented by the [separate diagnostics contract](../test-planning-handoff.md#explain-selection-without-changing-the-plan)
+and example regression tests. It distinguishes all-suite breadth from a full-mode decision,
+preserves paths bypassed by early full selection, and reports baseline availability explicitly.
+Diagnostics never rematch policy or assert complete ownership from an absence of unknown reasons.
+The django-ray release work owns the matching consumer policy, baseline shared-helper repair,
+and consumer regression tests as a separate logical change; verify its exact committed source
+before a new shadow run. The example also mirrors that work's additive lease dependencies:
+`src/django_ray/lease_policy.py` selects application, native, cancellation, and monitoring;
+`src/django_ray/management/commands/django_ray_lease_policy.py` selects application and native.
+No required workflow conditions, qualification variants, receipt checks,
+or cleanup behavior are removed. Phases 4B–4D remain proposed; phase 4A dispatches no qualifications
+and supplies no execution-activation authority.
+
+Deliver these as separate reviewable changes; do not combine policy narrowing with scheduler,
+concurrency, cleanup, or environment-matrix changes. Keep result evaluation installed-only and
+pure, outside both Action graphs. Use the proposed receipt contract above: complete bounded
+documents, independent expected identities, no arbitrary command or credential inputs, and no
+cross-source or cross-attempt assembly of successful cells. Adapter normalizers validate each
+custom assertion/cleanup contract before emitting `passed`; an aggregate green badge is not
+enough. The pilot's retained audit informs fixtures but is not a production receipt verifier.
+
+Version experiment observations separately from frozen plan/handoff/comparison v1 documents.
+Include exact base/head/comparison/execution identities, policy bytes, manifest, adapter revision,
+run/attempt, environment/image/dependency fingerprints, cache state, cell outcomes, artifact
+digests, timing availability, retries, and incomplete observations. Bound input/output and reject
+non-finite or inconsistent durations. Do not turn the pure planner into a CI API client or runner.
+
+### Measurement protocol
+
+The primary benefit under unchanged required checks is **earlier advisory feedback**. A faster
+subset does not make a PR merge-ready before its required checks finish. Running an extra lane
+also adds resource use; report total CI resource change, not just the selected lane's smaller cost.
+
+For every exact source, record three plans: current authoritative selection, proposed selection,
+and full catalog. The current selector is the benefit comparator; full execution supplies an
+additional failure oracle. Reuse one arm when its complete cells, definitions, and acceptance
+match another. When current and proposed differ from full and each other, measure a current arm
+as well, or explicitly limit the claim to comparison against forced full. Never substitute an
+old run at another source or a sum of excluded job times for a measured comparison.
+
+Proposed discovery budget: eight distinct source pairs, at most 16 full/selected executions and
+eight additional current-selector executions when needed. Report the expected runner budget
+before dispatch, allow only one pair at a time, and stop when that budget is exhausted. Reuse
+compatible existing evidence for correctness where possible; it is a timing comparator only when
+the same-source measurement protocol also matches. This plan does not authorize those runs now.
+
+Predeclare balanced order across every distinct arm, including the current-selector arm when it
+differs, for preselected backend, frontend/assets, infrastructure, qualification-test, dependency,
+and mixed changes. Do not always run the current arm last. Include cases that correctly
+remain full. Pin environments and caches, use fresh isolated fixtures, preserve the serial native
+matrix, and separate experiment/arm resource and concurrency identities from required CI. Do not
+run selected qualifications on every PR while validating this approach. Prefer reserved capacity
+isolated from required jobs. Otherwise admit experiments only within a declared spare-capacity
+budget: a required run starting or a capacity conflict stops admission of the next pair. That
+cannot guarantee zero delay from an already-running pair. Retain observed interference and
+deferred/aborted results, stop further experiments when the declared interference limit is reached,
+and do not silently discard affected pairs from the report.
+
+| Metric | Definition and reporting |
+| --- | --- |
+| Validated advisory workflow feedback | Every arm uses GitHub workflow `created_at` through complete selected-result aggregate completion; include scheduling within the run, planning, setup, assertions, cleanup, and publication; report dispatch-to-creation separately when available |
+| End-to-end developer feedback | Trusted candidate-ready event receipt through validated result publication; never use Git author dates; unavailable unless the same event timing is collected for both alternatives |
+| First actionable failure | Time until an observed test failure becomes available; record infrastructure failures separately and final cleanup completion too; all-green means unavailable, not zero |
+| Required-CI readiness | Same candidate's existing required-gate completion; report separately and make no reduction claim from this advisory rollout |
+| Scheduling and critical path | Observed job/dependency span; separate queue, dependency wait, and native serial wait when available, otherwise mark unknown |
+| Execution and overhead | Per-job setup/assertion/cleanup, planner time and whole planning-job time, runner image/class and cache state |
+| Resource cost | Summed observed runner job-seconds including retries and extra pilot jobs; billing remains unavailable without billing evidence |
+| Selection quality | Full/unknown fallback rates, selected/extra/missing cells, failure-bearing excluded cells, and unclassified paths by ownership |
+
+For each pair report both absolute seconds and relative change against current selection, with
+per-category distributions and all individual observations. Retain failures, cancellations,
+retries, and incomplete pairs; do not silently discard slow runs or choose the fastest retry.
+Ratios with zero baseline or unavailable timing are unavailable. Do not claim reliable tail
+percentiles from eight pairs; report the range and uncertainty. Deliberate waiting between serial
+experiment arms is not production route latency; end-to-end claims need comparable candidate-event
+observations from a later bounded advisory canary with required CI still enabled.
+
+After discovery, the owner chooses the feedback metric, minimum useful absolute/relative
+improvement, acceptable tail regression, and additional resource budget. A workflow-only result
+does not establish an end-to-end developer improvement. Freeze these, the policy, environment, sampling
+rules, and analysis before confirmation. Validate on at least 20 fresh revisions across the
+categories, including at least eight new controlled timing pairs and known-regression/seeded
+failure cases. These are sampling floors, not a statistical guarantee; fix an execution budget
+before dispatch and return inconclusive if the evidence cannot support the chosen criterion.
+Any policy change following a miss needs fresh held-out confirmation.
+
+### Activation criteria and rollback
+
+All criteria below are required for an opt-in **advisory developer lane**. No date, green run count,
+or selector-only replay automatically enables it.
+
+- Every selected cell has valid source, policy, binding, run/attempt, acceptance, and cleanup
+  evidence. Wrong/stale identity, missing/duplicate/unknown cells, unavailable capability,
+  cancellation, prohibited skips, and cleanup failure cannot produce advisory success.
+- No unexplained omission of current mandatory obligations or known shared dependencies. A
+  full-oracle regression must fail its intended assertion and the candidate selection must
+  include and detect it. An unexercised mutant does not count as a caught regression. Require zero
+  observed misses in the held-out and known-regression cases, without claiming zero possible risk.
+- Measured net feedback benefit meets the owner's predeclared confirmation threshold after all
+  overhead; tail behavior and total added resource use meet their declared budgets. If application
+  or native qualification still determines completion, report that limitation and decline an
+  unsupported speedup claim.
+- Full-profile rollback is exercised, including malformed plan, missing result, and cancellation
+  paths. A trusted switch restores the complete catalog without editing impact rules. Planning
+  failure blocks the advisory result or takes a separately verified full path; it never means
+  empty success. Define continued full-audit sampling and immediate rollback on an unexplained miss.
+- `Commit Messages`, `CI Gate`, and `Qualification Gate` remain enabled with their existing
+  conditions and bodies; integration/release full policies remain authoritative. Advisory
+  completion uses a distinct name and cannot substitute for any required status.
+
+Replacing required job selection or reducing a required qualification is a separate future
+authorization and migration, even if the status name remains present. It is outside this phase.
 
 ## Later automatic impact information
 
