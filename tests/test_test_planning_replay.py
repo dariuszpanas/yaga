@@ -7,6 +7,7 @@ import json
 import runpy
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -368,3 +369,195 @@ def test_replay_output_bound_includes_the_entire_utf8_payload_and_newline(
     monkeypatch.setitem(namespace, "MAX_BYTES", len(encoded) - 1)
     with pytest.raises(ValueError, match="output limit"):
         namespace["encode_replay"](document)
+
+
+@pytest.fixture
+def retained_replay() -> dict[str, Any]:
+    directory = EXAMPLE.parents[2] / "docs/designs/experiments/django-ray-shadow-replay"
+    document = json.loads((directory / "report.json").read_bytes())
+    observations = []
+    for entry in document["observation_files"]:
+        rows = json.loads((directory / entry["path"]).read_bytes())
+        canonical = json.dumps(rows, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        assert hashlib.sha256(canonical.encode()).hexdigest() == entry["canonical_sha256"]
+        observations.extend(rows)
+    document["observations"] = observations
+    return document
+
+
+def test_replay_diagnostics_explain_all_retained_revisions_without_rewriting_evidence(
+    retained_replay: dict[str, Any],
+) -> None:
+    namespace = runpy.run_path(str(EXAMPLE))
+    original = namespace["encode_replay"](retained_replay)
+    diagnostic = namespace["replay_diagnostics"](retained_replay)
+
+    assert namespace["encode_replay"](retained_replay) == original
+    assert diagnostic["source_replay_sha256"] == hashlib.sha256(original).hexdigest()
+    assert diagnostic["test-replay-diagnostics-version"] == 1
+    assert diagnostic["activation"] == "disabled"
+    assert diagnostic["summary"] == {
+        "revisions": 31,
+        "selection_breadth": {"all": 28, "partial": 0, "empty": 3},
+        "fallback_causes": {
+            "profile-full": 0,
+            "full-trigger": 17,
+            "unknown-path": 11,
+            "selective": 3,
+        },
+        "baseline_dispatches": 50,
+        "planned_dispatches": 140,
+        "additional_dispatches": 90,
+        "omitted_dispatches": 0,
+        "additional_selection_revisions": 24,
+        "omission_revisions": 0,
+        "test_runtime_observations": 0,
+        "feedback_time_reduction": None,
+    }
+    assert len(diagnostic["observations"]) == 31
+    unknowns = diagnostic["path_revisions"]["unknown_paths"]
+    assert len(unknowns) == 19
+    assert sum(item["revisions"] for item in unknowns) == 28
+    assert unknowns == sorted(unknowns, key=lambda item: (-item["revisions"], item["path"]))
+    assert diagnostic["path_revisions"]["paths_without_recorded_classification"]
+    assert sum(item["selected"] for item in diagnostic["suite_revisions"]) == 140
+    assert sum(item["missing"] for item in diagnostic["suite_revisions"]) == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("experiment_version", True),
+        ("repository", "other/repository"),
+        ("mode", "execution"),
+        ("activation", "enabled"),
+        ("observations", []),
+    ],
+)
+def test_replay_diagnostics_reject_wrong_or_incomplete_replay(
+    retained_replay: dict[str, Any],
+    field: str,
+    value: object,
+) -> None:
+    retained_replay[field] = value
+    with pytest.raises(ValueError):
+        runpy.run_path(str(EXAMPLE))["replay_diagnostics"](retained_replay)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("test-shadow-version", True),
+        ("status", "executed"),
+        ("effective_mode", "selective"),
+        ("baseline_selected", ["unknown"]),
+        ("baseline_selected", ["native", "native"]),
+        ("planned_selected", []),
+        ("missing", ["native"]),
+        ("additional", ["native"]),
+        ("plan_digest", "0" * 64),
+        ("source", {}),
+        ("policy_sha256", "0" * 64),
+        ("bindings_sha256", None),
+        ("activation", "enabled"),
+        ("adapter_source", {"commit": "HEAD", "tree": "c" * 40}),
+        ("baseline_policy_sha256", "0" * 64),
+    ],
+)
+def test_replay_diagnostics_reject_inconsistent_comparison_and_mixed_identities(
+    retained_replay: dict[str, Any],
+    field: str,
+    value: object,
+) -> None:
+    retained_replay["observations"][0]["comparison"][field] = value
+    with pytest.raises(ValueError):
+        runpy.run_path(str(EXAMPLE))["replay_diagnostics"](retained_replay)
+
+
+def test_replay_diagnostics_reject_plan_digest_tampering(retained_replay: dict[str, Any]) -> None:
+    retained_replay["observations"][0]["plan"]["plan"]["policy_sha256"] = "0" * 64
+    with pytest.raises(InputError, match="canonical"):
+        runpy.run_path(str(EXAMPLE))["replay_diagnostics"](retained_replay)
+
+
+def test_replay_diagnostics_reject_reordered_or_displaced_source(
+    retained_replay: dict[str, Any],
+) -> None:
+    namespace = runpy.run_path(str(EXAMPLE))
+    reordered = deepcopy(retained_replay)
+    reordered["observations"].reverse()
+    with pytest.raises(ValueError, match="order"):
+        namespace["replay_diagnostics"](reordered)
+    retained_replay["cohort"][0]["base"] = "0" * 40
+    retained_replay["observations"][0]["revision"]["base"] = "0" * 40
+    with pytest.raises(ValueError, match="source"):
+        namespace["replay_diagnostics"](retained_replay)
+
+
+def test_replay_diagnostics_keep_omissions_visible(retained_replay: dict[str, Any]) -> None:
+    namespace = runpy.run_path(str(EXAMPLE))
+    empty = next(
+        row for row in retained_replay["observations"] if not row["comparison"]["planned_selected"]
+    )
+    empty["comparison"]["baseline_selected"] = ["native"]
+    empty["comparison"]["missing"] = ["native"]
+    diagnostic = namespace["replay_diagnostics"](retained_replay)
+    assert diagnostic["summary"]["omission_revisions"] == 1
+    assert diagnostic["summary"]["omitted_dispatches"] == 1
+    native = next(
+        item for item in diagnostic["suite_revisions"] if item["suite"] == "qualification.native"
+    )
+    assert native["missing"] == 1
+
+
+def test_replay_cli_optional_diagnostics_are_separate_and_correlated(
+    consumer: tuple[Path, str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    retained_replay: dict[str, Any],
+) -> None:
+    namespace, output = invoke_main(consumer, monkeypatch)
+    diagnostics = output.with_name("diagnostics.json")
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--diagnostics-output", str(diagnostics)])
+    monkeypatch.setitem(namespace, "replay", lambda *args, **kwargs: retained_replay)
+    assert namespace["main"]() == 0
+    assert json.loads(output.read_bytes())["experiment_version"] == 1
+    report = json.loads(diagnostics.read_bytes())
+    assert report["source_replay_sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
+    assert report["summary"]["fallback_causes"]["unknown-path"] == 11
+
+
+@pytest.mark.parametrize("existing", ["same-path", "replay", "diagnostics"])
+def test_replay_cli_diagnostics_refuse_collisions_before_loading_consumer(
+    consumer: tuple[Path, str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    existing: str,
+) -> None:
+    namespace, output = invoke_main(consumer, monkeypatch)
+    diagnostics = output if existing == "same-path" else output.with_name("diagnostics.json")
+    if existing != "same-path":
+        (output if existing == "replay" else diagnostics).write_bytes(b"original evidence")
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--diagnostics-output", str(diagnostics)])
+    monkeypatch.setitem(
+        namespace, "verify_consumer_checkout", lambda *args: pytest.fail("loaded consumer")
+    )
+    with pytest.raises(SystemExit) as error:
+        namespace["main"]()
+    assert error.value.code == 2
+    if existing != "same-path":
+        assert (
+            output if existing == "replay" else diagnostics
+        ).read_bytes() == b"original evidence"
+
+
+def test_replay_cli_diagnostics_failure_writes_neither_report(
+    consumer: tuple[Path, str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    namespace, output = invoke_main(consumer, monkeypatch)
+    diagnostics = output.with_name("diagnostics.json")
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--diagnostics-output", str(diagnostics)])
+    with pytest.raises(SystemExit) as error:
+        namespace["main"]()
+    assert error.value.code == 2
+    assert not output.exists()
+    assert not diagnostics.exists()

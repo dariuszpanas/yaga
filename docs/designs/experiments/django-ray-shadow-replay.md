@@ -91,7 +91,8 @@ uv run python examples/test-planning/replay_django_ray.py \
   --cohort docs/designs/experiments/django-ray-shadow-replay/cohort.json \
   --adapter-commit a5a17c9e3687687db1362c61ff0567857f12d159 \
   --adapter-tree 3af35b26239c10fa63f83d42845b97b1d3e8d63f \
-  --output /path/to/new-replay.json
+  --output /path/to/new-replay.json \
+  --diagnostics-output /path/to/new-selection-diagnostics.json
 ```
 
 The command writes a complete report, exits nonzero on an omission, and fails instead of replacing
@@ -101,9 +102,29 @@ repository's per-file limit; canonical observation hashes use sorted keys, compa
 UTF-8 without ASCII escaping, and no trailing newline. The separate
 [cohort](django-ray-shadow-replay/cohort.json) is the exact explicit input list.
 
-Live full-shadow observation still requires publication of the pinned YAGA implementation and
-registration of the consumer workflow on its default branch, as required for
-[GitHub manual dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
-Then manually dispatch the reviewed
-source with an explicit base. Keep required checks enabled, retain all five original workflow
-artifacts and cleanup evidence, and assess real runtime and omitted failures before activation.
+`--diagnostics-output` is optional. Phase 4A adds this separate versioned report without changing
+the original replay schema or retained observations. It groups recorded full triggers, unknown
+paths, no-impact paths, paths whose classification was bypassed, and baseline additions/omissions.
+The report correlates every plan/comparison with its cohort source and rejects mixed policy,
+registry, or adapter identities. Each output is complete and bounded to 4 MiB including its newline;
+use distinct new files. The [API guide](../../test-planning-handoff.md#explain-selection-without-changing-the-plan)
+describes the fields and the distinction between recorded reasons and dependency coverage.
+
+Regression tests reassemble all six hash-verified observation files and confirm 17 full-trigger
+revisions, 11 unknown-path fallbacks, three empty selections, 50 baseline dispatches, 140 planned
+dispatches, and zero baseline omissions. This diagnoses the original policy; it does not replace
+its evidence with the new ownership mappings. The updated example maps eight exact application
+test files and corrects shared-helper latency selection. The five affected historical application
+revisions now select application alone in regression fixtures. Qualification runtime and failure
+coverage still require the later measured phases.
+
+## Subsequent full-shadow observation
+
+After publication and registration of the consumer workflow, the
+[full shadow pilot](https://github.com/dariuszpanas/django-ray/actions/runs/39090724517)
+passed all eight qualification cells at `e4f1ccc0be7944272ebbe82d8524d8a1bd09d8c9` in 27m 54s.
+The [separate result summary](django-ray-full-shadow-result.json) records that observation;
+the replay observations and their hashes above remain unchanged. The full pilot measured no
+selected-versus-current feedback benefit. See the
+[next-phase plan](../test-planning.md#pilot-review-and-next-phase-delivery-plan) for ownership
+corrections, source-bound timing experiments, and activation criteria. Required checks stay enabled.

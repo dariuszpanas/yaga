@@ -6,9 +6,11 @@ cancellation, and cleanup. The handoff contains job IDs and required cells; it c
 and reports no test outcomes.
 
 Phase 3 supplies this Python API, runnable examples, and a django-ray shadow-pilot adapter.
-Historical selection replay is recorded; real full same-source qualification runs and the adoption
-decision remain pending. Existing required CI checks remain enabled and authoritative.
+Historical selection replay and one full same-source qualification run are recorded; actual
+selective feedback-time measurements and the adoption decision remain pending. Existing required
+CI checks remain enabled and authoritative.
 Generic receipt evaluation and selective-execution activation are later work.
+Phase 4A adds pure selection diagnostics and reviewed application-test ownership mappings.
 
 ## Build a fixed registry
 
@@ -147,6 +149,57 @@ Do not launch four copies of that complete matrix. Keep application acceptance r
 driver observations, image/source checks, and every owned-resource cleanup check in their current
 workflows. This catalog does not cover ordinary django-ray CI, which remains required separately.
 
+## Explain selection without changing the plan
+
+The installed Python API emits a separate `test-selection-diagnostics-version: 1` document;
+plan, manifest, handoff, and consumer comparison version 1 remain unchanged:
+
+```python
+from yaga.test_planning.diagnostics import diagnose_selection, encode_diagnostics
+
+# planned is the PlannedTests returned by create_test_plan above.
+# Supply the current selector's catalog suite IDs, not executor dispatch IDs.
+diagnostics = diagnose_selection(planned, baseline_suites=("qualification.application",))
+payload = encode_diagnostics(diagnostics)
+```
+
+The report retains the original plan digest, exact policy/binding hashes, source identities, profile,
+and requested/effective modes. It adds these independently interpretable fields:
+
+| Field | Meaning |
+| --- | --- |
+| `selection_breadth` | `empty`, `partial`, or `all`, relative to the catalog; rules may select every suite while the effective mode stays selective |
+| `fallback_cause` | `profile-full`, `full-trigger`, `unknown-path`, or `selective`; the last means no full-mode decision was recorded |
+| `counts` | Catalog and selected suite/cell counts, plus changed-path count; a cell is one suite variant, not a workflow invocation |
+| `full_trigger_paths`, `unknown_paths`, `no_impact_paths` | Unique sorted paths attributed by the recorded reasons |
+| `paths_without_recorded_classification` | Changed paths lacking a recorded path reason; a full profile or early full trigger can bypass classification |
+| `rules` | Matched rule IDs with unique sorted paths/suites and their counts |
+| `comparison` | Sorted baseline, selected, additional, and missing catalog suite IDs |
+
+Omit `baseline_suites` to report an unavailable comparison (`null`). An explicit empty tuple means
+the baseline selected nothing. Duplicate or unknown baseline IDs are errors. For revision-only
+plans, changed-path counts and path lists are `null`, since no range was collected.
+
+These are summaries of recorded reasons, not a dependency coverage audit. An empty unknown-path
+list after a full trigger does not establish that every path has an owner. The API neither rematches
+policy nor reads Git/files/environment, runs tests, or infers runtime savings. Preview plans with no
+binding identity remain previews; a matching digest does not authenticate the report's origin.
+
+For an already decoded plan, `parse_plan_document(value)` reconstructs a validated `PlannedTests`
+and checks the closed version-one fields, canonical ordering, source/selection semantics, and digest.
+The caller must bound file reads and reject duplicate JSON keys before decoding. Both parsing and
+diagnostic encoding enforce a complete UTF-8 document within 4 MiB including its final newline;
+an oversized report fails without truncation. `encode_diagnostics` checks the versioned envelope and
+bounded JSON encoding; use `diagnose_selection` to establish its relationship to the plan.
+
+The [historical replay runner](designs/experiments/django-ray-shadow-replay.md#reproduce-the-comparison)
+accepts `--diagnostics-output NEW_FILE`. It writes a separate
+`test-replay-diagnostics-version: 1` report with per-revision diagnostics, ranked path counts, suite
+additions/omissions, and a hash of the complete replay bytes. Every observation must agree with its
+exact cohort source, plan digest, comparison, catalog, and frozen policy/registry/adapter identities.
+Both outputs must fit their limits before writing. Existing files are never overwritten.
+The default replay output format and exit behavior are unchanged; neither output enables execution.
+
 ## django-ray shadow pilot
 
 The initial catalog and fixed maps are reviewed against django-ray commit
@@ -163,7 +216,17 @@ This is source inspection evidence, not a qualification run. The pilot has two i
 The first [historical selection replay](designs/experiments/django-ray-shadow-replay.md) compared
 31 merged revisions with the frozen current selector: zero existing obligations were omitted,
 but 28 revisions selected the full catalog. This records selection behavior and local planning
-overhead only; qualification runtime and feedback-time reduction remain unmeasured.
+overhead only; it did not execute qualifications.
+
+The subsequent [full shadow pilot](https://github.com/dariuszpanas/django-ray/actions/runs/39090724517)
+passed all eight qualification cells at django-ray `e4f1ccc0be7944272ebbe82d8524d8a1bd09d8c9`
+in 27m 54s, including setup and cleanup. Its
+[result summary](designs/experiments/django-ray-full-shadow-result.json) retains exact identities,
+timings, artifact digests, and audit facts. This establishes one full-catalog baseline, not savings:
+the current selector requested no qualification workflows for that change, while the proposed
+policy forced full selection. The [next-phase plan](designs/test-planning.md#pilot-review-and-next-phase-delivery-plan)
+addresses dependency/ownership gaps, complete receipt evaluation, controlled comparisons against
+current selection, and advisory activation criteria. Required CI remains unchanged.
 
 The consumer implementation lives in `.github/workflows/test-planning-shadow.yml`, with policy
 `.yaga/test-planning-shadow.toml` and fixed adapter `scripts/test_planning_shadow.py`. Its explicit

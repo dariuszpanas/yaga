@@ -17,8 +17,14 @@
 - Add a pure version-one executor registry and handoff API with complete fixed job mappings,
   binding/source/policy identity checks, exact variant preservation, capability preflight,
   and bounded dispatch/cell output. Add runnable polyglot and django-ray examples, installed-wheel
-  smoke, and a django-ray shadow-pilot guide. Existing required CI stays enabled; real pilot
-  observations, a measured adoption threshold, and selective activation remain pending.
+  smoke, and a django-ray shadow-pilot guide. Existing required CI stays enabled. Historical
+  selection replay and one full shadow observation are recorded; measured selective feedback
+  savings, an adoption threshold, and selective activation remain pending.
+
+- Add pure version-one selection diagnostics and strict offline plan decoding, preserving
+  source/policy identities, fallback causes, selection breadth, unclassified paths, and explicit
+  baseline comparisons. Add optional separate replay diagnostics without changing existing plan
+  or comparison formats. Complete reports stay within 4 MiB and make no execution claims.
 
 - Add the schema-v1 boolean `dependabot-require-github-signature`, defaulting to `true`.
   Each otherwise eligible Dependabot-skipped commit must verify offline against the pinned
@@ -26,6 +32,12 @@
   retains the per-commit metadata filter; explicit PR-author exemptions remain independent.
 
 ### Fixed
+
+- Map eight exact application-test files to application qualification in the django-ray example,
+  include latency for changes to the shared Docker scenario helper, and preserve the shared lease
+  dependencies added by the coordinated django-ray release work. Add complete historical
+  path, unknown-path, lockfile, rename/deletion, and variant regressions. Required CI and the
+  conservative full/unknown fallback behavior remain enabled.
 
 - Narrow the opt-in Dependabot commit-message exemption per commit, so ordinary human additions
   and human rebases are checked even inside a Dependabot PR. Mixed PR titles and proposed
