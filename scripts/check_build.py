@@ -32,11 +32,15 @@ EXPECTED_OPTIONAL_REQUIRES_DIST = [
     "transformers<6,>=5.10; extra == 'quality'",
 ]
 TEST_PLANNING_SMOKE_SCRIPT = '''\
+import hashlib
 import json
 
-from yaga.errors import ConfigurationError
+from yaga.errors import ConfigurationError, InputError
+from yaga.test_planning.handoff import ExecutorRegistry, SuiteExecutor, create_handoff
 from yaga.test_planning.planner import plan_tests
 from yaga.test_planning.policy import parse_test_policy
+from yaga.test_planning.reports import PlannedTests
+from yaga.test_planning.source import PlanSource
 
 source = b"""
 test-policy-version = 1
@@ -70,12 +74,43 @@ try:
     parse_test_policy(source.replace(b"test-policy-version = 1", b"test-policy-version = 2"))
 except ConfigurationError:
     invalid_policy_rejected = True
+registry = ExecutorRegistry((
+    SuiteExecutor("backend", "pytest", "backend", ("py312", "py315"), (), "01" * 32),
+    SuiteExecutor("build", "docker", "build", ("default",), (), "02" * 32),
+    SuiteExecutor("frontend", "npm", "frontend", ("default",), (), "03" * 32),
+))
+source_identity = PlanSource("a" * 40, "b" * 40, "a" * 40, "b" * 40, "c" * 40)
+policy_sha256 = hashlib.sha256(source).hexdigest()
+planned = PlannedTests(policy_sha256, registry.sha256, source_identity, selective)
+expected = dict(
+    expected_policy_sha256=policy_sha256,
+    expected_execution_commit="b" * 40,
+    expected_execution_tree="c" * 40,
+)
+handoff = create_handoff(planned, registry, **expected)
+rejected_handoffs = []
+for candidate in (
+    PlannedTests(policy_sha256, None, source_identity, selective),
+    PlannedTests(policy_sha256, "ff" * 32, source_identity, selective),
+):
+    try:
+        create_handoff(candidate, registry, **expected)
+    except InputError:
+        rejected_handoffs.append(True)
+try:
+    create_handoff(planned, registry, **dict(expected, expected_execution_tree="d" * 40))
+except InputError:
+    rejected_handoffs.append(True)
 print(json.dumps({
     "selective": [[item.suite, list(item.variants)] for item in selective.selected],
     "full": [item.suite for item in full.selected],
     "fallback": [item.suite for item in fallback.selected],
     "modes": [selective.effective_mode, full.effective_mode, fallback.effective_mode],
     "invalid_policy_rejected": invalid_policy_rejected,
+    "handoff_version": handoff["test-handoff-version"],
+    "dispatch": handoff["dispatch"],
+    "cells": [[cell["suite"], cell["variant"]] for cell in handoff["cells"]],
+    "rejected_handoffs": rejected_handoffs,
 }))
 '''
 TEST_PLANNING_CLI_POLICY = b"""\
@@ -210,6 +245,10 @@ def exercise_installed_test_planning(python: Path, *, consumer: Path, env: dict[
         "fallback": ["build", "backend", "frontend"],
         "modes": ["selective", "full", "full"],
         "invalid_policy_rejected": True,
+        "handoff_version": 1,
+        "dispatch": {"backend": True, "build": True, "frontend": False},
+        "cells": [["build", "default"], ["backend", "py312"], ["backend", "py315"]],
+        "rejected_handoffs": [True, True, True],
     }:
         raise SystemExit("installed wheel test planning API emitted the wrong selection")
 
@@ -1299,6 +1338,7 @@ def main() -> int:
                 "yaga/path_patterns.py",
                 "yaga/test_planning/__init__.py",
                 "yaga/test_planning/git.py",
+                "yaga/test_planning/handoff.py",
                 "yaga/test_planning/limits.py",
                 "yaga/test_planning/models.py",
                 "yaga/test_planning/planner.py",

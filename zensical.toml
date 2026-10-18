@@ -30,6 +30,7 @@ nav = [
     { "Workflow checks" = "workflow-checks.md" },
     { "Repository plans" = "repository-plans.md" },
     { "Test planning" = "test-planning.md" },
+    { "Executor handoff" = "test-planning-handoff.md" },
     { "GitHub Actions" = "github-actions.md" },
   ] },
   { "Optional review tools" = [

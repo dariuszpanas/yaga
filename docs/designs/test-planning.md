@@ -1,10 +1,13 @@
 # Selective test and qualification planning
 
-**Status: phases 1 and 2 implemented.** The version-one policy model, strict loader, pure
-selection planner, installed CLI, Git source binding, and versioned plan reports are available.
+**Status: phases 1 and 2 implemented; phase 3 ready for shadow observation.** The version-one policy
+model, strict loader, pure selection planner, installed CLI, Git source binding, and versioned plan
+reports are available.
 Both example configurations are exercised by the test suite. See the
-[test planning guide](../test-planning.md) for current commands. Executor handoff, shadow pilots,
-and receipt evaluation below remain proposals; no consumer test skipping is enabled.
+[test planning guide](../test-planning.md) for current commands and the
+[handoff guide](../test-planning-handoff.md) for fixed executor preflight, runnable mappings, and
+the django-ray pilot. Full same-source pilot observations and the adoption decision remain pending;
+receipt evaluation remains proposed, and no consumer test skipping is enabled.
 
 YAGA should turn an explicit source change and qualification policy into a deterministic list of
 work for existing executors. The work can be Python tests, frontend tests, image builds, Docker
@@ -282,7 +285,7 @@ Use the existing plan-digest approach: SHA-256 over UTF-8 JSON of `plan`, with s
 compact separators, no ASCII escaping, no floating-point values, and canonical array orders.
 Include `test-plan-version = 1` inside `plan` as well as the envelope. Timestamps, absolute
 local paths, and display formatting do not participate. Exact policy-byte hashing intentionally
-invalidates plans after even a comment edit. Phase 2 emits reports only; importing plans and
+invalidates plans after even a comment edit. The CLI emits reports only; importing plans and
 validating receipt evidence belong to a later phase.
 
 Stable initial reason codes: `test.always`, `test.rule`, `test.profile-full`, `test.full-trigger`,
@@ -374,12 +377,12 @@ does not replace cancellation and cleanup checks. All external tools remain pinn
 ## django-ray migration example
 
 The example is grounded in upstream django-ray commit
-[`6b1688bf41189d6c5db5ae5d6a6125e202500260`](https://github.com/dariuszpanas/django-ray/tree/6b1688bf41189d6c5db5ae5d6a6125e202500260),
+[`0894832fabe8ab216c186c470548a15339b71e8e`](https://github.com/dariuszpanas/django-ray/tree/0894832fabe8ab216c186c470548a15339b71e8e),
 fetched on 2026-10-17. This is a source snapshot, not a new execution or qualification result.
 
-django-ray already has a [path-to-qualification policy](https://github.com/dariuszpanas/django-ray/blob/6b1688bf41189d6c5db5ae5d6a6125e202500260/scripts/qualification_policy.json),
-a selector, and an [always-running qualification aggregate](https://github.com/dariuszpanas/django-ray/blob/6b1688bf41189d6c5db5ae5d6a6125e202500260/.github/workflows/qualification-gate.yml).
-Start by generalizing that existing arrangement. The proposed
+django-ray already has a [path-to-qualification policy](https://github.com/dariuszpanas/django-ray/blob/0894832fabe8ab216c186c470548a15339b71e8e/scripts/qualification_policy.json),
+a selector, and an [always-running qualification aggregate](https://github.com/dariuszpanas/django-ray/blob/0894832fabe8ab216c186c470548a15339b71e8e/.github/workflows/qualification-gate.yml).
+The shadow pilot preserves that existing arrangement. The
 [django-ray.toml](examples/test-planning/django-ray.toml) preserves the five existing long
 qualification groups and their path triggers, adding full fallback and broad policy/tooling triggers.
 It is intentionally a conservative superset, not a promise of selection parity or a drop-in replacement.
@@ -397,7 +400,7 @@ mandatory independently; `full` for this file does not mean all django-ray valid
 
 The workflow bindings retain existing setup, execution, timeouts, artifacts, and cleanup. In
 particular, application qualification already calls
-[`qualification.application.run_chainsaw`](https://github.com/dariuszpanas/django-ray/blob/6b1688bf41189d6c5db5ae5d6a6125e202500260/qualification/application/run_chainsaw.py).
+[`qualification.application.run_chainsaw`](https://github.com/dariuszpanas/django-ray/blob/0894832fabe8ab216c186c470548a15339b71e8e/qualification/application/run_chainsaw.py).
 Preserve its acceptance intent, image/source identity, complete assertion evidence, cold-generation
 linkage, and owned cleanup checks. A diagnostic run or plain Chainsaw exit code cannot replace it.
 Native qualification requires all four scenarios. Monitoring and cancellation retain their own
@@ -405,14 +408,14 @@ cleanup checks; a successful test followed by failed cleanup is not successful q
 
 If ordinary backend suites are added to the catalog later, verified bindings include `uv run make
 test-unit`, `test-integration`, `test-postgres`, and `test-testproject` from the snapshot's
-[Makefile](https://github.com/dariuszpanas/django-ray/blob/6b1688bf41189d6c5db5ae5d6a6125e202500260/Makefile).
+[Makefile](https://github.com/dariuszpanas/django-ray/blob/0894832fabe8ab216c186c470548a15339b71e8e/Makefile).
 Those targets require Linux. Directory names do not prove hermeticity or disjoint selections.
-The existing [test taxonomy](https://github.com/dariuszpanas/django-ray/blob/6b1688bf41189d6c5db5ae5d6a6125e202500260/.github/test-suite-taxonomy.json)
+The existing [test taxonomy](https://github.com/dariuszpanas/django-ray/blob/0894832fabe8ab216c186c470548a15339b71e8e/.github/test-suite-taxonomy.json)
 and inventory runner offer finer, explicitly checked groups; preserve serial/resource constraints
 and prohibitions on empty collections or inappropriate skips.
 
 Keep local deployment qualification separate. Its `uv run make k8s-final-gate` entrypoint in
-[mk/k8s.mk](https://github.com/dariuszpanas/django-ray/blob/6b1688bf41189d6c5db5ae5d6a6125e202500260/mk/k8s.mk)
+[mk/k8s.mk](https://github.com/dariuszpanas/django-ray/blob/0894832fabe8ab216c186c470548a15339b71e8e/mk/k8s.mk)
 requires explicit actual cluster context, namespace, restart policy, and applicable service URLs.
 It intentionally preserves namespace, PostgreSQL, PVCs, and Docker data. Its restoration/evidence
 contract cannot be replaced with disposable-cluster deletion. It is not an automatic PR job in this
@@ -500,7 +503,7 @@ Do not weaken current required checks as part of adding the new feature.
 | 0: design fixtures | This proposal, complete TOML examples, expected selection cases | Review schema, trust split, inventory semantics, and examples; no runtime behavior changes |
 | 1: policy and pure planning (implemented) | `src/yaga/test_planning/{models,policy,selection,planner}.py` and shared `src/yaga/path_patterns.py`; focused parser/selection tests | Closed schema and limits; additive tag/rule selection; unknown/full behavior; DAG closure; both examples load and produce tested selections; no executors |
 | 2: installed CLI and Git (implemented) | `src/yaga/commands/test.py`; `test_planning/{source,git,service,reports,reporting}.py`; shared `git/changes.py` | Exact source identities, stable JSON/digest and exits, bounded reports, fresh installed-wheel smoke, unchanged Action graphs; useful local/CI planning only |
-| 3: executor handoff and shadow pilot | Consumer fixed job mappings, required aggregate, documentation and recorded experiment results | All five execution categories demonstrated; planning/selection failures cannot pass; django-ray comparison and full same-source shadow runs; existing gates still authoritative |
+| 3: executor handoff and shadow pilot (implementation ready; observations pending) | `test_planning/handoff.py`, runnable fixed job maps, installed-wheel smoke, django-ray advisory comparison and manual full-shadow adapter | All five execution categories demonstrated; planning/selection failures cannot pass; django-ray comparison and full same-source shadow runs required; record observed results before claiming savings; existing gates remain authoritative |
 | 4: receipts and controlled activation | `test_planning/{results,evaluation}.py`; evaluate command and adapter conformance fixtures | Exact selected cells/attempt/source correlation; malformed/stale/missing/cancelled/cleanup failures tested; activate only after shadow criteria and required gates are verified |
 | 5: optional impact providers | Independently versioned evidence format and optional collectors for Python/JS/build systems | Whole-suite fallback on absent/incompatible evidence; known-regression replay and seeded dependency changes; no removal of mandatory/full-profile obligations |
 
@@ -551,7 +554,9 @@ Do not estimate speedup solely from test counts or sum parallel durations as wal
 Activation requires: no unexplained omissions versus existing mandatory selection; no known missed
 regressions in the cohort and regression replay; demonstrated invalid-plan/missing-result blocking;
 preserved cleanup and matrix requirements; and a documented improvement in measured feedback time
-after overhead. The repository owner sets the minimum useful improvement before the pilot.
+after overhead. Measure first; the repository owner sets the minimum useful improvement after
+observing the pilot and before activation. Do not invent a threshold or claim savings from
+selection counts.
 Any discovered missed regression adds a regression case and broadens affected rules before further
 activation. A single trusted switch to the full profile provides rollback without editing rules.
 

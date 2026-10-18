@@ -1,5 +1,6 @@
-# Policy and CLI planning fixture; executor integration remains a later phase.
-# Source snapshot: django-ray 6b1688bf41189d6c5db5ae5d6a6125e202500260.
+# Policy, CLI, and fixed-handoff fixture; existing required CI remains enabled.
+# Source snapshot: django-ray 0894832fabe8ab216c186c470548a15339b71e8e.
+# Runnable mapping: examples/test-planning/fixed_handoff.py in the YAGA checkout.
 # The five rules preserve every trigger from scripts/qualification_policy.json.
 # Full-on and unknown-path fallbacks deliberately make selection a conservative
 # superset of that snapshot, not a promise of parity or a validated migration.
@@ -193,6 +194,10 @@ when-any = [
   "scripts/wait_for_ci_checkpoint.py",
   ".github/workflows/monitoring-qualification.yml",
   "qualification/monitoring/**",
+  "qualification/platform_auth.py",
+  "scripts/local_kuberay_auth.py",
+  "tests/unit/test_monitoring_auth_orchestration.py",
+  "tests/unit/test_platform_auth.py",
   "tests/unit/test_monitoring_qualification.py",
   "src/django_ray/metrics.py",
   "testproject/api.py",
