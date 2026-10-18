@@ -1,7 +1,7 @@
 # Selective test and qualification planning
 
-**Status: phases 1 through 3 and phase 4A diagnostics/example mappings implemented; one full shadow pilot passed.**
-Phases 4B through 4D remain proposed. The version-one policy
+**Status: phases 1 through 4B implemented; one full shadow pilot passed.**
+Phases 4C and 4D remain proposed. The version-one policy
 model, strict loader, pure selection planner, installed CLI, Git source binding, and versioned plan
 reports are available.
 Both example configurations are exercised by the test suite. See the
@@ -9,7 +9,7 @@ Both example configurations are exercised by the test suite. See the
 [handoff guide](../test-planning-handoff.md) for fixed executor preflight, runnable mappings, and
 the django-ray pilot. Historical selection replay and one full same-source observation are recorded;
 actual selective feedback-time measurements and the adoption decision remain pending;
-receipt evaluation remains proposed, and no consumer test skipping is enabled.
+offline normalized receipt evaluation is available, and no consumer test skipping is enabled.
 
 YAGA should turn an explicit source change and qualification policy into a deterministic list of
 work for existing executors. The work can be Python tests, frontend tests, image builds, Docker
@@ -26,7 +26,7 @@ prerequisites for adopting the feature.
 - An explicit, versioned TOML policy describing suites, tags, impact rules, and profiles.
 - An installed-only `yaga test plan` command with text and versioned JSON output.
 - Fixed adapter bindings that let existing local scripts and CI workflows consume selected IDs.
-- A later receipt evaluator that verifies every selected suite and environment combination.
+- A receipt evaluator that verifies every selected suite and environment combination.
 - Conservative fallback, selection explanations, and a measured shadow rollout.
 
 The planner does not execute repository code, import plugins, collect tests, discover branches,
@@ -113,7 +113,7 @@ Hard bounds for policy validation and planning:
 | Semantic selection | 4 MiB as compact sorted-key UTF-8 JSON, including inventory and reasons; reject rather than truncate |
 | JSON plan | 4 MiB including the complete source envelope; reject rather than truncate |
 | Human plan reasons | At most 256 displayed entries with exact omitted counts |
-| Later receipt | Proposed 4 MiB including its complete evidence envelope |
+| Result/evaluation document | 4 MiB including its complete envelope and final newline |
 
 The phase-one bounds are locked by tests. Valid
 repositories exceeding them receive an explicit operational error; increasing bounds requires
@@ -287,8 +287,8 @@ Use the existing plan-digest approach: SHA-256 over UTF-8 JSON of `plan`, with s
 compact separators, no ASCII escaping, no floating-point values, and canonical array orders.
 Include `test-plan-version = 1` inside `plan` as well as the envelope. Timestamps, absolute
 local paths, and display formatting do not participate. Exact policy-byte hashing intentionally
-invalidates plans after even a comment edit. The CLI emits reports only; importing plans and
-validating receipt evidence belong to a later phase.
+invalidates plans after even a comment edit. The planning command emits reports only; phase 4B's
+separate evaluator imports retained plans and validates normalized receipt declarations.
 
 Stable initial reason codes: `test.always`, `test.rule`, `test.profile-full`, `test.full-trigger`,
 `test.unknown-path`, `test.no-impact`, and `test.prerequisite`. Policy/Git/input errors use the existing error envelope;
@@ -448,32 +448,39 @@ selected job was merely skipped. If cancellation prevents the aggregate from run
 protection must leave qualification unsatisfied. An unselected suite is explicitly not required
 by this plan; it is never reported as a passed test.
 
-Before the generic receipt evaluator exists, the adapter's aggregate owns these checks. Never
+The generic receipt evaluator checks normalized obligations; the adapter still owns execution,
+custom acceptance, provenance, cleanup, and publication of its aggregate. Never
 activate selective execution with only conditional jobs and no complete-result aggregate. A
 missing binding or capability fails preflight or leaves an explicit blocked obligation.
 
-### Proposed receipt evaluation phase
+### Receipt evaluation (phase 4B)
 
-Add the following command after the planner and adapter contract are established:
+The installed offline command requires independent expected identities:
 
 ```bash
-yaga test evaluate --plan PLAN.json --results RESULTS.json --run-id RUN --attempt 1 --format json
+yaga test evaluate --plan PLAN.json --results RESULTS.json \
+  --policy-sha256 "$EXPECTED_POLICY_SHA256" --bindings-sha256 "$EXPECTED_MANIFEST_SHA256" \
+  --execution-commit "$EXPECTED_COMMIT" --execution-tree "$EXPECTED_TREE" \
+  --run-id RUN --attempt 1 --format json
 ```
 
 The expected plan must come from the trusted planner or be
 recomputed there; accepting an arbitrary PR-supplied plan and matching receipt proves nothing.
 
 The result envelope is independently versioned with `test-results-version = 1`, matching
-`plan_digest` and non-null `bindings_sha256`, exact `execution_commit`/`execution_tree`, `run_id`,
+`plan_digest`, `policy_sha256`, and non-null `bindings_sha256`, exact `execution_commit`/`execution_tree`, `run_id`,
 `attempt`, and an array of results. Require `run_id` to match
 `[A-Za-z0-9][A-Za-z0-9._:-]{0,127}` and `attempt` to be an integer from 1 through 2,147,483,647
-(not a boolean). The adapter supplies the expected run ID and aggregate execution attempt as
-explicit evaluator arguments from trusted CI context; both must match the envelope. A new overall
+(not a boolean). The adapter supplies the expected policy, manifest, source, run ID, and aggregate
+execution attempt as explicit evaluator arguments from trusted CI context; all must match the
+envelope. A new overall
 CI attempt requires a new complete envelope. Each result names `suite`, `variant`, `binding`, and
 an `outcome` from `passed`,
 `failed`, `pending`, `cancelled`, or `blocked`, plus optional bounded `summary` and `evidence_sha256`.
+Optional summaries contain at most 1,000 UTF-8 bytes and absent optional fields must be omitted.
 The adapter authenticates workflow/job identities, tool/environment fingerprints, and artifact
-provenance before producing these records. YAGA validates the handoff; it does not authenticate CI
+provenance before producing these records. Evaluation validates the retained plan, normalized
+results, and expected identities; the separate handoff API validates the registry. Neither authenticates CI
 merely because a digest appears in JSON. Reject preview plans with null binding identity. The
 adapter must retain the immutable execution manifest and verify that the jobs actually used it;
 copying its digest without that verification does not establish execution identity.
@@ -494,6 +501,14 @@ and `test.cancelled` for cancellation. Keep detailed logs and custom receipts in
 the generic result file carries only their digest and a summary. Matching a digest provides
 correlation, not a signature, trusted origin, or proof that a custom verifier was correct.
 
+The independently versioned evaluation report retains exact identities and canonical result
+digest, separates completeness from success, and bounds diagnostics to 256 with exact omitted
+counts. `complete` means no selected cell is missing, pending, or blocked; it can still contain
+failed or cancelled terminal work. Status is `failed` if any cell failed or was cancelled,
+otherwise `incomplete` if an obligation remains, and `passed` only when every obligation passed.
+An explicitly empty selected plan can pass with zero required cells and no claim that tests ran.
+See the [installed command contract](../test-planning.md#evaluate-normalized-results).
+
 ## Phased implementation plan
 
 Each phase should be delivered as focused Conventional Commit changes, with review/CI fixes folded
@@ -506,7 +521,7 @@ Do not weaken current required checks as part of adding the new feature.
 | 1: policy and pure planning (implemented) | `src/yaga/test_planning/{models,policy,selection,planner}.py` and shared `src/yaga/path_patterns.py`; focused parser/selection tests | Closed schema and limits; additive tag/rule selection; unknown/full behavior; DAG closure; both examples load and produce tested selections; no executors |
 | 2: installed CLI and Git (implemented) | `src/yaga/commands/test.py`; `test_planning/{source,git,service,reports,reporting}.py`; shared `git/changes.py` | Exact source identities, stable JSON/digest and exits, bounded reports, fresh installed-wheel smoke, unchanged Action graphs; useful local/CI planning only |
 | 3: executor handoff and shadow pilot (implemented; one full observation passed) | `test_planning/handoff.py`, runnable fixed job maps, installed-wheel smoke, django-ray advisory comparison and manual full-shadow adapter | All five execution categories demonstrated; 31-revision comparison and one full same-source run recorded; no measured selective benefit or activation claim; existing gates remain authoritative |
-| 4: selection quality, receipts, and measured advisory feedback (proposed) | `test_planning/{results,evaluation}.py`; evaluate command; adapter conformance, selection audit, and experiment reports | Correct dependency/ownership mappings; exact selected cells/attempt/source correlation; controlled feedback measurements and held-out validation; owner adoption decision; required CI remains unchanged |
+| 4: selection quality, receipts, and measured advisory feedback (4A/4B implemented; 4C/4D proposed) | `test_planning/{results,evaluation}.py`; evaluate command; adapter conformance, selection audit, and experiment reports | Correct dependency/ownership mappings; exact selected cells/attempt/source correlation; controlled feedback measurements and held-out validation; owner adoption decision; required CI remains unchanged |
 | 5: optional impact providers | Independently versioned evidence format and optional collectors for Python/JS/build systems | Whole-suite fallback on absent/incompatible evidence; known-regression replay and seeded dependency changes; no removal of mandatory/full-profile obligations |
 
 Implementation dependencies are linear through phase 3. Receipt format work can proceed during
@@ -674,12 +689,13 @@ before a new shadow run. The example also mirrors that work's additive lease dep
 `src/django_ray/lease_policy.py` selects application, native, cancellation, and monitoring;
 `src/django_ray/management/commands/django_ray_lease_policy.py` selects application and native.
 No required workflow conditions, qualification variants, receipt checks,
-or cleanup behavior are removed. Phases 4B–4D remain proposed; phase 4A dispatches no qualifications
-and supplies no execution-activation authority.
+or cleanup behavior are removed. Phase 4B supplies offline evaluation and a separate consumer
+normalizer; phases 4C/4D remain proposed. Phases 4A/4B dispatch no qualifications and supply no
+execution-activation authority. Consumer adoption remains separate from the active 0.7 release.
 
 Deliver these as separate reviewable changes; do not combine policy narrowing with scheduler,
 concurrency, cleanup, or environment-matrix changes. Keep result evaluation installed-only and
-pure, outside both Action graphs. Use the proposed receipt contract above: complete bounded
+pure, outside both Action graphs. Use the receipt contract above: complete bounded
 documents, independent expected identities, no arbitrary command or credential inputs, and no
 cross-source or cross-attempt assembly of successful cells. Adapter normalizers validate each
 custom assertion/cleanup contract before emitting `passed`; an aggregate green badge is not

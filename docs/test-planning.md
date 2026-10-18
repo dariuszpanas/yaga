@@ -178,7 +178,8 @@ with null before strings.
 separators, and no ASCII escaping. Complete canonical arrays participate; timestamps, local paths,
 and human formatting do not. Identical policy bytes, source identities, binding identity, and profile
 produce an identical digest. A comment edit changes the policy hash and therefore the digest.
-The CLI emits plans; it does not import plan documents or evaluate execution results. The
+The `plan` command emits plans. The separate `evaluate` command strictly imports a retained plan
+and normalized execution results, as described below. The
 [executor handoff API](test-planning-handoff.md) accepts freshly computed validated plans.
 The separate [selection diagnostics API](test-planning-handoff.md#explain-selection-without-changing-the-plan)
 can inspect a validated plan or strictly decode an existing version-one plan for offline analysis.
@@ -189,7 +190,7 @@ It explains recorded selection and baseline differences without authorizing exec
 | `0` | Valid policy or complete plan, including full fallback and zero-obligation selection |
 | `2` | Invalid policy/input, missing or incomplete history, invalid Git output, or resource failure |
 
-Neither command uses exit `1` or reports that tests passed. A collection error produces no plan.
+Neither policy validation nor planning uses exit `1` or reports that tests passed. A collection error produces no plan.
 CI must block or use a separately defined full path when planning fails; missing output must never
 be interpreted as an empty selection.
 
@@ -213,6 +214,68 @@ The [handoff and shadow guide](test-planning-handoff.md) includes a runnable ada
 catalogs, fixed maps for all five execution categories, and the django-ray pilot protocol.
 Conditional jobs alone are insufficient: an eventual required aggregate must detect failed,
 cancelled, missing, or unexpectedly skipped selected cells and failed cleanup. This release supplies
-planning and fixed-job handoff; generic receipt evaluation and selective-execution activation remain
-later phases. The pilot keeps existing required CI authoritative. It does not provide a
+planning, fixed-job handoff, and normalized receipt evaluation. Selective-execution activation
+remains a later phase. The pilot keeps existing required CI authoritative. It does not provide a
 merge-security authority or authorize credentials or write access.
+
+## Evaluate normalized results
+
+`test evaluate` is an offline consistency and completeness check. Supply a plan from the trusted
+planner, one result envelope from a reviewed adapter, and independent expected identities from
+the execution context:
+
+```bash
+yaga test evaluate --plan plan.json --results results.json \
+  --policy-sha256 "$EXPECTED_POLICY_SHA256" \
+  --bindings-sha256 "$EXPECTED_MANIFEST_SHA256" \
+  --execution-commit "$EXPECTED_COMMIT" --execution-tree "$EXPECTED_TREE" \
+  --run-id "$EXPECTED_RUN_ID" --attempt 1 --format json
+```
+
+Every identity option is required. Do not derive expected values from the untrusted result file.
+The plan must be trusted or recomputed from trusted policy: matching hashes alone cannot detect
+a contributor removing obligations and recomputing a plan. The consumer authenticates jobs,
+artifacts, checkout, environment, and the actual use of the retained execution manifest. YAGA
+does not contact a CI provider, read Git or environment state, run tests, or authenticate artifacts.
+Preview plans with null bindings are rejected.
+
+The closed result envelope has its own `test-results-version: 1`, independent of the unchanged
+plan and handoff versions:
+
+| Field | Contract |
+| --- | --- |
+| `test-results-version` | Integer `1`, never a boolean |
+| `plan_digest`, `policy_sha256`, `bindings_sha256` | Exact lowercase SHA-256 identities; bindings cannot be null |
+| `execution_commit`, `execution_tree` | Exact same-format Git object IDs matching the plan and expected source |
+| `run_id` | `[A-Za-z0-9][A-Za-z0-9._:-]{0,127}`, matching the explicit expected run |
+| `attempt` | Integer from 1 through 2,147,483,647, matching the explicit aggregate attempt |
+| `results` | At most 512 cell objects, each naming `suite`, `variant`, `binding`, and `outcome` |
+
+Each cell outcome is exactly `passed`, `failed`, `pending`, `cancelled`, or `blocked`. Optional
+`summary` is at most 1,000 UTF-8 bytes; optional `evidence_sha256` is a lowercase SHA-256 digest.
+Omit absent optional fields; explicit null is invalid. Unknown keys, duplicate JSON keys/cells,
+extra unselected cells, wrong bindings, unsupported versions, malformed identities, non-finite
+numbers, and mismatched runs or attempts are input errors. Input files must be bounded regular
+UTF-8 JSON files, at most 4 MiB each. A new aggregate attempt needs a complete new envelope;
+evaluation never chooses the greenest retry or assembles successes across attempts.
+
+Every selected variant and prerequisite needs its own passed record. Missing cells, `pending`,
+and `blocked` produce `test.required-result`; failures produce `test.failed`; cancellations produce
+`test.cancelled`. `skipped` is not an accepted outcome. An adapter must represent an unexpectedly
+skipped selected job as blocked, and failed cleanup or custom acceptance must prevent `passed`.
+A missing evidence file is an operational error, not a fabricated failure record. A digest
+correlates evidence; it does not prove its origin or the correctness of a custom verifier.
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Every selected obligation has a matching passed result, including an explicit zero-obligation plan |
+| `1` | Valid envelope, but selected work is missing, incomplete, failed, or cancelled |
+| `2` | Invalid input, identity mismatch, unsupported schema, or operational/resource failure |
+
+Evaluation reports use `test-evaluation-version: 1`; they retain source, policy, manifest, plan,
+result, run, and attempt identities, outcome counts, and at most 256 diagnostics with an exact
+omitted count. Complete JSON output including its newline is bounded to 4 MiB. Successful and
+incomplete evaluations go to stdout; input errors go to stderr. `--quiet` suppresses only success.
+Zero obligations never means tests ran. Evaluation establishes no authority to skip required CI,
+activate selection, or claim feedback-time savings. See the
+[receipt adapter boundary](test-planning-handoff.md#normalize-and-evaluate-receipts).

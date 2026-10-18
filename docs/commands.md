@@ -31,6 +31,7 @@ or `yaga self update --dry-run` to verify a uv tool installation without updatin
 | `yaga github pull-request check` | Exact event-bound title and commit validation | [GitHub Actions](github-actions.md) |
 | `yaga test policy check` | Validate an explicit test-suite catalog and selection policy | [Test planning](test-planning.md) |
 | `yaga test plan` | Select suites and variants for an explicit Git source and profile | [Test planning](test-planning.md) |
+| `yaga test evaluate` | Check normalized cell results against a trusted plan and explicit execution identities | [Test evaluation](test-planning.md#evaluate-normalized-results) |
 
 Evaluating YAGA for another repository? Start with [Assess and adopt in CI](ci-adoption.md).
 
