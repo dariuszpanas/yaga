@@ -1,0 +1,295 @@
+[
+  {
+    "comparison": {
+      "activation": "disabled",
+      "adapter_source": {
+        "commit": "a5a17c9e3687687db1362c61ff0567857f12d159",
+        "tree": "3af35b26239c10fa63f83d42845b97b1d3e8d63f"
+      },
+      "additional": [
+        "cancellation",
+        "latency",
+        "monitoring",
+        "native"
+      ],
+      "baseline_policy_sha256": "dcd5b559460ad724f8322f8e141244c21b45d2b408e7987130b49b9794452911",
+      "baseline_selected": [
+        "application"
+      ],
+      "bindings_sha256": "5b525027a0a278a3c89b2b270f6ca53b433f8a65c8aa927b364f5c6e6d0fb622",
+      "critical_path_seconds": null,
+      "effective_mode": "full",
+      "excluded_failures": null,
+      "missing": [],
+      "plan_digest": "640cdd08bfa4033dcb54ab99bc3b35d93d0a39db45dd7a683df55a3bff9d32eb",
+      "planned_selected": [
+        "application",
+        "cancellation",
+        "latency",
+        "monitoring",
+        "native"
+      ],
+      "planning_seconds": 0.924863,
+      "policy_sha256": "4de2a19c3d2aa48125cd62f33ca0ec87f1c0c4e9815b3f7d1a4b4bb82bdc1329",
+      "runner_minutes": null,
+      "runtime_observation": "not-observed",
+      "selected_cells": [
+        {
+          "binding": "application-qualification",
+          "dispatch": "application",
+          "suite": "qualification.application",
+          "variant": "default"
+        },
+        {
+          "binding": "cancellation-qualification",
+          "dispatch": "cancellation",
+          "suite": "qualification.cancellation",
+          "variant": "default"
+        },
+        {
+          "binding": "latency-qualification",
+          "dispatch": "latency",
+          "suite": "qualification.latency",
+          "variant": "default"
+        },
+        {
+          "binding": "monitoring-qualification",
+          "dispatch": "monitoring",
+          "suite": "qualification.monitoring",
+          "variant": "default"
+        },
+        {
+          "binding": "upgrade-native-qualification",
+          "dispatch": "native",
+          "suite": "qualification.native",
+          "variant": "core-loss"
+        },
+        {
+          "binding": "upgrade-native-qualification",
+          "dispatch": "native",
+          "suite": "qualification.native",
+          "variant": "jobs"
+        },
+        {
+          "binding": "upgrade-native-qualification",
+          "dispatch": "native",
+          "suite": "qualification.native",
+          "variant": "jobs-crash"
+        },
+        {
+          "binding": "upgrade-native-qualification",
+          "dispatch": "native",
+          "suite": "qualification.native",
+          "variant": "native"
+        }
+      ],
+      "source": {
+        "base_commit": "4f33bcf2467ef371765dd6983f5de42a66426f62",
+        "comparison_commit": "4f33bcf2467ef371765dd6983f5de42a66426f62",
+        "execution_commit": "5a69a892b4d8fe6682ed77a39b5f13ea67823d61",
+        "execution_tree": "1a0d5d4532ff7b50c90438a3103ed981dc37aa01",
+        "head_commit": "5a69a892b4d8fe6682ed77a39b5f13ea67823d61"
+      },
+      "status": "compared",
+      "test-shadow-version": 1
+    },
+    "plan": {
+      "plan": {
+        "bindings_sha256": "5b525027a0a278a3c89b2b270f6ca53b433f8a65c8aa927b364f5c6e6d0fb622",
+        "changed_paths": [
+          "docs/changelog.md",
+          "src/django_ray/static/django_ray/admin/diagnostics.css",
+          "tests/integration/test_testproject_admin_theme.py",
+          "tests/unit/test_package_metadata.py"
+        ],
+        "effective_mode": "full",
+        "inventory": [
+          {
+            "binding": "application-qualification",
+            "id": "qualification.application",
+            "needs": [],
+            "requires": [
+              "chainsaw",
+              "docker",
+              "helm",
+              "kind",
+              "linux"
+            ],
+            "tags": [
+              "application",
+              "backend",
+              "chainsaw",
+              "kubernetes",
+              "long"
+            ],
+            "variants": [
+              "default"
+            ]
+          },
+          {
+            "binding": "cancellation-qualification",
+            "id": "qualification.cancellation",
+            "needs": [],
+            "requires": [
+              "docker",
+              "linux"
+            ],
+            "tags": [
+              "backend",
+              "docker",
+              "long",
+              "runtime"
+            ],
+            "variants": [
+              "default"
+            ]
+          },
+          {
+            "binding": "latency-qualification",
+            "id": "qualification.latency",
+            "needs": [],
+            "requires": [
+              "docker",
+              "linux"
+            ],
+            "tags": [
+              "backend",
+              "docker",
+              "long",
+              "performance"
+            ],
+            "variants": [
+              "default"
+            ]
+          },
+          {
+            "binding": "monitoring-qualification",
+            "id": "qualification.monitoring",
+            "needs": [],
+            "requires": [
+              "docker",
+              "helm",
+              "kind",
+              "linux"
+            ],
+            "tags": [
+              "infrastructure",
+              "kubernetes",
+              "long",
+              "monitoring"
+            ],
+            "variants": [
+              "default"
+            ]
+          },
+          {
+            "binding": "upgrade-native-qualification",
+            "id": "qualification.native",
+            "needs": [],
+            "requires": [
+              "docker",
+              "linux"
+            ],
+            "tags": [
+              "backend",
+              "docker",
+              "long",
+              "upgrade"
+            ],
+            "variants": [
+              "core-loss",
+              "jobs",
+              "jobs-crash",
+              "native"
+            ]
+          }
+        ],
+        "policy_sha256": "4de2a19c3d2aa48125cd62f33ca0ec87f1c0c4e9815b3f7d1a4b4bb82bdc1329",
+        "profile": "development",
+        "reasons": [
+          {
+            "code": "test.no-impact",
+            "path": "docs/changelog.md",
+            "required_by": null,
+            "rule": null,
+            "suite": null
+          },
+          {
+            "code": "test.rule",
+            "path": "src/django_ray/static/django_ray/admin/diagnostics.css",
+            "required_by": null,
+            "rule": "application",
+            "suite": "qualification.application"
+          },
+          {
+            "code": "test.unknown-path",
+            "path": "tests/integration/test_testproject_admin_theme.py",
+            "required_by": null,
+            "rule": null,
+            "suite": null
+          },
+          {
+            "code": "test.unknown-path",
+            "path": "tests/unit/test_package_metadata.py",
+            "required_by": null,
+            "rule": null,
+            "suite": null
+          }
+        ],
+        "requested_mode": "selective",
+        "selected": [
+          {
+            "suite": "qualification.application",
+            "variants": [
+              "default"
+            ]
+          },
+          {
+            "suite": "qualification.cancellation",
+            "variants": [
+              "default"
+            ]
+          },
+          {
+            "suite": "qualification.latency",
+            "variants": [
+              "default"
+            ]
+          },
+          {
+            "suite": "qualification.monitoring",
+            "variants": [
+              "default"
+            ]
+          },
+          {
+            "suite": "qualification.native",
+            "variants": [
+              "core-loss",
+              "jobs",
+              "jobs-crash",
+              "native"
+            ]
+          }
+        ],
+        "source": {
+          "base_commit": "4f33bcf2467ef371765dd6983f5de42a66426f62",
+          "comparison_commit": "4f33bcf2467ef371765dd6983f5de42a66426f62",
+          "execution_commit": "5a69a892b4d8fe6682ed77a39b5f13ea67823d61",
+          "execution_tree": "1a0d5d4532ff7b50c90438a3103ed981dc37aa01",
+          "head_commit": "5a69a892b4d8fe6682ed77a39b5f13ea67823d61"
+        },
+        "test-plan-version": 1
+      },
+      "plan_digest": "640cdd08bfa4033dcb54ab99bc3b35d93d0a39db45dd7a683df55a3bff9d32eb",
+      "test-plan-version": 1
+    },
+    "revision": {
+      "base": "4f33bcf2467ef371765dd6983f5de42a66426f62",
+      "head": "5a69a892b4d8fe6682ed77a39b5f13ea67823d61",
+      "merged_at": "2026-08-03T19:31:11Z",
+      "number": 356,
+      "tree": "1a0d5d4532ff7b50c90438a3103ed981dc37aa01"
+    }
+  }
+]

@@ -1,12 +1,13 @@
 # Selective test and qualification planning
 
-**Status: phases 1 and 2 implemented; phase 3 ready for shadow observation.** The version-one policy
+**Status: phases 1 and 2 implemented; phase 3 historical replay recorded, full shadow runs pending.** The version-one policy
 model, strict loader, pure selection planner, installed CLI, Git source binding, and versioned plan
 reports are available.
 Both example configurations are exercised by the test suite. See the
 [test planning guide](../test-planning.md) for current commands and the
 [handoff guide](../test-planning-handoff.md) for fixed executor preflight, runnable mappings, and
-the django-ray pilot. Full same-source pilot observations and the adoption decision remain pending;
+the django-ray pilot. Historical selection replay is recorded; full same-source pilot observations
+and the adoption decision remain pending;
 receipt evaluation remains proposed, and no consumer test skipping is enabled.
 
 YAGA should turn an explicit source change and qualification policy into a deterministic list of
@@ -503,7 +504,7 @@ Do not weaken current required checks as part of adding the new feature.
 | 0: design fixtures | This proposal, complete TOML examples, expected selection cases | Review schema, trust split, inventory semantics, and examples; no runtime behavior changes |
 | 1: policy and pure planning (implemented) | `src/yaga/test_planning/{models,policy,selection,planner}.py` and shared `src/yaga/path_patterns.py`; focused parser/selection tests | Closed schema and limits; additive tag/rule selection; unknown/full behavior; DAG closure; both examples load and produce tested selections; no executors |
 | 2: installed CLI and Git (implemented) | `src/yaga/commands/test.py`; `test_planning/{source,git,service,reports,reporting}.py`; shared `git/changes.py` | Exact source identities, stable JSON/digest and exits, bounded reports, fresh installed-wheel smoke, unchanged Action graphs; useful local/CI planning only |
-| 3: executor handoff and shadow pilot (implementation ready; observations pending) | `test_planning/handoff.py`, runnable fixed job maps, installed-wheel smoke, django-ray advisory comparison and manual full-shadow adapter | All five execution categories demonstrated; planning/selection failures cannot pass; django-ray comparison and full same-source shadow runs required; record observed results before claiming savings; existing gates remain authoritative |
+| 3: executor handoff and shadow pilot (historical replay recorded; full shadow runs pending) | `test_planning/handoff.py`, runnable fixed job maps, installed-wheel smoke, django-ray advisory comparison and manual full-shadow adapter | All five execution categories demonstrated; planning/selection failures cannot pass; django-ray comparison and full same-source shadow runs required; record observed results before claiming savings; existing gates remain authoritative |
 | 4: receipts and controlled activation | `test_planning/{results,evaluation}.py`; evaluate command and adapter conformance fixtures | Exact selected cells/attempt/source correlation; malformed/stale/missing/cancelled/cleanup failures tested; activate only after shadow criteria and required gates are verified |
 | 5: optional impact providers | Independently versioned evidence format and optional collectors for Python/JS/build systems | Whole-suite fallback on absent/incompatible evidence; known-regression replay and seeded dependency changes; no removal of mandatory/full-profile obligations |
 

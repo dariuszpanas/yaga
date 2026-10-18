@@ -6,8 +6,8 @@ cancellation, and cleanup. The handoff contains job IDs and required cells; it c
 and reports no test outcomes.
 
 Phase 3 supplies this Python API, runnable examples, and a django-ray shadow-pilot adapter.
-The pilot implementation is ready for observation; real same-source qualification runs and the
-adoption decision remain pending. Existing required CI checks remain enabled and authoritative.
+Historical selection replay is recorded; real full same-source qualification runs and the adoption
+decision remain pending. Existing required CI checks remain enabled and authoritative.
 Generic receipt evaluation and selective-execution activation are later work.
 
 ## Build a fixed registry
@@ -159,6 +159,11 @@ This is source inspection evidence, not a qualification run. The pilot has two i
 2. An explicitly requested full shadow run calls all five existing workflows once at the same
    source. It retains their normal assertions, artifacts, matrix behavior, and cleanup. Its
    concurrency namespace must stay separate from required CI so a pilot cannot cancel it.
+
+The first [historical selection replay](designs/experiments/django-ray-shadow-replay.md) compared
+31 merged revisions with the frozen current selector: zero existing obligations were omitted,
+but 28 revisions selected the full catalog. This records selection behavior and local planning
+overhead only; qualification runtime and feedback-time reduction remain unmeasured.
 
 The consumer implementation lives in `.github/workflows/test-planning-shadow.yml`, with policy
 `.yaga/test-planning-shadow.toml` and fixed adapter `scripts/test_planning_shadow.py`. Its explicit
