@@ -299,6 +299,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     for module in (
         "__init__",
         "git",
+        "handoff",
         "limits",
         "models",
         "planner",
@@ -312,6 +313,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         assert f'"yaga/test_planning/{module}.py"' in build_gate
     assert 'operation="test policy check"' in build_gate
     assert 'operation=f"test plan {profile}"' in build_gate
+    assert "create_handoff(planned, registry, **expected)" in build_gate
+    assert '"rejected_handoffs": [True, True, True]' in build_gate
     assert build_gate.index("test_policy = exercise_installed_test_policy(") < build_gate.index(
         '("init", "--initial-branch=main")'
     )

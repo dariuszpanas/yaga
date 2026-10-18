@@ -32,6 +32,7 @@ to capabilities, prerequisites, and integration steps.
 | Workflow references, permissions, or syntax | [Workflow checks](workflow-checks.md) |
 | Pull-request validation | [GitHub Actions](github-actions.md) |
 | Selecting test suites and qualification work | [Test planning](test-planning.md) |
+| Mapping plans to existing jobs and measuring adoption | [Executor handoff and shadow pilot](test-planning-handoff.md) |
 | A failing command or missing prerequisite | [Troubleshooting](troubleshooting.md) |
 
 [Usage modes](usage.md) explains where local commands, hooks, and CI fit together.

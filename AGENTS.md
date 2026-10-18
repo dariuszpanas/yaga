@@ -121,6 +121,14 @@ Agent review gate is the public review contract. Its current provider adapter re
   contracts, exact policy-byte SHA-256, optional binding identity, canonical plan digests, complete
   JSON within 4 MiB, at most 256 human reasons with exact omitted counts, and exits 0/2 only.
   Planning never claims tests passed and stays outside repository plans and both Action graphs.
+  Keep executor handoff pure and installed-only: a complete fixed registry maps every suite exactly
+  once, preserves all variants and required capabilities, and binds executor-definition hashes.
+  Require non-null matching binding identity and independent expected policy/commit/tree identities.
+  Preserve version-one registry/handoff documents, complete 4 MiB bounded output, prerequisite
+  order, and one dispatch per suite even for a matrix. No commands or receipt evaluation enter this
+  API. Consumer adapters own real capability checks, execution, cancellation, acceptance, and cleanup.
+  Shadow jobs remain advisory and cannot change or cancel required CI. Measure first; set the
+  feedback-time adoption threshold before activation, after real pilot observations.
 - Keep `branch check` installed-only and require an explicit versioned policy plus exact short
   branch name. Never inspect Git, infer checkout or event state, discover policy, normalize full
   refs/remotes, or read environment in the domain layer. Schema v1 is a bounded ordered list of

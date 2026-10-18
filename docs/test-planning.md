@@ -56,7 +56,7 @@ when-any = ["frontend/**"]
 select = ["frontend"]
 ```
 
-Bindings are opaque IDs for a future fixed executor mapping. They contain no commands or runner
+Bindings are opaque IDs for a fixed executor mapping. They contain no commands or runner
 arguments, and YAGA never executes them. A variant names a required environment or scenario:
 selecting `backend` above selects both Python variants. Names alone do not pin tool versions.
 
@@ -178,7 +178,8 @@ with null before strings.
 separators, and no ASCII escaping. Complete canonical arrays participate; timestamps, local paths,
 and human formatting do not. Identical policy bytes, source identities, binding identity, and profile
 produce an identical digest. A comment edit changes the policy hash and therefore the digest.
-Phase 2 emits plans; it does not import plan documents or evaluate execution results.
+The CLI emits plans; it does not import plan documents or evaluate execution results. The
+[executor handoff API](test-planning-handoff.md) accepts freshly computed validated plans.
 
 | Exit | Meaning |
 | --- | --- |
@@ -196,15 +197,19 @@ normally use a full profile. Load the expected catalog and binding registry from
 full selection of a PR-edited catalog cannot detect obligations that the contributor removed.
 Policy and binding digests identify bytes, not authority, signatures, or successful execution.
 
-For a future executor handoff, pass `--bindings-sha256` with the lowercase 64-character SHA-256 of
-an immutable reviewed execution manifest. This opaque identity should cover the binding registry,
-its revision, and locked tools/images/configuration for every variant. YAGA does not read or verify
-the manifest. Without it, `bindings_sha256` is null and the plan is a preview; future receipt
-qualification requires a binding identity and independent adapter verification.
+For executor handoff, pass `--bindings-sha256` with the lowercase 64-character SHA-256 of an
+immutable reviewed execution manifest. The Python `ExecutorRegistry` provides a canonical identity
+for a complete fixed job map and its definition hashes. Its definitions should cover the registry's
+revision and locked tools/images/configuration for every variant. The CLI treats the digest as
+opaque; the handoff API checks it against the supplied registry. Without it, `bindings_sha256` is
+null and the plan is a preview that cannot be handed off.
 
 Keep existing required CI running during initial comparison. Review the selected suites and
 variants against those jobs, then follow the [shadow pilot and activation plan](designs/test-planning.md#shadow-pilot-and-promotion-criteria).
+The [handoff and shadow guide](test-planning-handoff.md) includes a runnable adapter for both
+catalogs, fixed maps for all five execution categories, and the django-ray pilot protocol.
 Conditional jobs alone are insufficient: an eventual required aggregate must detect failed,
 cancelled, missing, or unexpectedly skipped selected cells and failed cleanup. This release supplies
-planning only; fixed adapters, receipt evaluation, and selective-execution activation remain later
-phases. It does not provide a merge-security authority or authorize credentials or write access.
+planning and fixed-job handoff; generic receipt evaluation and selective-execution activation remain
+later phases. The pilot keeps existing required CI authoritative. It does not provide a
+merge-security authority or authorize credentials or write access.

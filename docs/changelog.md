@@ -12,7 +12,13 @@
   Git range or full-profile revision inputs. Plans bind exact commit/tree and policy identities,
   carry deterministic version-one JSON digests, and explain selected suites and variants.
   Git collection remains bounded and never fetches. Planning does not run tests or enable skips;
-  executor handoff and receipt evaluation remain planned.
+  receipt evaluation remains planned.
+
+- Add a pure version-one executor registry and handoff API with complete fixed job mappings,
+  binding/source/policy identity checks, exact variant preservation, capability preflight,
+  and bounded dispatch/cell output. Add runnable polyglot and django-ray examples, installed-wheel
+  smoke, and a django-ray shadow-pilot guide. Existing required CI stays enabled; real pilot
+  observations, a measured adoption threshold, and selective activation remain pending.
 
 - Add the schema-v1 boolean `dependabot-require-github-signature`, defaulting to `true`.
   Each otherwise eligible Dependabot-skipped commit must verify offline against the pinned

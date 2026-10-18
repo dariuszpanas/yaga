@@ -64,6 +64,16 @@ within 4 MiB, and at most 256 human reasons with exact omitted counts. Emit succ
 stdout and bounded error envelopes on stderr, with exits 0/2 only. Planning never executes bindings
 or claims tests passed. Keep both commands outside repository plans and both Action runtimes.
 
+Keep executor handoff pure and installed-only. `ExecutorRegistry` must map the complete catalog
+exactly once to fixed dispatch IDs, preserve every variant, satisfy declared capabilities, and
+bind immutable executor-definition hashes. `create_handoff` requires a non-preview plan plus
+independent expected policy/commit/tree identities; keep the version-one manifest/handoff shapes
+and 4 MiB complete-output limit. No binding may become a command or credential source. Consumer
+adapters own real capability checks, execution, cancellation, custom acceptance, and cleanup.
+Keep shadow comparisons advisory and full shadow jobs isolated from required CI cancellation.
+Do not claim measured savings or enable skips before actual observations, a documented adoption
+threshold, and complete-result gating. See the [handoff guide](docs/test-planning-handoff.md).
+
 All revision-bound providers use the dependency-free runtime under `src/yaga/git/`. Keep repository
 and executable discovery, metadata and alternate-object-store boundaries, process execution,
 environment isolation, time and output limits, object identity parsing, and complete-history checks
