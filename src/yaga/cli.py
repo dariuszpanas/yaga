@@ -16,6 +16,7 @@ from yaga.commands.gate import app as gate_app
 from yaga.commands.github import app as github_app
 from yaga.commands.mode import app as mode_app
 from yaga.commands.path import app as path_app
+from yaga.commands.pull_request import app as pull_request_app
 from yaga.commands.repo import app as repo_app
 from yaga.commands.self_manage import app as self_app
 from yaga.commands.size import app as size_app
@@ -37,6 +38,7 @@ app.add_typer(gate_app, name="gate")
 app.add_typer(github_app, name="github")
 app.add_typer(mode_app, name="mode")
 app.add_typer(path_app, name="path")
+app.add_typer(pull_request_app, name="pull-request")
 app.add_typer(repo_app, name="repo")
 app.add_typer(self_app, name="self")
 app.add_typer(size_app, name="size")

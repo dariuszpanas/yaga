@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from yaga.commands.pull_request import github_description_app
 from yaga.commits.github_event import check_pull_request
 from yaga.commits.github_reporting import (
     PullRequestOutputFormat,
@@ -20,6 +21,7 @@ app = typer.Typer(
 )
 pull_request_app = typer.Typer(help="Inspect one pull-request event.", no_args_is_help=True)
 app.add_typer(pull_request_app, name="pull-request")
+pull_request_app.add_typer(github_description_app, name="description")
 
 
 @pull_request_app.command("check")

@@ -1,0 +1,8 @@
+description-policy-version = 1
+min-words = 20
+max-length = 10000
+heading-min-level = 2
+heading-max-length = 120
+placeholders = ["TODO", "TBD", "Describe the change", "Describe the validation"]
+require-checked-tasks = false
+typos = "skip"

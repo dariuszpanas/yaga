@@ -245,6 +245,148 @@ def successful_json(
     return document
 
 
+def exercise_installed_description(
+    executable: Path, *, consumer: Path, env: dict[str, str]
+) -> None:
+    """Exercise local and event description checks before creating the consumer repository."""
+    policy = consumer.parent / "description-policy.toml"
+    template = consumer.parent / "pull-request-template.md"
+    body = consumer.parent / "pull-request-description.md"
+    event = consumer.parent / "pull-request-event.json"
+    policy.write_text(
+        "description-policy-version = 1\nmin-words = 5\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    template.write_text(
+        "## Summary\n\n<!-- Explain the change. -->\n\n## Validation\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    description = (
+        "## Summary\n\nReject empty descriptions before review.\n\n"
+        "## Validation\n\nRan the description checks successfully.\n"
+    )
+    body.write_text(description, encoding="utf-8", newline="\n")
+    arguments = [
+        str(executable),
+        "pull-request",
+        "description",
+        "check",
+        "--policy",
+        str(policy),
+        "--template",
+        str(template),
+        "--file",
+        str(body),
+        "--format",
+        "json",
+    ]
+    completed = run_bounded(arguments, cwd=consumer, env=env)
+    document = successful_json(completed, operation="pull-request description check")
+    if not (
+        document.get("schema_version") == 1
+        and document.get("kind") == "pull_request_description"
+        and document.get("status") == "passed"
+        and document.get("valid") is True
+        and document.get("policy_path") == str(policy.resolve())
+        and document.get("template_path") == str(template.resolve())
+        and document.get("pull_request_number") is None
+        and document.get("word_count") == 10
+        and document.get("diagnostic_count") == 0
+        and document.get("omitted_diagnostic_count") == 0
+        and document.get("diagnostics") == []
+    ):
+        raise SystemExit("installed wheel description check emitted the wrong report contract")
+
+    event.write_text(
+        json.dumps(
+            {
+                "action": "edited",
+                "number": 7,
+                "pull_request": {
+                    "number": 7,
+                    "state": "open",
+                    "draft": False,
+                    "body": description,
+                },
+            }
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+    event_arguments = [str(executable), "github", *arguments[1:]]
+    source_option = event_arguments.index("--file")
+    event_arguments[source_option : source_option + 2] = ["--event-file", str(event)]
+    event_completed = run_bounded(event_arguments, cwd=consumer, env=env)
+    event_document = successful_json(
+        event_completed, operation="github pull-request description check"
+    )
+    if not (
+        event_document.get("schema_version") == 1
+        and event_document.get("kind") == "pull_request_description"
+        and event_document.get("status") == "passed"
+        and event_document.get("valid") is True
+        and event_document.get("pull_request_number") == 7
+        and event_document.get("diagnostics") == []
+    ):
+        raise SystemExit("installed wheel event description check emitted the wrong report")
+
+    standalone_arguments = arguments.copy()
+    template_option = standalone_arguments.index("--template")
+    del standalone_arguments[template_option : template_option + 2]
+    oversized_heading = "Description details " * 20
+    for markdown, expected_codes in (
+        (f"# {oversized_heading}", {"description.heading-level", "description.heading-length"}),
+        (f"{oversized_heading}\n===", {"description.heading-level", "description.heading-length"}),
+        (f"<h1>{oversized_heading}</h1>", {"description.html-heading"}),
+        ("Explain \u200bthe change.", {"description.invisible-character"}),
+        ("Explain\tthe change.", {"description.tab"}),
+        (r"Explain the change.\n\nTests passed.", {"description.escaped-newline"}),
+        ("Explain `the change.", {"description.backtick"}),
+    ):
+        body.write_text(
+            f"{markdown}\n\nExplain the change in an ordinary paragraph.\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        malformed_description = run_bounded(standalone_arguments, cwd=consumer, env=env)
+        if malformed_description.returncode != 1 or malformed_description.stderr:
+            raise SystemExit(
+                "installed wheel description check accepted malformed Markdown or prose"
+            )
+        malformed_report = json.loads(malformed_description.stdout.decode("utf-8"))
+        if not expected_codes <= {item["code"] for item in malformed_report["diagnostics"]}:
+            raise SystemExit("installed wheel description check omitted Markdown or prose findings")
+
+    body.write_text("Explain the \x08ackend change.", encoding="utf-8", newline="\n")
+    damaged = run_bounded(standalone_arguments, cwd=consumer, env=env)
+    if damaged.returncode != 2 or damaged.stdout:
+        raise SystemExit("installed wheel description check accepted a destructive control")
+    damaged_error = json.loads(damaged.stderr.decode("utf-8"))
+    if "U+0008" not in damaged_error["error"]["message"]:
+        raise SystemExit("installed wheel description error omitted the damaged code point")
+
+    body.write_text("## Summary\n\nOnly one section was filled.\n", encoding="utf-8", newline="\n")
+    missing_section = run_bounded([*arguments, "--quiet"], cwd=consumer, env=env)
+    if missing_section.returncode != 1 or missing_section.stdout or missing_section.stderr:
+        raise SystemExit("installed wheel description check did not reject an incomplete template")
+    policy.write_text(
+        "description-policy-version = 1\nunknown-setting = true\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    malformed = run_bounded(arguments, cwd=consumer, env=env)
+    if malformed.returncode != 2 or malformed.stdout:
+        raise SystemExit("installed wheel description check did not reject an invalid policy")
+    try:
+        failure = json.loads(malformed.stderr.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise SystemExit("installed wheel description error was not UTF-8 JSON") from error
+    if not isinstance(failure, dict) or failure.get("status") != "error":
+        raise SystemExit("installed wheel description check emitted the wrong error contract")
+
+
 def exercise_installed_test_planning(python: Path, *, consumer: Path, env: dict[str, str]) -> None:
     """Preserve the pure policy/planning API in the installed distribution."""
     completed = run_bounded(
@@ -637,6 +779,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         child_environment.pop(variable, None)
     child_environment["PYTHONNOUSERSITE"] = "1"
     child_environment["PYTHONSAFEPATH"] = "1"
+    exercise_installed_description(executable, consumer=consumer, env=child_environment)
     exercise_installed_test_planning(python, consumer=consumer, env=child_environment)
     test_policy = exercise_installed_test_policy(
         executable, consumer=consumer, env=child_environment
@@ -1398,6 +1541,7 @@ def main() -> int:
                 "yaga/commands/change.py",
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
+                "yaga/commands/pull_request.py",
                 "yaga/commands/mode.py",
                 "yaga/commands/repo.py",
                 "yaga/commands/path.py",
@@ -1418,6 +1562,15 @@ def main() -> int:
                 "yaga/branches/policy.py",
                 "yaga/branches/reporting.py",
                 "yaga/branches/service.py",
+                "yaga/descriptions/__init__.py",
+                "yaga/descriptions/checker.py",
+                "yaga/descriptions/hygiene.py",
+                "yaga/descriptions/markdown.py",
+                "yaga/descriptions/models.py",
+                "yaga/descriptions/policy.py",
+                "yaga/descriptions/reporting.py",
+                "yaga/descriptions/service.py",
+                "yaga/descriptions/sources.py",
                 "yaga/changes/__init__.py",
                 "yaga/changes/checker.py",
                 "yaga/changes/git.py",

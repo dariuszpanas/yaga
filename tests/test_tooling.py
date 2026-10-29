@@ -398,6 +398,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "from yaga.cli" not in source, path
         assert "from yaga.changes" not in source, path
         assert "from yaga.branches" not in source, path
+        assert "from yaga.descriptions" not in source, path
         assert "from yaga.trees" not in source, path
         assert "from yaga.sizes" not in source, path
         assert "from yaga.paths" not in source, path
@@ -407,6 +408,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "from yaga.workflows" not in source, path
         assert "import yaga.changes" not in source, path
         assert "import yaga.branches" not in source, path
+        assert "import yaga.descriptions" not in source, path
         assert "import yaga.trees" not in source, path
         assert "import yaga.sizes" not in source, path
         assert "import yaga.paths" not in source, path
@@ -450,6 +452,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "from yaga.cli" not in source, path
         assert "from yaga.changes" not in source, path
         assert "from yaga.branches" not in source, path
+        assert "from yaga.descriptions" not in source, path
         assert "from yaga.trees" not in source, path
         assert "from yaga.sizes" not in source, path
         assert "from yaga.paths" not in source, path
@@ -460,6 +463,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "from yaga.github import" not in source, path
         assert "import yaga.changes" not in source, path
         assert "import yaga.branches" not in source, path
+        assert "import yaga.descriptions" not in source, path
         assert "import yaga.trees" not in source, path
         assert "import yaga.sizes" not in source, path
         assert "import yaga.paths" not in source, path
