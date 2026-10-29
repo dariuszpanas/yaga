@@ -39,6 +39,7 @@ dependencies = [
 
 [project.optional-dependencies]
 quality = [
+    "certifi>=2026.10.19",
     "torch>=2.13,<3",
     "transformers>=5.10,<6",
 ]

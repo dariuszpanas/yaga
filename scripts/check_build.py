@@ -28,6 +28,7 @@ SMOKE_MESSAGE = "feat(build): execute the built wheel"
 EXPECTED_REQUIRES_DIST = ["pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]
 EXPECTED_OPTIONAL_REQUIRES_DIST = [
     "boto3<2,>=1.37; extra == 'quality-bedrock'",
+    "certifi>=2026.10.19; extra == 'quality'",
     "torch<3,>=2.13; extra == 'quality'",
     "transformers<6,>=5.10; extra == 'quality'",
 ]

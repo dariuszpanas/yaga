@@ -10,6 +10,15 @@ through 3.14 for this extra. The repository's Linux CPU index has Python 3.15 wh
 index selection is not part of the published wheel metadata. The core CLI and the separate
 `quality-bedrock` extra do not require PyTorch.
 
+The published `quality` extra also requires `certifi>=2026.10.19` for certificate bundles used
+by supported online model-download dependencies. The [certifi advisory](https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2)
+identifies 2026.10.18 as removing the affected roots; [PyPA recommends 2026.10.19 or later](https://github.com/pypa/advisory-database/blob/main/vulns/certifi/PYSEC-2026-4320.yaml),
+which restores unaffected roots. Upgrade with `pip install --upgrade 'yaga-cli[quality]'` (or
+the equivalent command for your environment) to apply this extra-scoped floor. Wheel metadata
+cannot repair untouched environments, installations using `--no-deps`, or incompatible external
+constraints. This direct requirement also installs certifi if a future model-download dependency
+graph no longer needs it; base CLI and `quality-bedrock` requirements are unchanged.
+
 ## When to use it
 
 Run both checks when exact policy enforcement and broader writing feedback are useful:
