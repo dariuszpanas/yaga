@@ -391,6 +391,57 @@ def test_requested_spelling_dependency_failure_is_not_a_pass(
     assert json.loads(result.stderr)["error"]["kind"] == "input"
 
 
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "stderr"),
+    [
+        (0, b"not-json\n", b""),
+        (
+            0,
+            b'{"type":"typo","line_num":1,"typo":"teh","corrections":["the"]}\n',
+            b"",
+        ),
+        (
+            2,
+            b'{"type":"typo","line_num":1,"typo":"teh","corrections":["the"]}\n',
+            b"untrusted warning",
+        ),
+    ],
+    ids=["malformed-success-output", "findings-with-success-status", "findings-with-stderr"],
+)
+def test_inconsistent_spelling_process_output_is_an_operational_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    returncode: int,
+    stdout: bytes,
+    stderr: bytes,
+) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "trusted-typos")
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process",
+        lambda *_args, **_kwargs: ProcessResult(returncode, stdout, stderr, False, False, False),
+    )
+    result = runner.invoke(
+        app,
+        [
+            *LOCAL,
+            "--policy",
+            str(_policy(tmp_path, 'typos = "check"\n')),
+            "--stdin",
+            "--format",
+            "json",
+        ],
+        input="teh change.",
+    )
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    document = json.loads(result.stderr)
+    assert document["status"] == "error"
+    assert document["error"]["kind"] == "input"
+    assert "not-json" not in result.stderr
+    assert "untrusted warning" not in result.stderr
+
+
 @pytest.mark.parametrize(("line", "offset"), [(2, 0), (1, 100), (65537, 0)])
 def test_spelling_locations_must_belong_to_selected_description(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, line: int, offset: int

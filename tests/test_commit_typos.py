@@ -22,6 +22,42 @@ def test_typos_pass_has_no_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
     assert check_typos("feat: add a clear description") == ()
 
 
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "stderr"),
+    [
+        (0, b"not-json\n", b""),
+        (
+            0,
+            b'{"type":"typo","line_num":1,"typo":"teh","corrections":["the"]}\n',
+            b"",
+        ),
+        (0, b"", b"unexpected warning"),
+        (
+            2,
+            b'{"type":"typo","line_num":1,"typo":"teh","corrections":["the"]}\n',
+            b"partial failure",
+        ),
+    ],
+    ids=[
+        "clean-with-malformed-output",
+        "clean-with-findings",
+        "clean-with-stderr",
+        "findings-with-stderr",
+    ],
+)
+def test_typos_status_and_output_must_agree(
+    monkeypatch: pytest.MonkeyPatch, returncode: int, stdout: bytes, stderr: bytes
+) -> None:
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process",
+        lambda *_args, **_kwargs: ProcessResult(returncode, stdout, stderr, False, False, False),
+    )
+
+    with pytest.raises(InputError, match="unexpected"):
+        check_typos("feat: fix teh spelling")
+
+
 def test_typos_runs_from_the_selected_repository(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
     calls: list[dict[str, object]] = []
@@ -76,6 +112,50 @@ def test_typos_rejects_malformed_findings(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.parametrize(
+    "fields",
+    [
+        '"type":"error","type":"typo"',
+        '"type":"typo","context":{"word":"first","word":"second"}',
+        '"type":"typo","context":NaN',
+        '"type":"typo","context":Infinity',
+        '"type":"typo","context":-Infinity',
+    ],
+    ids=["duplicate-type", "duplicate-nested-field", "nan", "infinity", "negative-infinity"],
+)
+def test_typos_rejects_ambiguous_and_nonfinite_json(
+    monkeypatch: pytest.MonkeyPatch, fields: str
+) -> None:
+    output = ("{" + fields + ',"line_num":1,"typo":"teh","corrections":["the"]}\n').encode()
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process",
+        lambda *_args, **_kwargs: ProcessResult(2, output, b"", False, False, False),
+    )
+
+    with pytest.raises(InputError, match="malformed JSON"):
+        check_typos("feat: fix teh spelling")
+
+
+def test_typos_retains_valid_unknown_provider_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    output = (
+        b'{"type":"typo","line_num":1,"byte_offset":10,"typo":"teh",'
+        b'"corrections":["the"],"path":"-","context":{"count":1,"ratio":0.5}}\n'
+    )
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "C:/bin/typos.exe")
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process",
+        lambda *_args, **_kwargs: ProcessResult(2, output, b"", False, False, False),
+    )
+
+    findings = check_typos("feat: fix teh spelling")
+
+    assert len(findings) == 1
+    assert findings[0].code == "typos.word"
+    assert findings[0].line == 1
+    assert findings[0].column == 11
+
+
+@pytest.mark.parametrize(
     "output",
     [
         b"[" * 2000 + b"0" + b"]" * 2000,
@@ -108,7 +188,7 @@ def test_typos_normalizes_json_decoder_recursion_failure(
         lambda *_args, **_kwargs: ProcessResult(2, b"{}", b"", False, False, False),
     )
 
-    def reject_recursion(_line: str) -> object:
+    def reject_recursion(_line: str, **_options: object) -> object:
         raise RecursionError("decoder nesting limit")
 
     monkeypatch.setattr("yaga.commits.typos.json.loads", reject_recursion)

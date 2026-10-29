@@ -86,9 +86,11 @@ def check_typos(
         raise InputError("typos did not complete within its bounded commit-message check")
     if completed.stdout_overflow or completed.stderr_overflow:
         raise InputError("typos exceeded its bounded commit-message output limit")
+    if completed.returncode in {0, 2} and completed.stderr:
+        raise InputError("typos returned unexpected diagnostic output on stderr")
     if completed.returncode == 0:
-        if completed.stderr:
-            raise InputError("typos returned unexpected diagnostic output on stderr")
+        if completed.stdout:
+            raise InputError("typos returned unexpected output for a successful spelling check")
         return ()
     if completed.returncode != 2:
         detail = safe_error_text(completed.stderr.decode("utf-8", errors="replace"))
@@ -104,7 +106,11 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
         raise InputError("typos returned non-UTF-8 JSON output") from error
     for _line_number, line in enumerate(text.splitlines(), start=1):
         try:
-            value: Any = json.loads(line)
+            value: Any = json.loads(
+                line,
+                object_pairs_hook=_unique_object,
+                parse_constant=_reject_constant,
+            )
         except (ValueError, RecursionError) as error:
             raise InputError("typos returned malformed JSON output") from error
         if not isinstance(value, dict) or value.get("type") != "typo":
@@ -149,6 +155,19 @@ def _parse_findings(output: bytes) -> tuple[Diagnostic, ...]:
     if not diagnostics:
         raise InputError("typos reported findings without JSON diagnostics")
     return tuple(diagnostics)
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    document: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in document:
+            raise ValueError("duplicate JSON key")
+        document[key] = value
+    return document
+
+
+def _reject_constant(_value: str) -> None:
+    raise ValueError("nonfinite JSON value")
 
 
 def _utf8_length(value: str) -> int:
