@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -253,3 +254,53 @@ def test_change_service_composes_loader_git_and_checker_in_order(
         ("git", tmp_path, "main...HEAD"),
         ("check", policy, selection),
     ]
+
+
+def test_complete_pr_range_keeps_source_finding_after_a_docs_only_commit(tmp_path: Path) -> None:
+    def git(*arguments: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(tmp_path), *arguments],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init", "--initial-branch=main")
+    git("config", "user.email", "yaga@example.invalid")
+    git("config", "user.name", "YAGA Tests")
+    (tmp_path / "README.md").write_text("Initial documentation.\n", encoding="utf-8")
+    git("add", "README.md")
+    git("commit", "--quiet", "-m", "chore: initialize")
+    base = git("rev-parse", "HEAD")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "example.py").write_text("VALUE = 1\n", encoding="utf-8")
+    git("add", "src/example.py")
+    git("commit", "--quiet", "-m", "feat: add source without a test")
+    (tmp_path / "README.md").write_text("Updated documentation.\n", encoding="utf-8")
+    git("add", "README.md")
+    git("commit", "--quiet", "-m", "docs: explain the source")
+    head = git("rev-parse", "HEAD")
+    policy = Path(__file__).parents[1] / ".yaga" / "change-policy.toml"
+    arguments = [
+        "change",
+        "check",
+        "--policy",
+        str(policy),
+        "--repo",
+        str(tmp_path),
+        "--format",
+        "json",
+        "--range",
+    ]
+
+    last_commit = runner.invoke(app, [*arguments, "HEAD^..HEAD"])
+    complete_pr = runner.invoke(app, [*arguments, f"{base}...{head}"])
+
+    assert last_commit.exit_code == 0, last_commit.stderr
+    assert json.loads(last_commit.stdout)["status"] == "passed"
+    assert complete_pr.exit_code == 1, complete_pr.stderr
+    document = json.loads(complete_pr.stdout)
+    assert document["status"] == "failed"
+    assert document["paths"] == ["README.md", "src/example.py"]
+    assert document["rules"][0]["code"] == "change.require_any"
+    assert document["rules"][0]["triggered_paths"] == ["src/example.py"]
