@@ -53,6 +53,8 @@ def read_changed_paths(
     older coupling provider retains its existing diagnostic-tolerant behavior.
     """
     base, separator, head = split_revision_range(revision_range)
+    if ":" in base or ":" in head:
+        raise GitError("changed-path range endpoints must not contain object-path selectors")
     repo = open_repository(repository)
     require_complete_history(
         repo,
