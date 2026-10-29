@@ -1203,7 +1203,7 @@ wheels = [
 
 [[package]]
 name = "yaga-cli"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "pyyaml" },

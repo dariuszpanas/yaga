@@ -193,7 +193,7 @@ def test_version_is_available_from_the_installed_command() -> None:
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "yaga 0.3.0"
+    assert result.stdout.strip() == "yaga 0.4.0"
 
 
 def test_github_pull_request_command_requires_explicit_signature_opt_out_for_unsigned_bot(

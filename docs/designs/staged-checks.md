@@ -1,6 +1,6 @@
 # Staged repository checks: design assessment
 
-## Decision for the next release
+## Decision for YAGA 0.4.0
 
 Complete the assessment requested in [#243](https://github.com/dariuszpanas/yaga/issues/243);
 retain the existing committed-only commands in this release. An explicit index source is useful
@@ -89,5 +89,5 @@ malformed/bounded output, missing objects, race failures, and clean temporary-fi
 Installed-wheel tests must compare staged versus committed results and verify that neither index
 bytes nor repository history change. Required CI continues checking exact committed sources.
 
-This closes the design assessment for the next release. Shipping staged execution requires a
+This closes the design assessment for YAGA 0.4.0. Shipping staged execution requires a
 separate implementation decision and the above evidence; it is not part of this release's CLI.

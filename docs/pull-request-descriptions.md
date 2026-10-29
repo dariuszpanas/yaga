@@ -5,8 +5,8 @@ policy when its body changes in CI. YAGA checks required content, word and chara
 heading structure, text hygiene, unfinished placeholders, optional task completion, spelling, and
 an explicitly selected Markdown template.
 
-Use a YAGA build from a reviewed revision containing these commands; the published `0.3.0`
-release does not include them.
+These commands are available in YAGA 0.4.0 and later. Install or upgrade the `yaga-cli`
+distribution before using them.
 
 ```bash
 yaga pull-request description check \
