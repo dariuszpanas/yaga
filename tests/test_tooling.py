@@ -316,7 +316,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "create_handoff(planned, registry, **expected)" in build_gate
     assert '"rejected_handoffs": [True, True, True]' in build_gate
     assert build_gate.index("test_policy = exercise_installed_test_policy(") < build_gate.index(
-        '("init", "--initial-branch=main")'
+        '("init", "--initial-branch=main", "--template=")'
     )
     assert "tree_sha=tree_sha" in build_gate
     assert "invalid.returncode != 2 or invalid.stdout" in build_gate
