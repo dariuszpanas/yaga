@@ -825,6 +825,11 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         check=True,
     )
 
+    exercise_installed_runtime(environment, output)
+
+
+def exercise_installed_runtime(environment: Path, output: Path) -> None:
+    """Exercise the same installed CLI contracts with an already provisioned runtime."""
     consumer = output / "consumer"
     consumer.mkdir()
     config = consumer / ".yaga.toml"
