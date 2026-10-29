@@ -2,6 +2,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.artifacts/
+.cache/
 *.py[cod]
 .coverage
 *.egg-info/

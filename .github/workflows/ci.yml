@@ -145,7 +145,8 @@ jobs:
           - python-version: "3.15"
             os: windows-latest
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # Include setup time and the complete process-heavy suite on Windows.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 20 || 10 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

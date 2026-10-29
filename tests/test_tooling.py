@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tarfile
 import tomllib
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert project["project"]["name"] == "yaga-cli"
     assert project["project"]["scripts"] == {"yaga": "yaga.cli:main"}
     assert project["project"]["dependencies"] == [
+        "pygments>=2.20.0,<3",
         "pyyaml>=6.0.3,<7",
         "typer>=0.27.2,<1",
     ]
@@ -218,7 +221,12 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     ):
         assert f'"{locked_argument}"' in build_gate
     assert '"--no-hashes"' not in build_gate
-    assert 'EXPECTED_REQUIRES_DIST = ["pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]' in build_gate
+    assert check_build.EXPECTED_REQUIRES_DIST == [
+        "pygments<3,>=2.20.0",
+        "pyyaml<7,>=6.0.3",
+        "typer<1,>=0.27.2",
+    ]
+    assert "validate_sdist_metadata(source_distribution)" in build_gate
     assert '"PYTHONPATH"' in build_gate
     assert '"YAGA_ACTION_RUNTIME"' in build_gate
     assert "cwd=consumer" in build_gate
@@ -338,11 +346,13 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"--format",\n            "json"' in build_gate
 
 
-def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
-    valid = (
+@pytest.fixture
+def runtime_metadata() -> bytes:
+    return (
         b"Metadata-Version: 2.4\n"
         b"Requires-Python: >=3.12\n"
         b"Description-Content-Type: text/markdown\n"
+        b"Requires-Dist: pygments<3,>=2.20.0\n"
         b"Requires-Dist: pyyaml<7,>=6.0.3\n"
         b"Requires-Dist: typer<1,>=0.27.2\n"
         b"Requires-Dist: boto3<2,>=1.37; extra == 'quality-bedrock'\n"
@@ -353,9 +363,17 @@ def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
         b'<img src="https://dariuszpanas.github.io/yaga/assets/branding/'
         b'isometric_terminal_y_logo_transparent.png" alt="YAGA terminal Y logo">'
     )
+
+
+def test_wheel_metadata_must_advertise_the_locked_runtime(runtime_metadata: bytes) -> None:
+    valid = runtime_metadata
     check_build.validate_wheel_metadata(valid)
 
     for malformed in (
+        valid.replace(b"Requires-Dist: pygments<3,>=2.20.0\n", b""),
+        valid.replace(b"pygments<3,>=2.20.0", b"pygments<3,>=2.13.0"),
+        valid.replace(b"pygments<3,>=2.20.0", b"pygments>=2.20.0"),
+        valid.replace(b"pygments<3,>=2.20.0", b"pygments<3,>=2.20.0; extra == 'quality'"),
         valid.replace(b"Requires-Dist: pyyaml<7,>=6.0.3\n", b""),
         valid.replace(b"Requires-Dist: typer<1,>=0.27.2\n", b""),
         valid.replace(b"pyyaml<7,>=6.0.3", b"pyyaml>=6.0.3"),
@@ -374,6 +392,63 @@ def test_wheel_metadata_must_advertise_the_locked_runtime() -> None:
     ):
         with pytest.raises(SystemExit):
             check_build.validate_wheel_metadata(malformed)
+
+
+def _sdist_metadata_archive(
+    metadata: bytes,
+    *,
+    names: tuple[str, ...] = ("yaga_cli-0.0.0/PKG-INFO",),
+    entry_type: bytes = tarfile.REGTYPE,
+) -> BytesIO:
+    stream = BytesIO()
+    with tarfile.open(fileobj=stream, mode="w") as archive:
+        for name in names:
+            member = tarfile.TarInfo(name)
+            member.type = entry_type
+            member.linkname = "outside-metadata"
+            member.size = len(metadata) if member.isfile() else 0
+            archive.addfile(member, BytesIO(metadata) if member.isfile() else None)
+    stream.seek(0)
+    return stream
+
+
+def test_sdist_metadata_enforces_the_same_runtime_floor(runtime_metadata: bytes) -> None:
+    with tarfile.open(fileobj=_sdist_metadata_archive(runtime_metadata)) as archive:
+        check_build.validate_sdist_metadata(archive)
+    weakened = runtime_metadata.replace(b"pygments<3,>=2.20.0", b"pygments<3,>=2.13.0")
+    with tarfile.open(fileobj=_sdist_metadata_archive(weakened)) as archive:
+        with pytest.raises(SystemExit, match="runtime dependency metadata"):
+            check_build.validate_sdist_metadata(archive)
+
+
+@pytest.mark.parametrize(
+    "names",
+    [(), ("yaga_cli-0.0.0/PKG-INFO",) * 2, ("yaga_cli-0.0.0/nested/PKG-INFO",)],
+)
+def test_sdist_metadata_must_be_unique_at_the_root(
+    runtime_metadata: bytes, names: tuple[str, ...]
+) -> None:
+    with tarfile.open(fileobj=_sdist_metadata_archive(runtime_metadata, names=names)) as archive:
+        with pytest.raises(SystemExit, match="metadata"):
+            check_build.validate_sdist_metadata(archive)
+
+
+@pytest.mark.parametrize("entry_type", [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.DIRTYPE])
+def test_sdist_metadata_must_not_follow_links_or_directories(
+    runtime_metadata: bytes, entry_type: bytes
+) -> None:
+    with tarfile.open(
+        fileobj=_sdist_metadata_archive(runtime_metadata, entry_type=entry_type)
+    ) as archive:
+        with pytest.raises(SystemExit, match="regular root file"):
+            check_build.validate_sdist_metadata(archive)
+
+
+def test_sdist_metadata_has_a_byte_limit() -> None:
+    oversized = b"x" * (check_build.MAX_DISTRIBUTION_METADATA_BYTES + 1)
+    with tarfile.open(fileobj=_sdist_metadata_archive(oversized)) as archive:
+        with pytest.raises(SystemExit, match="bounded"):
+            check_build.validate_sdist_metadata(archive)
 
 
 @pytest.mark.parametrize("stream", ["stdout", "stderr"])
