@@ -21,6 +21,7 @@ from yaga.commits.models import (
 from yaga.commits.service import check_commits
 from yaga.commits.typos import apply_typos
 from yaga.errors import ConfigurationError, InputError
+from yaga.git.runtime import ProcessResult
 
 
 def _config(tmp_path: Path, *, extra: str = "") -> Path:
@@ -127,6 +128,40 @@ def test_typos_warning_does_not_hide_tool_errors(
     monkeypatch.setattr("yaga.commits.typos.check_typos", fail)
     with pytest.raises(InputError):
         apply_typos(result, policy, repository=tmp_path)
+
+
+def test_duplicate_typos_fields_cannot_demote_a_provider_error_to_a_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy = tmp_path / ".yaga.toml"
+    policy.write_text('[commit]\ntypos="check"\nwarning-rules=["typos.word"]\n', encoding="utf-8")
+    output = (
+        b'{"type":"error","type":"typo","line_num":1,"byte_offset":13,'
+        b'"typo":"teh","corrections":["the"]}\n'
+    )
+    monkeypatch.setattr("yaga.commits.typos.shutil.which", lambda _name: "trusted-typos")
+    monkeypatch.setattr(
+        "yaga.commits.typos.run_bounded_process",
+        lambda *_args, **_kwargs: ProcessResult(2, output, b"", False, False, False),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "commit",
+            "check",
+            "--config",
+            str(policy),
+            "--message",
+            "fix: correct teh input",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert json.loads(result.stderr)["error"]["kind"] == "input"
 
 
 def test_annotation_truncation_never_hides_error_severity() -> None:
