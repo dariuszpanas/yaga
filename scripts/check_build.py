@@ -290,6 +290,23 @@ def successful_json(
     return document
 
 
+def run_smoke_git(git: str, consumer: Path, arguments: list[str]) -> str:
+    """Keep disposable Git setup independent of ambient repository and configuration state."""
+    environment = {
+        name: value for name, value in os.environ.items() if not name.upper().startswith("GIT_")
+    }
+    environment.update(
+        GIT_CONFIG_GLOBAL=os.devnull,
+        GIT_CONFIG_SYSTEM=os.devnull,
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_TERMINAL_PROMPT="0",
+    )
+    completed = run_bounded([git, "-C", str(consumer), *arguments], cwd=consumer, env=environment)
+    if completed.returncode != 0:
+        raise SystemExit("installed wheel disposable Git setup failed")
+    return completed.stdout.decode("utf-8").strip()
+
+
 def exercise_installed_description(
     executable: Path, *, consumer: Path, env: dict[str, str]
 ) -> None:
@@ -1096,7 +1113,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     if git is None:
         raise SystemExit("git is required for the installed change-policy smoke test")
     for arguments in (
-        ("init", "--initial-branch=main"),
+        ("init", "--initial-branch=main", "--template="),
         ("config", "user.name", "YAGA Build"),
         ("config", "user.email", "yaga-build@example.invalid"),
         ("add", "--all"),
@@ -1108,43 +1125,29 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
             "chore: establish smoke repository",
         ),
     ):
-        subprocess.run([git, "-C", str(consumer), *arguments], check=True)
-    base_sha = subprocess.check_output(
-        [git, "-C", str(consumer), "rev-parse", "HEAD"],
-        text=True,
-    ).strip()
+        run_smoke_git(git, consumer, list(arguments))
+    base_sha = run_smoke_git(git, consumer, ["rev-parse", "HEAD"])
     source = consumer / "src" / "package.py"
     test = consumer / "tests" / "test_package.py"
     source.parent.mkdir()
     test.parent.mkdir()
     source.write_text("VALUE = 1\n", encoding="utf-8", newline="\n")
     test.write_text("def test_value():\n    assert 1 == 1\n", encoding="utf-8", newline="\n")
-    subprocess.run([git, "-C", str(consumer), "add", "--all"], check=True)
-    subprocess.run(
-        [git, "-C", str(consumer), "update-index", "--chmod=+x", "src/package.py"],
-        check=True,
-    )
-    subprocess.run(
+    run_smoke_git(git, consumer, ["add", "--all"])
+    run_smoke_git(git, consumer, ["update-index", "--chmod=+x", "src/package.py"])
+    run_smoke_git(
+        git,
+        consumer,
         [
-            git,
-            "-C",
-            str(consumer),
             "commit",
             "--no-verify",
             "--no-gpg-sign",
             "--message",
             "test: cover smoke package",
         ],
-        check=True,
     )
-    head_sha = subprocess.check_output(
-        [git, "-C", str(consumer), "rev-parse", "HEAD"],
-        text=True,
-    ).strip()
-    tree_sha = subprocess.check_output(
-        [git, "-C", str(consumer), "rev-parse", f"{head_sha}^{{tree}}"],
-        text=True,
-    ).strip()
+    head_sha = run_smoke_git(git, consumer, ["rev-parse", "HEAD"])
+    tree_sha = run_smoke_git(git, consumer, ["rev-parse", f"{head_sha}^{{tree}}"])
     exercise_installed_test_plan(
         executable,
         consumer=consumer,
@@ -1173,16 +1176,8 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     size_expected_largest: list[dict[str, object]] = []
     size_expected_total = 0
     for relative_path in size_expected_paths:
-        oid = subprocess.check_output(
-            [git, "-C", str(consumer), "rev-parse", f"{head_sha}:{relative_path}"],
-            text=True,
-        ).strip()
-        committed_size = int(
-            subprocess.check_output(
-                [git, "-C", str(consumer), "cat-file", "-s", oid],
-                text=True,
-            ).strip()
-        )
+        oid = run_smoke_git(git, consumer, ["rev-parse", f"{head_sha}:{relative_path}"])
+        committed_size = int(run_smoke_git(git, consumer, ["cat-file", "-s", oid]))
         size_expected_total += committed_size
         size_expected_largest.append(
             {
