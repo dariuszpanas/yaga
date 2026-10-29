@@ -7,7 +7,8 @@ the supplied Actions.
 ## Choose the right execution surface
 
 The command name tells you which boundary YAGA is checking; it does not automatically select
-every possible check. Keep each concern on the narrowest surface that can express it:
+every possible check. The [command index](commands.md) lists each checker's source, prerequisites,
+formats, and execution surfaces. Keep each concern on the narrowest surface that can express it:
 
 | Surface | Selects | Reads | Writes or trusts | Best use |
 | --- | --- | --- | --- | --- |
@@ -17,7 +18,7 @@ every possible check. Keep each concern on the narrowest surface that can expres
 | `repo check` | An explicit provider list or versioned plan | Selected policies plus the explicit commit/revision inputs | Nothing; provider reports stay separate | One repeatable repository quality gate |
 | `workflow check` / `security` / `lint` | Explicit workflow files or documented defaults | Workflow YAML and local Action metadata | Nothing; lint runs in a hardened container | Actions supply-chain and syntax checks |
 | `commit quality` | One message, commit, or range | Complete selected message, sent to an optional provider | Nothing; model output is advisory | Finding vague or low-information prose |
-| `gate agent-review` | A trusted review lifecycle operation | Provider evidence, requests, and bounded GitHub state | Trusted workflows may react, comment, review, or publish status | Coordinating external review agents |
+| `gate agent-review <operation>` | A trusted review lifecycle operation | Provider evidence, requests, and bounded GitHub state | Trusted workflows may post comments or publish commit statuses | Coordinating external review agents |
 
 The first six surfaces are read-only quality checks. The Agent review gate is different: its
 write-capable operations belong only in a trusted default-branch workflow and must not consume
@@ -42,8 +43,9 @@ this order:
    request, authorize, or publish review outcomes.
 
 This layering keeps local commands fast, CI reproducible, and privileged writes isolated. It also
-makes a failure actionable: a policy finding is exit `1`, while a missing input, malformed event,
-missing Git object, unavailable model, or invalid provider result is exit `2`.
+makes ordinary check failures actionable: a policy finding is exit `1`, while a missing input,
+malformed event, missing Git object, unavailable model, or invalid provider result is exit `2`.
+Trusted lifecycle operations retain their own exit behavior: a `GateError` returns `1`.
 
 ## Interactive CLI
 
@@ -57,6 +59,9 @@ yaga workflow security .github/workflows/ci.yml
 
 The command writes human-readable findings to standard output. Invocation, configuration, Git,
 and other operational errors use standard error and exit `2`; policy findings use exit `1`.
+This describes the policy-check commands above, not the trusted lifecycle operations. CLI usage
+errors may be plain text even when `--format json` was supplied; see
+[exit-aware capture](troubleshooting.md#read-the-exit-code-first).
 
 The standalone policy-check commands `commit check`, `branch check`, `change check`, `mode check`,
 `path check`, `size check`, `tree check`, and both pull-request description commands accept

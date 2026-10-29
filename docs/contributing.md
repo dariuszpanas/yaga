@@ -22,7 +22,22 @@ uv run make ci
 ```
 
 The full gate covers formatting, lint, type checks, tests, repository policies, workflow linting,
-documentation, and the package build. The documentation-only loop is:
+documentation, and the package build. Its default changed-path range is only `HEAD^..HEAD`.
+For a complete PR, run from the head checkout with exact base/head SHAs already available in
+complete local history:
+
+```bash
+uv run yaga commit check --range '<base-sha>..<head-sha>'
+uv run make ci CHANGE_RANGE='<base-sha>...<head-sha>'
+```
+
+The two-dot command checks all branch-only commit messages; the three-dot override checks paths
+against the unique merge base. No remote branch is inferred and no history is fetched. Workflow,
+formatting, and test checks still read the current checkout. The independent
+[minimum runtime qualification](minimum-runtime.md) checks the base wheel's lowest dependency
+resolution; it does not replace the locked gate.
+
+The documentation-only loop is:
 
 ```bash
 make docs

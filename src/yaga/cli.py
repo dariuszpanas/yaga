@@ -26,7 +26,12 @@ from yaga.commands.workflow import app as workflow_app
 
 app = typer.Typer(
     name="yaga",
-    help="Extensible, configurable developer workflow automation.",
+    help="Check explicit messages, files, Git history, and repository policy.",
+    epilog=(
+        "Choose sources, prerequisites, and reports: "
+        "https://dariuszpanas.github.io/yaga/commands.html. "
+        "There is no implicit all-checks mode; run yaga <group> --help for options."
+    ),
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )

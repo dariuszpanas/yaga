@@ -42,6 +42,32 @@ with project and Python environment leakage removed.
 That strict build gate runs on Python 3.12. The Python 3.15 test jobs permit PyYAML's source-build
 fallback because the locked PyYAML release does not publish Python 3.15 wheels.
 
+The default `make ci` changed-path check covers only `HEAD^..HEAD`. To qualify a complete pull
+request, use exact base/head SHAs that are already available in complete local history, and run
+from the head checkout:
+
+```bash
+uv run yaga commit check --range '<base-sha>..<head-sha>'
+uv run make ci CHANGE_RANGE='<base-sha>...<head-sha>'
+```
+
+The independent two-dot commit check selects branch-only commits; the three-dot changed-path
+check compares the head against its unique merge base. Neither command fetches or infers a remote
+branch. The range override does not change workflow, formatting, or test inputs: those still use
+the current checkout. A final docs-only commit must not hide an earlier source change from the
+complete PR check.
+
+Minimum runtime compatibility has a separate optional check:
+
+```bash
+uv run --locked --python 3.12 python scripts/check_minimum_runtime.py --report minimum-runtime.json
+```
+
+It builds a fresh base wheel, resolves the lowest runtime dependency versions outside the checkout,
+checks installed provenance and dependency consistency, and exercises representative CLI/report
+paths. See [minimum runtime qualification](docs/minimum-runtime.md) for scope and retained evidence;
+this complements the frozen-lock `make ci` and strict package build gates.
+
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `mode`,
@@ -429,7 +455,11 @@ gate. Its PR-head configuration is contributor-controlled and is only a quality 
 ## Action contract
 
 The public inputs are exactly `gate`, `operation`, `github-token`, `prerequisite-workflow`,
-`lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`, and `job-timeout-minutes`.
+`lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`, `job-timeout-minutes`, and
+`agent-review-policy-file`. The last input defaults to empty; nonempty values are deliberately
+rejected before API access because this fixed GitHub adapter cannot execute named lenses or bind
+their outcomes to a policy digest. Provider-neutral `gate agent-review policy` commands remain
+available to external adapters.
 `operation` is closed to `invalidate`, `prepare`, `authorize`, `observe`, `request`, and `finalize`.
 Only `prepare` emits the closed `route` capability and `pull_request_number` used by the template;
 its routes are `skip`, `done`, `observe`, `owner`, `external`, and `approved`. Candidate identity

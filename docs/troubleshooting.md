@@ -6,23 +6,39 @@ finding or an operational error.
 
 ## Read the exit code first
 
-Every provider uses the same three-way contract:
+Deterministic policy checks, advisory commit quality, repository aggregation, and receipt
+evaluation use this three-way contract:
 
 | Exit | Meaning | Typical response |
 | --- | --- | --- |
 | `0` | The selected input passed. | Continue the workflow. |
-| `1` | The input was valid but violated policy. | Fix the input or change policy deliberately. |
+| `1` | Policy/advisory findings or failed/incomplete receipt obligations. | Fix the input, finish required work, or change policy deliberately. |
 | `2` | YAGA could not safely complete the check. | Fix invocation, configuration, checkout, Git, or resource limits. |
 
-Use JSON when a script needs to distinguish a finding from an error. Human-readable output is
-intended for people; GitHub output is escaped and bounded for workflow annotations:
+Test policy validation and planning, configuration commands, and review-policy check/plan/template
+use only `0` and `2`; planning does not claim tests or reviews passed. The trusted GitHub lifecycle
+operations (`gate agent-review prepare`, `request`, and their peers) have a separate contract:
+`GateError`, including missing GitHub context, returns `1`. Do not interpret that as a policy
+finding. See the [command index](commands.md#reports-and-execution-surfaces) for formats and surfaces.
+
+For checks supporting JSON, keep standard output and error separate. Passed reports and policy
+findings use stdout; structured operational errors use stderr. This Bash example also preserves
+the exit code when the caller has enabled `set -e`:
 
 ```bash
-yaga commit check --format json > report.json
-status=$?
+status=0
+yaga commit check --file message.txt --format json > report.json 2> error.txt || status=$?
+case "$status" in
+  0|1) cat report.json ;;  # JSON report: inspect findings as well as the exit code.
+  2) cat error.txt >&2 ;; # Structured command error or plain CLI usage error.
+esac
 ```
 
-Do not treat every nonzero result as a policy failure.
+Missing required options or invalid option values can be Typer usage errors even with
+`--format json`; `error.txt` is not guaranteed to contain JSON. Parse it as JSON only after
+checking that it is a valid error document. Human-readable output is for people; supported GitHub
+output escapes and bounds workflow annotations. Do not treat every nonzero result as a policy
+failure.
 
 ## “Configuration not found” or unexpected defaults
 
@@ -88,9 +104,9 @@ complete bounded prompt.
 
 ## “Exactly one source” errors
 
-`commit check` accepts one of `--message`, `--file`, `--stdin`, `--commit`, or `--range`, and
-defaults to `HEAD` only when none is supplied. Do not combine them. A range requires complete
-history and is evaluated oldest first; YAGA will not fetch missing commits.
+`commit check` accepts one of `--title`, `--edit`, `--message`, `--file`, `--stdin`, `--commit`, or
+`--range`, and defaults to `HEAD` only when none is supplied. Do not combine them. A range requires
+complete history and is evaluated oldest first; YAGA will not fetch missing commits.
 
 For a pull request, pass the exact base and head SHAs supplied by the event, usually as one quoted
 environment variable. Do not interpolate untrusted values into shell source.
@@ -155,9 +171,11 @@ docker context show
 docker image inspect "rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
 ```
 
-YAGA uses that audited digest in its installed runtime. An unavailable daemon or missing image is
-an operational error (`2`), not an actionlint finding. The image is normally pulled or made
-available by the environment before the lint command runs.
+YAGA uses that audited digest in its installed runtime. Docker may pull the image when it is
+missing, despite networking being disabled inside the container. Preload it for offline use.
+The active Docker context can target a remote daemon, which receives the bounded workflow
+snapshot. An unavailable daemon, failed pull, or other startup failure is an operational error
+(`2`), not an actionlint finding.
 
 Cleanup failures include the exact private workspace name and a bounded, sanitized Docker cause,
 for example `Docker could not remove private actionlint workspace ...: ...`. Inspect only that

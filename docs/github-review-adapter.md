@@ -128,6 +128,7 @@ permissions and provider-side access controls remain necessary.
 | `approval-marker` | Protected-environment capability used only by `authorize`; otherwise empty. |
 | `request-timeout` | Bounded REST timeout; default `5` seconds. |
 | `job-timeout-minutes` | Bounded action window; the templates use `15`. |
+| `agent-review-policy-file` | Must remain empty. Nonempty values fail before API access: this adapter cannot execute named lenses or bind their outcomes to a policy digest. Use the separate provider-neutral policy commands with an external adapter. |
 
 `prepare` exposes the closed `route` output (`skip`, `done`, `observe`, `owner`, `external`, or
 `approved`) and an exact `pull_request_number` output used only for job concurrency. Candidate

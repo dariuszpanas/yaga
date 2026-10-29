@@ -26,6 +26,36 @@
   authenticated `gh` CLI with bounded process execution, and run the same policy/template checks
   without a checkout or Actions. File, stdin, and event checks remain offline.
 
+- Add a separate minimum-runtime qualification helper that builds a fresh base wheel, installs
+  the lowest resolved runtime dependencies outside the checkout, checks installed imports, and
+  runs the shared CLI smoke checks. Its JSON receipt records actual versions and the wheel hash;
+  the frozen-lock matrix and strict package build gate remain required.
+
+- Make source types, prerequisites, network behavior, reports, repository-plan membership, and
+  Action availability discoverable from installed help and the command guide, with tested local
+  and complete-PR recipes.
+
+### Fixed
+
+- Reject Git object-path selectors in changed-path range endpoints before repository access, so
+  a crafted gitlink cannot redirect the selected comparison and hide policy findings.
+
+- Isolate installed-wheel smoke Git setup from ambient repository variables, user/system
+  configuration, and templates, preserving unrelated repositories during qualification.
+
+- Allow an explicit `CHANGE_RANGE` override for local `make ci` qualification. Document the
+  independent full commit range check and the default last-commit-only comparison.
+
+- Require `certifi>=2026.10.19` in the published `quality` extra, including wheel metadata, to
+  prevent supported model-download stacks retaining older affected certificate bundles. This
+  applies when installing/upgrading with the extra; base and Bedrock requirements are unchanged.
+
+- Reject inconsistent Typos success/finding responses instead of silently accepting unexpected
+  output as a clean spelling result.
+
+- Correct the documented repository-plan key, stdout/stderr capture, lifecycle exit codes,
+  quality-provider help, and the fixed GitHub Action's rejecting policy-file input.
+
 ## [0.3.0] - 2026-10-18
 
 ### Added

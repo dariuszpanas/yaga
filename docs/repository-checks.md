@@ -20,6 +20,9 @@ Branch checks take a name directly and do not inspect Git. Change checks compare
 inspect committed objects, not staged or working-tree edits. Commit those edits before
 expecting a snapshot check to see them. Git-backed checks never fetch missing history.
 
+An explicit staged-index source has been [assessed separately](designs/staged-checks.md).
+It is not implemented in this release; the current committed-source contract remains unchanged.
+
 Each reference above includes a policy example, command, diagnostics, and limits. Policies are
 explicit, versioned files; see [configuration](configuration.md#standalone-provider-policies)
 for the configuration boundary.

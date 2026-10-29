@@ -218,7 +218,10 @@ def quality_check(
         bool, typer.Option("--quiet", "-q", help="Suppress reports and use only the exit code.")
     ] = False,
 ) -> None:
-    """Advisory-check commit-message quality with an optional local model."""
+    """Get advisory message feedback from a local Hugging Face model or remote Bedrock.
+
+    Hugging Face may download models unless --offline; Bedrock sends selected text to AWS.
+    """
     try:
         report = check_commit_quality(
             repository,
