@@ -31,6 +31,12 @@ from yaga.workflows.models import (
 runner = CliRunner()
 
 
+def normalized_help(text: str) -> str:
+    """Compare help prose independently of Rich styling and terminal wrapping."""
+    plain = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+    return re.sub(r"\s+", " ", plain)
+
+
 def single_lens_plan_digest() -> str:
     return build_plan(
         AgentReviewPolicy(
@@ -59,8 +65,17 @@ def commit(repository: Path, message: str) -> str:
     return git(repository, "rev-parse", "HEAD")
 
 
-def test_root_help_exposes_local_policy_and_preserved_gate_commands() -> None:
-    result = runner.invoke(app, ["--help"])
+@pytest.mark.parametrize("color", [False, True])
+def test_root_help_exposes_local_policy_and_preserved_gate_commands(color: bool) -> None:
+    result = runner.invoke(
+        app,
+        ["--help"],
+        color=color,
+        terminal_width=70,
+        env={"NO_COLOR": None, "TERM": "xterm-256color", "FORCE_COLOR": "1", "COLUMNS": "70"}
+        if color
+        else None,
+    )
 
     assert result.exit_code == 0
     assert "branch" in result.stdout
@@ -76,13 +91,25 @@ def test_root_help_exposes_local_policy_and_preserved_gate_commands() -> None:
     assert "size" in result.stdout
     assert "tree" in result.stdout
     assert "workflow" in result.stdout
+    help_text = normalized_help(result.stdout)
+    assert "https://dariuszpanas.github.io/yaga/commands.html" in help_text
+    assert "no implicit all-checks mode" in help_text
 
 
-def test_commit_quality_help_explains_provider_specific_options() -> None:
-    result = runner.invoke(app, ["commit", "quality", "--help"])
+@pytest.mark.parametrize("color", [False, True])
+def test_commit_quality_help_explains_provider_specific_options(color: bool) -> None:
+    result = runner.invoke(
+        app,
+        ["commit", "quality", "--help"],
+        color=color,
+        terminal_width=70,
+        env={"NO_COLOR": None, "TERM": "xterm-256color", "FORCE_COLOR": "1", "COLUMNS": "70"}
+        if color
+        else None,
+    )
 
     assert result.exit_code == 0
-    help_text = re.sub(r"\s+", " ", result.stdout)
+    help_text = normalized_help(result.stdout)
     assert "huggingface" in help_text
     assert "bedrock" in help_text
     assert "classification" in help_text
@@ -90,6 +117,8 @@ def test_commit_quality_help_explains_provider_specific_options() -> None:
     assert "unsupported" in help_text
     assert "rejected" in help_text
     assert "ignored" in help_text
+    assert "local Hugging Face model or remote Bedrock" in help_text
+    assert "Bedrock sends selected text to AWS" in help_text
 
 
 def test_commit_quality_quiet_suppresses_advisory_report(

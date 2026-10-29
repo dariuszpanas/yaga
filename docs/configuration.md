@@ -273,10 +273,22 @@ a tree or workflow policy:
 | `.yaga/path-policy.toml` | `path-policy-version = 1` | exact `--revision` |
 | `.yaga/mode-policy.toml` | `mode-policy-version = 1` | exact `--revision` |
 | `.yaga/size-policy.toml` | `size-policy-version = 1` | exact `--revision` |
-| `.yaga/checks/*.toml` | `repository-plan-version` | explicit `--plan` |
+| `.yaga/checks/*.toml` | `plan-version = 1` or `plan-version = 2` | explicit `--plan` |
 
 These files are quality policy only. A pull-request-controlled plan or policy is never trusted
 security authority for a privileged workflow.
+
+A minimal workflow-only repository plan uses the same explicit version key as larger plans:
+
+```toml
+# workflow-checks.toml
+plan-version = 2
+checks = ["workflow"]
+```
+
+Run it with `yaga repo check --plan workflow-checks.toml`; workflow files come from the current
+checkout. See [Repository plans](repository-plans.md) for all eight supported providers and
+their runtime inputs.
 
 ## Provider configuration examples
 
@@ -340,8 +352,9 @@ diagnostics, and revision requirements.
 Use the narrowest provider that expresses the requirement. `commit` checks message structure and
 footers; `change` checks relationships between changed paths; `branch` checks one supplied branch
 name; `tree`, `path`, `mode`, and `size` check one committed snapshot; and the workflow providers
-check Actions files. Combine them only through explicit `repo check` selections or a checked-in
-plan. A policy file never causes another provider to run.
+check Actions files. Repository plans combine only the supported commit, workflow, tree, path,
+mode, and size providers; invoke branch and change checks separately. A policy file never causes
+another provider to run.
 
 For a committed-tree provider, always pass the exact revision that CI checked out:
 
