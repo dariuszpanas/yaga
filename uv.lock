@@ -1212,6 +1212,7 @@ dependencies = [
 
 [package.optional-dependencies]
 quality = [
+    { name = "certifi" },
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
     { name = "transformers" },
@@ -1234,6 +1235,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", marker = "extra == 'quality-bedrock'", specifier = ">=1.37,<2" },
+    { name = "certifi", marker = "extra == 'quality'", specifier = ">=2026.10.19" },
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "torch", marker = "sys_platform == 'linux' and extra == 'quality'", specifier = ">=2.13,<3", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform != 'linux' and extra == 'quality'", specifier = ">=2.13,<3" },
