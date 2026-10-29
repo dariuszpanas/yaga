@@ -1,9 +1,12 @@
 # Pull-request descriptions
 
-Check a description before opening a pull request, then run the same policy when its body changes
-in CI. YAGA checks required content, word and character limits, heading structure, text hygiene,
-unfinished placeholders, optional task completion, spelling, and an explicitly selected Markdown
-template.
+Check a description before opening a pull request, fetch its current body locally, or run the same
+policy when its body changes in CI. YAGA checks required content, word and character limits,
+heading structure, text hygiene, unfinished placeholders, optional task completion, spelling, and
+an explicitly selected Markdown template.
+
+Use a YAGA build from a reviewed revision containing these commands; the published `0.3.0`
+release does not include them.
 
 ```bash
 yaga pull-request description check \
@@ -12,10 +15,58 @@ yaga pull-request description check \
   --file pr-description.md
 ```
 
-Use `--stdin` instead of `--file` to read standard input. Exactly one source is required. The
-command reads no Git history, discovers no policy or template, and makes no network request.
+Use `--stdin` instead of `--file` to read standard input. Exactly one of `--file`, `--stdin`, or
+`--pr` is required. File and stdin checks make no network request; `--pr` explicitly fetches the
+current GitHub description. The command reads no Git history and discovers no policy or template.
 Policy and template paths are explicit filesystem paths, resolved from the current directory.
 Omit `--template` when the repository needs content checks without a fixed section layout.
+
+## Check an existing pull request
+
+Use `--pr` with a canonical HTTPS pull-request URL to validate the description currently stored
+on GitHub:
+
+```bash
+yaga pull-request description check \
+  --policy examples/description-policy.toml \
+  --template examples/pull-request-template.md \
+  --pr https://github.com/OWNER/REPO/pull/123
+```
+
+For a positive pull-request number, supply its repository explicitly:
+
+```bash
+yaga pull-request description check \
+  --policy examples/description-policy.toml \
+  --pr 123 --repo OWNER/REPO
+```
+
+`--repo OWNER/REPO` selects `github.com`; `--repo HOST/OWNER/REPO` selects a GitHub Enterprise
+host. A URL identifies the host and repository itself, so combining a URL with `--repo` is an
+error. Repository selection is never inferred from a checkout, current branch, or `GH_REPO`.
+`--repo` is only valid with a numeric `--pr`; remote sources cannot be combined with `--file`
+or `--stdin`. Use a URL without query parameters, fragments, credentials, or a custom port.
+
+Install the [GitHub CLI](https://cli.github.com/manual/) and authenticate it for the selected
+host before running the check. `gh` must be on `PATH` outside the current directory; YAGA rejects
+a current-directory executable to avoid implicit Windows executable lookup. YAGA invokes
+`gh pr view` without a shell, reuses the caller's
+existing authentication, and disables interactive prompts. No checkout or GitHub Actions workflow
+is required. Open, closed, and merged pull requests use the same policy, template, and spelling
+checks. The report identifies the returned canonical URL and PR number after verifying that they
+match the requested pull request.
+
+This reads the current body once. It does not recover the description at merge time, prevent later
+edits, or modify the pull request. For a local publication workflow, validate a draft with `--file`,
+publish that same file using the GitHub CLI's `--body-file`, then run `--pr` to check what GitHub
+stored. The [source-text guidance](#preserve-the-source-text) explains how to preserve Markdown
+while writing the draft.
+
+The fetch has a 30-second process timeout, a 512 KiB JSON response limit, and a 64 KiB stderr
+limit. The decoded description still has the normal 64 KiB input limit. Missing `gh`, failed
+authentication or network access, invalid responses, and exceeded limits return exit `2`.
+Raw process output and credentials are not included in error reports. File, stdin, and event
+checks continue to work without `gh` or network access.
 
 ## Policy
 
@@ -207,9 +258,8 @@ yaga github pull-request description check \
   --format github
 ```
 
-Use a YAGA build from a reviewed revision containing this command; the published `0.3.0` release
-does not include it. In an existing unprivileged workflow with that installation and the selected
-policy and template available, include body-edit events:
+In an existing unprivileged workflow with YAGA installed and the selected policy and template
+available, include body-edit events:
 
 ```yaml
 on:
@@ -249,13 +299,14 @@ description checker is installed-only and is not part of either composite Action
 
 Both commands support `--format text`, `--format json`, `--format github`, and `--quiet`. Findings
 return exit `1`; a passing description returns `0`; invalid input, policy/template errors, and
-spelling process failures return `2`. Quiet mode suppresses result reports but retains operational
-errors on standard error.
+fetch or spelling process failures return `2`. Quiet mode suppresses result reports but retains
+operational errors on standard error.
 
 JSON reports use schema version `1` and kind `pull_request_description`. Diagnostics identify the
-failing rule and source line. Reports retain exact finding counts while storing at most 256
-diagnostics; GitHub output escapes untrusted text and emits at most 50 annotations. Description,
-template, and policy files each have a 64 KiB input limit;
+failing rule and source line. For `--pr`, `source` is the canonical returned URL and
+`pull_request_number` is the verified PR number. Reports retain exact finding counts while storing
+at most 256 diagnostics; GitHub output escapes untrusted text and emits at most 50 annotations.
+Description, template, and policy files each have a 64 KiB input limit;
 GitHub events have a 1 MiB limit. Templates support at most 64 headings. The hard UTF-8 byte limit
 applies independently of the configurable character limit.
 

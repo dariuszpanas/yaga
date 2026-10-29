@@ -66,15 +66,19 @@ def test_description_help_exposes_explicit_inputs_without_tokens_or_revisions(
     help_text = _unstyle(result.stdout)
     for option in ("--policy", "--template", "--format", "--quiet"):
         assert option in help_text
-    for unsupported in ("--token", "--repo", "--revision", "--config"):
+    for unsupported in ("--token", "--revision", "--config"):
         assert unsupported not in help_text
     if command == LOCAL:
         assert "--file" in help_text
         assert "--stdin" in help_text
+        assert "--pr" in help_text
+        assert "--repo" in help_text
         assert "--event-file" not in help_text
     else:
         assert "--event-file" in help_text
         assert "--stdin" not in help_text
+        assert "--pr" not in help_text
+        assert "--repo" not in help_text
 
 
 @pytest.mark.parametrize("command", [LOCAL, GITHUB])

@@ -41,11 +41,21 @@ def check_local_description(
     policy_path: PolicyOption,
     file_path: Annotated[
         Path | None,
-        typer.Option("--file", help="UTF-8 description file; mutually exclusive with --stdin."),
+        typer.Option("--file", help="UTF-8 description file; exclusive with --stdin and --pr."),
     ] = None,
     stdin: Annotated[
         bool, typer.Option("--stdin", help="Read description from standard input.")
     ] = False,
+    pull_request: Annotated[
+        str | None,
+        typer.Option(
+            "--pr", help="Fetch the current description with gh: PR URL or positive number."
+        ),
+    ] = None,
+    github_repository: Annotated[
+        str | None,
+        typer.Option("--repo", help="[HOST/]OWNER/REPO; required only with a numeric --pr."),
+    ] = None,
     template_path: TemplateOption = None,
     output_format: FormatOption = DescriptionOutputFormat.TEXT,
     quiet: QuietOption = False,
@@ -55,6 +65,8 @@ def check_local_description(
         policy_path=policy_path,
         file_path=file_path,
         stdin=stdin,
+        pull_request=pull_request,
+        github_repository=github_repository,
         template_path=template_path,
         output_format=output_format,
         quiet=quiet,
@@ -89,6 +101,8 @@ def _run(
     file_path: Path | None = None,
     stdin: bool = False,
     event_file: Path | None = None,
+    pull_request: str | None = None,
+    github_repository: str | None = None,
     template_path: Path | None = None,
 ) -> None:
     try:
@@ -97,6 +111,8 @@ def _run(
             file_path=file_path,
             stdin=stdin,
             event_file=event_file,
+            pull_request=pull_request,
+            github_repository=github_repository,
             template_path=template_path,
         )
     except YagaError as error:
