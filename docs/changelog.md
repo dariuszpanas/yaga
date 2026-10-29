@@ -21,6 +21,11 @@
   control characters without rendering them. Document literal UTF-8 file authoring to preserve
   Markdown through shell commands.
 
+- Add `pull-request description check --pr` for the current body of an existing GitHub pull
+  request. Accept an explicit URL or a number with `--repo`, fetch through the installed
+  authenticated `gh` CLI with bounded process execution, and run the same policy/template checks
+  without a checkout or Actions. File, stdin, and event checks remain offline.
+
 ## [0.3.0] - 2026-10-18
 
 ### Added

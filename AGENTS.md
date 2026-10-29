@@ -14,7 +14,7 @@ Agent review gate is the public review contract. Its current provider adapter re
 ## Preserve the CLI contract
 
 - Keep pull-request description checks installed-only under `src/yaga/descriptions/`, with one
-  explicit versioned policy and file/stdin/event source plus an optional explicit Markdown template.
+  explicit versioned policy and file/stdin/event/PR source plus an optional explicit Markdown template.
   Keep the checker pure, Markdown support deliberate, and Typos execution bounded and isolated.
   Require meaningful content and unique ordered template headings; preserve schema-v1 reports,
   exact finding counts, 256 stored diagnostics, 64 KiB policy/body/template and 1 MiB event limits.
@@ -27,8 +27,15 @@ Agent review gate is the public review contract. Its current provider adapter re
   controls, prose tabs, high-confidence literal newline escapes, and unmatched backticks without
   rejecting ordinary Unicode joining/emoji sequences or guessing arbitrary emphasis. Reject
   unsupported control characters and bare CR before normalization; preserve LF/CRLF input.
-  Never discover templates or policy, access Git/network, inherit commit-author exemptions, or
-  write to GitHub. Keep this provider outside repository plans and both Action import graphs.
+  Keep file/stdin/event sources offline. Only explicit `--pr` may fetch the current body through
+  the installed authenticated `gh` CLI: require a canonical HTTPS URL or a positive number plus
+  `--repo [HOST/]OWNER/REPO`, reject mixed sources and URL/repository ambiguity, and never infer
+  checkout or environment selection. Use shell-free bounded process execution, verify returned
+  PR identity and strict JSON, preserve the 64 KiB decoded-body limit, and never expose raw process
+  output or credentials. Keep the 30-second, 512 KiB stdout, and 64 KiB stderr bounds. Fetches may
+  check open/closed/merged PRs, without retrieving historical descriptions or writing to GitHub.
+  Never discover templates or policy, access Git history, or inherit commit-author exemptions.
+  Keep this provider outside repository plans and both Action import graphs.
 - `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine sources,
   fetch history, reduce a Git selection, or ignore a missing base.
 - Treat commit messages, Git output, revisions, paths, and displayed labels as untrusted. Bound

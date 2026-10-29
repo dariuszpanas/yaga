@@ -14,7 +14,7 @@ or `yaga self update --dry-run` to verify a uv tool installation without updatin
 | `yaga commit template` | Selected policy and explicit conventional type/scope, or plain format | [Authoring help](commit-policy.md#read-only-message-templates) |
 | `yaga config init` / `show` | Target repository or explicit configuration | [Configuration](configuration.md) |
 | `yaga branch check` | Explicit short branch name and policy | [Branch policy](branch-policy.md) |
-| `yaga pull-request description check` | Explicit description file or stdin, policy, and optional Markdown template | [Pull-request descriptions](pull-request-descriptions.md) |
+| `yaga pull-request description check` | Description file, stdin, or current PR fetched with `gh`; explicit policy and optional template | [Pull-request descriptions](pull-request-descriptions.md) |
 | `yaga change check` | Explicit Git range and policy | [Changed-path policy](change-policy.md) |
 | `yaga tree check` | Explicit revision and policy | [Required and forbidden paths](tree-policy.md) |
 | `yaga path check` | Explicit revision and policy | [Path portability](path-policy.md) |

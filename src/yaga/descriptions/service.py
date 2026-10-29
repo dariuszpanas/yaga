@@ -1,4 +1,4 @@
-"""Installed description-check orchestration with explicit local inputs."""
+"""Installed description-check orchestration with explicit offline or gh inputs."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from pathlib import Path
 
 from yaga.commits.typos import check_typos
 from yaga.descriptions.checker import check_description
+from yaga.descriptions.github import fetch_pull_request_description, parse_pull_request_reference
 from yaga.descriptions.markdown import spelling_text
 from yaga.descriptions.models import MAX_DIAGNOSTICS, DescriptionDiagnostic, DescriptionReport
 from yaga.descriptions.policy import load_description_policy
@@ -35,14 +36,31 @@ def check_description_source(
     file_path: Path | None = None,
     stdin: bool = False,
     event_file: Path | None = None,
+    pull_request: str | None = None,
+    github_repository: str | None = None,
     template_path: Path | None = None,
 ) -> CheckedDescription:
     """Check exactly one source; never discover policy, template, Git, or events."""
-    if sum((file_path is not None, stdin, event_file is not None)) != 1:
-        raise InputError("select exactly one description source: --file, --stdin, or --event-file")
+    if sum((file_path is not None, stdin, event_file is not None, pull_request is not None)) != 1:
+        raise InputError(
+            "select exactly one description source: --file, --stdin, --pr, or --event-file"
+        )
+    if github_repository is not None and pull_request is None:
+        raise InputError("--repo requires a numeric --pr source")
+    reference = (
+        parse_pull_request_reference(pull_request, github_repository)
+        if pull_request is not None
+        else None
+    )
     loaded = load_description_policy(policy_path)
+    template = read_description_file(template_path) if template_path is not None else None
     number = None
-    if event_file is not None:
+    if reference is not None:
+        fetched = fetch_pull_request_description(reference)
+        body = fetched.body
+        number = fetched.number
+        source = fetched.url
+    elif event_file is not None:
         event = load_description_event(event_file)
         body = event.body
         number = event.number
@@ -53,7 +71,6 @@ def check_description_source(
     else:
         body = read_description_stdin()
         source = "stdin"
-    template = read_description_file(template_path) if template_path is not None else None
     report = check_description(body, loaded.policy, template=template)
     if loaded.policy.typos == "check":
         # Always isolate Typos configuration from caller-controlled working directories.

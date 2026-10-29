@@ -182,9 +182,16 @@ its deterministic starter template round-trippable through the strict loader.
 
 Pull-request description policy lives under `src/yaga/descriptions/` and remains installed-only.
 Require one explicit versioned policy and description source, plus an optional explicit template.
-Keep the Markdown subset and checker pure; file/stdin/event loading and bounded isolated Typos
-execution belong in adapters. No Git access, network, policy/template discovery, author exemptions,
-or writes belong in this provider. Schema v1 controls prose word minimum, total character maximum,
+Keep the Markdown subset and checker pure; file/stdin/event loading, explicit current-PR fetching,
+and bounded isolated Typos execution belong in adapters. File/stdin/event sources remain offline.
+Only `--pr` invokes the installed authenticated `gh` CLI to read the current description. Require
+a canonical HTTPS PR URL or a positive number plus `--repo [HOST/]OWNER/REPO`; reject mixed sources,
+URL/repository ambiguity, and implicit checkout/environment selection. Use the shared shell-free
+bounded process runtime with a 30-second timeout, 512 KiB stdout, and 64 KiB stderr; strictly parse
+JSON and verify returned PR identity before checking its bounded body. Do not expose raw process
+output or credentials. Support open, closed, and merged PRs without historical-description reads.
+No Git history access, policy/template discovery, author exemptions, or writes belong in this
+provider. Schema v1 controls prose word minimum, total character maximum,
 heading level/length, whole-line placeholders, task completion, and optional spelling. Default
 `heading-min-level` to 2 (strict integer 1 through 6) and `heading-max-length` to 120 (strict integer
 1 through 256). Apply level/length/content checks to top-level ATX and Setext headings; Setext

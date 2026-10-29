@@ -31,6 +31,50 @@ EXPECTED_OPTIONAL_REQUIRES_DIST = [
     "torch<3,>=2.13; extra == 'quality'",
     "transformers<6,>=5.10; extra == 'quality'",
 ]
+DESCRIPTION_REMOTE_SMOKE_SCRIPT = """\
+import json
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+from typer.testing import CliRunner
+from yaga.cli import app
+from yaga.git.runtime import ProcessResult
+
+url = "https://github.com/example/project/pull/7"
+payload = {"body": "## Summary\\nExplain the changed behavior.", "number": 7, "url": url}
+calls = []
+def fetch(command, **options):
+    assert command[1:] == ["pr", "view", "7", "--repo", "github.com/example/project", "--json", "body,number,url"]
+    calls.append(command)
+    return ProcessResult(0, json.dumps(payload).encode(), b"", False, False, False)
+
+with tempfile.TemporaryDirectory() as directory:
+    policy = Path(directory) / "policy.toml"
+    policy.write_text("description-policy-version = 1\\n", encoding="utf-8")
+    arguments = ["pull-request", "description", "check", "--policy", str(policy), "--format", "json"]
+    runner = CliRunner()
+    codes = []
+    with patch("yaga.descriptions.github.shutil.which", return_value=sys.executable), patch("yaga.descriptions.github.run_bounded_process", side_effect=fetch):
+        for source in (["--pr", url], ["--pr", "7", "--repo", "example/project"]):
+            result = runner.invoke(app, arguments + source)
+            assert result.exit_code == 0, result.stderr
+            document = json.loads(result.stdout)
+            assert document["source"] == url and document["pull_request_number"] == 7
+            codes.append(result.exit_code)
+        payload["body"] = "# Oversized heading style"
+        result = runner.invoke(app, arguments + ["--pr", url])
+        assert result.exit_code == 1, result.stderr
+        assert "description.heading-level" in {item["code"] for item in json.loads(result.stdout)["diagnostics"]}
+        codes.append(result.exit_code)
+        payload["url"] = "https://github.com/example/other/pull/7"
+        result = runner.invoke(app, arguments + ["--pr", url])
+        assert result.exit_code == 2 and not result.stdout
+        assert json.loads(result.stderr)["error"]["kind"] == "input"
+        codes.append(result.exit_code)
+print(json.dumps({"exit_codes": codes, "fetches": len(calls)}))
+"""
 TEST_PLANNING_SMOKE_SCRIPT = '''\
 import hashlib
 import json
@@ -385,6 +429,18 @@ def exercise_installed_description(
         raise SystemExit("installed wheel description error was not UTF-8 JSON") from error
     if not isinstance(failure, dict) or failure.get("status") != "error":
         raise SystemExit("installed wheel description check emitted the wrong error contract")
+
+
+def exercise_installed_remote_description(
+    python: Path, *, consumer: Path, env: dict[str, str]
+) -> None:
+    """Exercise the installed remote-source path with a controlled gh transport."""
+    completed = run_bounded(
+        [str(python), "-I", "-c", DESCRIPTION_REMOTE_SMOKE_SCRIPT], cwd=consumer, env=env
+    )
+    document = successful_json(completed, operation="remote description API smoke")
+    if document != {"exit_codes": [0, 0, 1, 2], "fetches": 4}:
+        raise SystemExit("installed wheel remote description check emitted the wrong result")
 
 
 def exercise_installed_test_planning(python: Path, *, consumer: Path, env: dict[str, str]) -> None:
@@ -780,6 +836,7 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     child_environment["PYTHONNOUSERSITE"] = "1"
     child_environment["PYTHONSAFEPATH"] = "1"
     exercise_installed_description(executable, consumer=consumer, env=child_environment)
+    exercise_installed_remote_description(python, consumer=consumer, env=child_environment)
     exercise_installed_test_planning(python, consumer=consumer, env=child_environment)
     test_policy = exercise_installed_test_policy(
         executable, consumer=consumer, env=child_environment
@@ -1564,6 +1621,7 @@ def main() -> int:
                 "yaga/branches/service.py",
                 "yaga/descriptions/__init__.py",
                 "yaga/descriptions/checker.py",
+                "yaga/descriptions/github.py",
                 "yaga/descriptions/hygiene.py",
                 "yaga/descriptions/markdown.py",
                 "yaga/descriptions/models.py",
