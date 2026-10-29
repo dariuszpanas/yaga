@@ -54,8 +54,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         "uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD"
         in makefile
     )
+    assert "CHANGE_RANGE ?= HEAD^..HEAD" in makefile
     assert (
-        "uv run yaga change check --policy .yaga/change-policy.toml --range HEAD^..HEAD" in makefile
+        'uv run yaga change check --policy .yaga/change-policy.toml --range "$(CHANGE_RANGE)"'
+        in makefile
     )
     assert "uv run yaga mode check" not in makefile
     assert "uv run yaga path check" not in makefile
