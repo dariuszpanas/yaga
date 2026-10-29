@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-29
+
 ### Added
 
 - Add installed `pull-request description check` and `github pull-request description check`
@@ -34,6 +36,9 @@
 - Make source types, prerequisites, network behavior, reports, repository-plan membership, and
   Action availability discoverable from installed help and the command guide, with tested local
   and complete-PR recipes.
+
+- Document the staged-check design assessment, including index semantics, report compatibility,
+  and implementation acceptance criteria. Staged execution is not included in this release.
 
 ### Fixed
 
