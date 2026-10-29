@@ -24,8 +24,9 @@ else:
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_SMOKE_OUTPUT_BYTES = 65_536
+MAX_DISTRIBUTION_METADATA_BYTES = 1024 * 1024
 SMOKE_MESSAGE = "feat(build): execute the built wheel"
-EXPECTED_REQUIRES_DIST = ["pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]
+EXPECTED_REQUIRES_DIST = ["pygments<3,>=2.20.0", "pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]
 EXPECTED_OPTIONAL_REQUIRES_DIST = [
     "boto3<2,>=1.37; extra == 'quality-bedrock'",
     "certifi>=2026.10.19; extra == 'quality'",
@@ -211,6 +212,33 @@ def validate_wheel_metadata(raw: bytes) -> None:
     if not isinstance(payload, bytes):
         raise SystemExit("wheel must contain a UTF-8 description")
     validate_description(payload.decode("utf-8"))
+
+
+def validate_sdist_metadata(source_distribution: tarfile.TarFile) -> None:
+    """Require one bounded root metadata file with the same contract as the wheel."""
+    members = [
+        member
+        for member in source_distribution.getmembers()
+        if member.name.rsplit("/", 1)[-1] == "PKG-INFO"
+    ]
+    if len(members) != 1:
+        raise SystemExit("source distribution must contain exactly one metadata document")
+    member = members[0]
+    if (
+        member.name.count("/") != 1
+        or not member.name.startswith("yaga_cli-")
+        or not member.isfile()
+        or not 0 < member.size <= MAX_DISTRIBUTION_METADATA_BYTES
+    ):
+        raise SystemExit("source distribution metadata must be a bounded regular root file")
+    metadata_file = source_distribution.extractfile(member)
+    if metadata_file is None:
+        raise SystemExit("source distribution metadata could not be read")
+    with metadata_file:
+        raw = metadata_file.read(MAX_DISTRIBUTION_METADATA_BYTES + 1)
+    if len(raw) != member.size:
+        raise SystemExit("source distribution metadata size does not match its header")
+    validate_wheel_metadata(raw)
 
 
 def run_bounded(
@@ -1720,6 +1748,7 @@ def main() -> int:
                 raise SystemExit("wheel must contain exactly one metadata document")
             validate_wheel_metadata(wheel.read(metadata_paths[0]))
         with tarfile.open(source_distributions[0], mode="r:gz") as source_distribution:
+            validate_sdist_metadata(source_distribution)
             names = source_distribution.getnames()
             required_suffixes = {
                 "/action.yml": "the composite Action",

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-29
+
+### Fixed
+
+- Require `Pygments>=2.20.0,<3` in base package metadata so minimum-supported installs
+  exclude the versions affected by CVE-2022-40896 and CVE-2026-4539. This constrains the
+  existing Typer/Rich dependency; YAGA does not call the affected language lexers.
+- Check the dependency contract in both wheel and source-distribution metadata, and document
+  advisory auditing of the actual lowest-resolved dependencies before publication separately
+  from their functional CLI qualification.
+
 ## [0.4.0] - 2026-10-29
 
 ### Added

@@ -561,15 +561,24 @@ def test_blocked_input_writer_shares_process_timeout() -> None:
     assert time.monotonic() - before < 2
 
 
+@pytest.mark.parametrize("startup_delay", [0.0, 0.8])
 def test_timeout_terminates_pipe_holding_descendants_within_a_bounded_cleanup(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    startup_delay: float,
 ) -> None:
     started = tmp_path / "timeout-child-started"
+    armed = tmp_path / "timeout-child-armed"
     survived = tmp_path / "timeout-child-survived"
     child_code = (
         "import pathlib,time; "
+        f"time.sleep({startup_delay!r}); "
         f"pathlib.Path({str(started)!r}).write_text('started'); "
-        "time.sleep(1.0); "
+        f"armed=pathlib.Path({str(armed)!r}); "
+        "deadline=time.monotonic()+10; "
+        "\nwhile not armed.exists() and time.monotonic() < deadline: time.sleep(0.01); "
+        "\nif not armed.exists(): raise SystemExit(2)"
+        "\ntime.sleep(1.0); "
         f"pathlib.Path({str(survived)!r}).write_text('survived')"
     )
     parent_code = (
@@ -578,9 +587,43 @@ def test_timeout_terminates_pipe_holding_descendants_within_a_bounded_cleanup(
         f"started=pathlib.Path({str(started)!r}); "
         "deadline=time.monotonic()+5; "
         "\nwhile not started.exists() and time.monotonic() < deadline: time.sleep(0.01); "
+        "\nif not started.exists(): raise SystemExit(2)"
         "\nprint('spawned', flush=True)"
     )
 
+    real_open_process_tree = runtime.open_process_tree
+    ready_at: float | None = None
+
+    class ReadyProcessTree:
+        def __init__(self) -> None:
+            self.tree = real_open_process_tree()
+
+        def creation_flags(self) -> int:
+            return self.tree.creation_flags()
+
+        def starts_new_session(self) -> bool:
+            return self.tree.starts_new_session()
+
+        def attach_and_start(self, process: subprocess.Popen[bytes]) -> None:
+            nonlocal ready_at
+            self.tree.attach_and_start(process)
+            startup_deadline = time.monotonic() + 5.0
+            while process.poll() is None and time.monotonic() < startup_deadline:
+                time.sleep(0.01)
+            if process.poll() != 0 or not started.exists():
+                raise OSError("test setup did not establish a ready pipe-holding descendant")
+            # Begin the real timeout only after both interpreters have started and the
+            # parent has exited. The descendant's survival clock must start here too.
+            armed.write_text("armed")
+            ready_at = time.monotonic()
+
+        def terminate(self, process: subprocess.Popen[bytes]) -> None:
+            self.tree.terminate(process)
+
+        def close(self) -> None:
+            self.tree.close()
+
+    monkeypatch.setattr(runtime, "open_process_tree", ReadyProcessTree)
     before = time.monotonic()
     result = runtime._run_bounded(
         [sys.executable, "-c", parent_code],
@@ -588,12 +631,16 @@ def test_timeout_terminates_pipe_holding_descendants_within_a_bounded_cleanup(
         stderr_limit=1024,
         timeout_seconds=0.6,
     )
-    elapsed = time.monotonic() - before
+    returned_at = time.monotonic()
 
+    assert result.returncode == 0
     assert result.timed_out
     expected_output = b"spawned\r\n" if os.name == "nt" else b"spawned\n"
     assert result.stdout == expected_output
-    assert elapsed < 2.0
+    assert result.stderr == b""
+    assert ready_at is not None
+    assert returned_at - ready_at < 2.0
+    assert returned_at - before < 7.0
     assert started.exists()
     time.sleep(0.6)
     assert not survived.exists()

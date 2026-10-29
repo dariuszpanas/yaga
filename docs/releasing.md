@@ -48,16 +48,20 @@ package users. Twine's metadata check does not prove remote images or links are 
    above it. The Beta classifier is a maturity label; version `0.1.0` is a normal PyPI version,
    not the PEP 440 prerelease `0.1.0b1`. Use `YAGA 0.1.0` as the GitHub Release title;
    keep the maturity label in package metadata rather than appending `(Beta)` to the title.
-2. Merge the release changes and require all hosted CI lanes to pass for the exact commit,
+2. Run [minimum runtime qualification](minimum-runtime.md) and audit the exact recorded
+   dependency pins with no skipped distributions or known advisories. Also audit the release
+   lock; functional smoke and locked-dependency success do not qualify the lowest set.
+3. Merge the release changes and require all hosted CI lanes to pass for the exact commit,
    including Windows. Resolve dependency PR failures before choosing the candidate.
-3. After publication is explicitly authorized, create and push the matching `v0.1.0` tag at that
+4. After publication is explicitly authorized, create and push the matching `v0.1.0` tag at that
    verified commit. Use the corresponding version for later releases.
-4. The workflow requires the tagged commit to be on the default branch, checks that the tag matches
+5. The workflow requires the tagged commit to be on the default branch, checks that the tag matches
    package metadata and a dated changelog entry, and reruns `uv run make ci`. Only then does it
    offer the `pypi` environment approval and upload the validated distributions with attestations.
-5. Verify the PyPI project files and install `yaga-cli==0.1.0` from PyPI in a clean tool environment.
+6. Verify the PyPI project files and install `yaga-cli==0.1.0` from PyPI in a clean tool environment.
    Confirm `yaga --help` and the automatically created GitHub Release. Its wheel and source
-   archive must be the same artifacts published to PyPI.
+   archive must be the same artifacts published to PyPI. Repeat the lowest-resolved installed
+   smoke and audit its actual dependency pins from the public package; retain both reports.
 
 This workflow accepts final `vMAJOR.MINOR.PATCH` tags and does not publish TestPyPI packages.
 After PyPI publication succeeds, a separate job creates the GitHub Release from the validated

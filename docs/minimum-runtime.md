@@ -42,3 +42,30 @@ of versions. Do not raise dependency floors just to match the development lock.
 This helper does not replace `uv run make ci`, the frozen platform matrix, or the strict build
 gate's hash-locked installation. It adds no hosted workload; a small hosted smoke can be considered
 when the Actions budget permits.
+
+## Security audit of the resolved dependencies
+
+Functional smoke success does not mean a dependency set is free of known advisories. Before
+publication, audit the exact installed versions recorded in the minimum-runtime receipt, in
+addition to auditing the release lock. Keep the audit output and the receipt together.
+
+Generate a requirements file from the receipt's `runtime.distributions` mapping, excluding
+`yaga-cli` itself, with one `name==version` per line. Audit those pins without installing them:
+
+```bash
+uv tool run --from pip-audit==2.10.1 pip-audit --no-deps --disable-pip --strict \
+  --requirement minimum-runtime-requirements.txt --format json --output minimum-runtime-audit.json
+```
+
+Require a successful audit with no skipped distributions or known advisories; inspect the JSON
+rather than treating an unavailable advisory service as a clean result. This command contacts the
+advisory service. It does not execute the recorded dependency versions or replace the installed
+smoke checks. Repeat the audit against the actual pins from fresh public-package installations,
+including lowest resolution, after publication. Retain the audit time because advisory data changes.
+
+YAGA 0.4.1 adds a base `Pygments>=2.20.0,<3` constraint to exclude the versions affected by
+[CVE-2022-40896](https://github.com/advisories/GHSA-mrwq-x4v8-fh7p) and
+[CVE-2026-4539](https://github.com/advisories/GHSA-5239-wwwm-4pmq). This is a security-driven floor
+for the existing Typer/Rich dependency, not an attempt to match every development-lock version.
+YAGA does not call the affected Smithy or ADL lexers; that reachability assessment does not waive
+the dependency audit.
