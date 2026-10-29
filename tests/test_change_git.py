@@ -146,6 +146,37 @@ def test_repository_config_cannot_hide_a_changed_gitlink(
     assert selected.paths == ("vendor/dependency",)
 
 
+def test_path_selector_cannot_swallow_the_commit_guard_and_select_a_gitlink_target(
+    repository: tuple[Path, str],
+) -> None:
+    path, base = repository
+    commit_paths(path, "feat: add unchecked source", {"src/example.py": "VALUE = 1\n"})
+    git(path, "update-index", "--add", "--cacheinfo", f"160000,{base},vendor^{{commit}}")
+    git(path, "commit", "--quiet", "-m", "feat: add misleading gitlink")
+
+    # Git treats the appended type guard as part of the tree path, so this is
+    # the earlier gitlink target rather than the explicitly named HEAD commit.
+    assert git(path, "rev-parse", "--verify", "HEAD:vendor^{commit}") == base
+    assert git(path, "rev-parse", "HEAD") != base
+    assert change_git.read_changed_paths(path, f"{base}..HEAD").paths == (
+        "src/example.py",
+        "vendor^{commit}",
+    )
+    for revision_range in (f"{base}..HEAD:vendor", "HEAD:vendor..HEAD"):
+        with pytest.raises(GitError, match="object-path selectors"):
+            change_git.read_changed_paths(path, revision_range)
+
+
+@pytest.mark.parametrize("selector", ["HEAD:vendor", ":README.md", ":/subject"])
+@pytest.mark.parametrize("separator", ["..", "..."])
+def test_object_path_range_endpoints_fail_before_repository_access(
+    tmp_path: Path, selector: str, separator: str
+) -> None:
+    for revision_range in (f"{selector}{separator}HEAD", f"HEAD{separator}{selector}"):
+        with pytest.raises(GitError, match="object-path selectors"):
+            change_git.read_changed_paths(tmp_path / "does-not-exist", revision_range)
+
+
 def test_legacy_grafts_cannot_change_a_linked_worktree_merge_base(
     repository: tuple[Path, str],
 ) -> None:
