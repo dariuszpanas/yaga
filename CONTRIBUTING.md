@@ -45,7 +45,7 @@ fallback because the locked PyYAML release does not publish Python 3.15 wheels.
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `mode`,
-`path`, `repo`, `self`, `size`, `test`, `tree`, `workflow`, and `gate`.
+`path`, `pull-request`, `repo`, `self`, `size`, `test`, `tree`, `workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
@@ -179,6 +179,29 @@ diagnostics.
 `config init` creates only a new standalone `.yaga.toml` with exclusive no-overwrite semantics. It
 must refuse to shadow any effective discovered configuration, never edit `pyproject.toml`, and keep
 its deterministic starter template round-trippable through the strict loader.
+
+Pull-request description policy lives under `src/yaga/descriptions/` and remains installed-only.
+Require one explicit versioned policy and description source, plus an optional explicit template.
+Keep the Markdown subset and checker pure; file/stdin/event loading and bounded isolated Typos
+execution belong in adapters. No Git access, network, policy/template discovery, author exemptions,
+or writes belong in this provider. Schema v1 controls prose word minimum, total character maximum,
+heading level/length, whole-line placeholders, task completion, and optional spelling. Default
+`heading-min-level` to 2 (strict integer 1 through 6) and `heading-max-length` to 120 (strict integer
+1 through 256). Apply level/length/content checks to top-level ATX and Setext headings; Setext
+paragraphs do not contribute prose words. Reject raw HTML `h1` through `h6` tags outside comments,
+code, and escaped literal markup; this narrow rule does not sanitize or forbid other HTML.
+Template headings must occur once in order with meaningful section content; hidden comments and
+fenced code cannot satisfy it. Reject template/policy conflicts as configuration errors.
+Keep fixed text hygiene checks code/comment/escape-aware: suspicious invisible Unicode characters,
+prose tabs, high-confidence literal newline escapes, and unmatched backtick delimiters. Preserve
+ordinary Unicode joining/emoji behavior and source byte-column locations. Reject unsupported
+control characters and bare CR before normalization; accept LF and CRLF. Do not infer lost text,
+rewrite descriptions, or claim complete Markdown rendering or HTML sanitization.
+Preserve 64 KiB policy/body/template bounds, the 1 MiB event bound, 64 template headings, exact
+finding counts with 256 stored diagnostics, schema-v1 reports, and exits 0/1/2. The GitHub body
+adapter validates supported open-PR events without claiming authenticated identity or requiring
+commit metadata. Keep both commands outside repository plans and both Action import graphs.
+See [pull-request descriptions](docs/pull-request-descriptions.md) for the complete public contract.
 
 Branch-name policy lives under `src/yaga/branches/` and remains installed-only. `branch check`
 requires one explicit versioned policy and one explicit short name; never inspect Git, infer the

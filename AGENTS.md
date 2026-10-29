@@ -13,6 +13,22 @@ Agent review gate is the public review contract. Its current provider adapter re
 
 ## Preserve the CLI contract
 
+- Keep pull-request description checks installed-only under `src/yaga/descriptions/`, with one
+  explicit versioned policy and file/stdin/event source plus an optional explicit Markdown template.
+  Keep the checker pure, Markdown support deliberate, and Typos execution bounded and isolated.
+  Require meaningful content and unique ordered template headings; preserve schema-v1 reports,
+  exact finding counts, 256 stored diagnostics, 64 KiB policy/body/template and 1 MiB event limits.
+  Keep `heading-min-level` defaulted to 2 and `heading-max-length` to 120, with strict integer
+  ranges 1–6 and 1–256. Apply these rules to top-level ATX and Setext headings, reject raw HTML
+  heading tags outside comments/code/escaped literals, and reject conflicting templates.
+  Preserve the `description.heading-*` and `description.html-heading` diagnostic boundaries;
+  structural checks are neither a complete Markdown renderer nor an HTML sanitizer.
+  Keep text hygiene source-located and code/comment/escape-aware. Diagnose invisible format
+  controls, prose tabs, high-confidence literal newline escapes, and unmatched backticks without
+  rejecting ordinary Unicode joining/emoji sequences or guessing arbitrary emphasis. Reject
+  unsupported control characters and bare CR before normalization; preserve LF/CRLF input.
+  Never discover templates or policy, access Git/network, inherit commit-author exemptions, or
+  write to GitHub. Keep this provider outside repository plans and both Action import graphs.
 - `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine sources,
   fetch history, reduce a Git selection, or ignore a missing base.
 - Treat commit messages, Git output, revisions, paths, and displayed labels as untrusted. Bound

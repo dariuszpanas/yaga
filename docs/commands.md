@@ -14,6 +14,7 @@ or `yaga self update --dry-run` to verify a uv tool installation without updatin
 | `yaga commit template` | Selected policy and explicit conventional type/scope, or plain format | [Authoring help](commit-policy.md#read-only-message-templates) |
 | `yaga config init` / `show` | Target repository or explicit configuration | [Configuration](configuration.md) |
 | `yaga branch check` | Explicit short branch name and policy | [Branch policy](branch-policy.md) |
+| `yaga pull-request description check` | Explicit description file or stdin, policy, and optional Markdown template | [Pull-request descriptions](pull-request-descriptions.md) |
 | `yaga change check` | Explicit Git range and policy | [Changed-path policy](change-policy.md) |
 | `yaga tree check` | Explicit revision and policy | [Required and forbidden paths](tree-policy.md) |
 | `yaga path check` | Explicit revision and policy | [Path portability](path-policy.md) |
@@ -29,6 +30,7 @@ or `yaga self update --dry-run` to verify a uv tool installation without updatin
 | `yaga workflow security` | Versioned permission and checkout policies | [Workflow checks](workflow-checks.md) |
 | `yaga workflow lint` | Syntax checks through Docker actionlint | [Workflow checks](workflow-checks.md) |
 | `yaga github pull-request check` | Exact event-bound title and commit validation | [GitHub Actions](github-actions.md) |
+| `yaga github pull-request description check` | Description validation from an explicit event file | [Pull-request descriptions](pull-request-descriptions.md#github-actions) |
 | `yaga test policy check` | Validate an explicit test-suite catalog and selection policy | [Test planning](test-planning.md) |
 | `yaga test plan` | Select suites and variants for an explicit Git source and profile | [Test planning](test-planning.md) |
 | `yaga test evaluate` | Check normalized cell results against a trusted plan and explicit execution identities | [Test evaluation](test-planning.md#evaluate-normalized-results) |

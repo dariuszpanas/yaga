@@ -13,12 +13,13 @@ every possible check. Keep each concern on the narrowest surface that can expres
 | --- | --- | --- | --- | --- |
 | `commit check` | One message, commit, or range | Message text and, for Git sources, local history | Nothing; no network or fetch | Deterministic commit policy in a hook or ordinary CI |
 | `github pull-request check` | One event title plus its exact commit range | Event file, checked-out head, complete local history | Nothing; no GitHub API calls | Unprivileged pull-request validation |
+| `pull-request description check` / `github pull-request description check` | One description from a file, stdin, or event adapter | Explicit policy, description, and optional template | Nothing; no Git or API access | Required PR sections, meaningful content, and optional spelling |
 | `repo check` | An explicit provider list or versioned plan | Selected policies plus the explicit commit/revision inputs | Nothing; provider reports stay separate | One repeatable repository quality gate |
 | `workflow check` / `security` / `lint` | Explicit workflow files or documented defaults | Workflow YAML and local Action metadata | Nothing; lint runs in a hardened container | Actions supply-chain and syntax checks |
 | `commit quality` | One message, commit, or range | Complete selected message, sent to an optional provider | Nothing; model output is advisory | Finding vague or low-information prose |
 | `gate agent-review` | A trusted review lifecycle operation | Provider evidence, requests, and bounded GitHub state | Trusted workflows may react, comment, review, or publish status | Coordinating external review agents |
 
-The first five surfaces are read-only quality checks. The Agent review gate is different: its
+The first six surfaces are read-only quality checks. The Agent review gate is different: its
 write-capable operations belong only in a trusted default-branch workflow and must not consume
 pull-request code, artifacts, or caches. A pull-request workflow can report findings, but it is not
 merge-security authority. Combine checks explicitly in CI or a repository plan rather than assuming
@@ -58,10 +59,11 @@ The command writes human-readable findings to standard output. Invocation, confi
 and other operational errors use standard error and exit `2`; policy findings use exit `1`.
 
 The standalone policy-check commands `commit check`, `branch check`, `change check`, `mode check`,
-`path check`, `size check`, and `tree check` accept `--quiet` when a caller needs only the exit
-status. `commit quality` accepts the same option for advisory findings. Quiet mode suppresses
-policy or advisory reports on standard output; operational errors still use standard error and
-exit `2`. Use `--format json` when another program needs the versioned document.
+`path check`, `size check`, `tree check`, and both pull-request description commands accept
+`--quiet` when a caller needs only the exit status. `commit quality` accepts the same option for
+advisory findings. Quiet mode suppresses policy or advisory reports on standard output;
+operational errors still use standard error and exit `2`. Use `--format json` when another
+program needs the versioned document.
 The same providers, plus `workflow check`, `workflow security`, `workflow lint`, and `repo check`,
 support `--format github` for escaped workflow annotations where documented. Configuration reports
 remain text/JSON; `commit quality` also supports GitHub warning/error annotations, while `gate

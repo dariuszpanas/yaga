@@ -13,6 +13,7 @@ become another review conversation. Start with one check and adopt more as your 
 | Problem | What YAGA checks |
 | --- | --- |
 | Commit messages and branch names follow inconsistent conventions | [Commit policy](https://dariuszpanas.github.io/yaga/commit-policy.html) and [branch naming](https://dariuszpanas.github.io/yaga/branch-policy.html) defined by your team |
+| Pull requests omit useful context or leave template sections unfinished | [Description checks](https://dariuszpanas.github.io/yaga/pull-request-descriptions.html) for required content, templates, and optional spelling |
 | A change lands without the related files your project expects | [Changed-path rules](https://dariuszpanas.github.io/yaga/change-policy.html), such as source changes accompanied by tests |
 | Unwanted files, oversized blobs, or incompatible paths enter the repository | [Committed-file checks](https://dariuszpanas.github.io/yaga/repository-checks.html) for contents, sizes, names, and entry modes |
 | GitHub Actions workflows drift from your security and maintenance rules | [Workflow checks](https://dariuszpanas.github.io/yaga/workflow-checks.html) for immutable references, permission and checkout rules, and syntax |

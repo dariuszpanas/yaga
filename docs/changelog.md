@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add installed `pull-request description check` and `github pull-request description check`
+  commands for explicit Markdown files, stdin, and GitHub event bodies. Version-one policies
+  check meaningful content, word and character limits, unfinished placeholders, optional task
+  completion, and isolated Typos spelling. Explicit templates require ordered, filled sections
+  and replacement of unchanged prompts. Reports support text, JSON, and GitHub annotations;
+  existing commit checks and composite Actions retain their separate contracts.
+
+- Check description heading structure even without a template. Default to H2 or deeper and at
+  most 120 heading-text characters; reject empty headings and raw HTML heading tags. Recognize
+  top-level Setext headings so a whole paragraph formatted as an H1 or H2 cannot count as prose.
+  Reject templates whose headings conflict with the selected policy.
+
+- Detect suspicious invisible characters, prose tabs, literal escaped line breaks, and unmatched
+  backticks outside code and comments. Reject bare carriage returns and identify unsupported
+  control characters without rendering them. Document literal UTF-8 file authoring to preserve
+  Markdown through shell commands.
+
 ## [0.3.0] - 2026-10-18
 
 ### Added
