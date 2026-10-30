@@ -57,16 +57,20 @@ branch. The range override does not change workflow, formatting, or test inputs:
 the current checkout. A final docs-only commit must not hide an earlier source change from the
 complete PR check.
 
-Minimum runtime compatibility has a separate optional check:
+Minimum runtime compatibility and security have a separate required CI check on Linux and
+Windows with Python 3.12. Run the same check locally with:
 
 ```bash
 uv run --locked --python 3.12 python scripts/check_minimum_runtime.py --report minimum-runtime.json
 ```
 
 It builds a fresh base wheel, resolves the lowest runtime dependency versions outside the checkout,
-checks installed provenance and dependency consistency, and exercises representative CLI/report
-paths. See [minimum runtime qualification](docs/minimum-runtime.md) for scope and retained evidence;
-this complements the frozen-lock `make ci` and strict package build gates.
+checks installed provenance and dependency consistency, exercises representative CLI/report paths,
+and audits every resolved dependency pin with the locked pip-audit tool. Advisories, skipped or
+missing dependencies, and audit errors fail the check. The release workflow repeats this check on
+both platforms against the retained release wheel before allowing publication. See
+[minimum runtime qualification](docs/minimum-runtime.md) for scope and retained evidence; this
+complements the frozen-lock `make ci` and strict package build gates.
 
 ## CLI and commit policy contract
 

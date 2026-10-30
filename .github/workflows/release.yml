@@ -65,9 +65,48 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  minimum-runtime:
+    name: Audit release minimum dependencies on ${{ matrix.os }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: distributions
+          path: dist/
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: false
+          version: "0.13.0"
+      - run: uv sync --frozen --group dev --python 3.12
+      - name: Qualify and audit the retained release wheel
+        shell: bash
+        env:
+          YAGA_MINIMUM_REPORT: ${{ runner.temp }}/minimum-runtime.json
+        run: >-
+          uv run --frozen --python 3.12 python scripts/check_minimum_runtime.py
+          --wheel dist/*.whl --report "$YAGA_MINIMUM_REPORT"
+      - name: Retain release minimum dependency evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-minimum-runtime-${{ matrix.os }}
+          path: ${{ runner.temp }}/minimum-runtime.json
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Publish to PyPI
-    needs: build
+    needs: [build, minimum-runtime]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 10

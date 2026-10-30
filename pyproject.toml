@@ -72,6 +72,7 @@ yaga = "yaga.cli:main"
 [dependency-groups]
 dev = [
     "hatchling==1.32.4",
+    "pip-audit==2.10.1",
     "pre-commit>=4.6.2,<5",
     "pytest>=8.3",
     "readme-renderer[md]>=46.0",

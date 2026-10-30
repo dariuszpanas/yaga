@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Require lowest-supported base dependency smoke and security audits on Linux and Windows in CI.
+  Release publication now waits for both platforms to audit the exact retained release wheel;
+  advisories, incomplete results, and audit failures block publication.
+
 ## [0.4.1] - 2026-10-29
 
 ### Fixed
