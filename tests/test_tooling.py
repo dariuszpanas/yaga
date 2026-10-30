@@ -18,6 +18,22 @@ from yaga.workflows.lint import ACTIONLINT_IMAGE
 ROOT = Path(__file__).parents[1]
 
 
+def test_installed_description_smoke_preserves_the_explicit_template_path(tmp_path: Path) -> None:
+    intermediate = tmp_path / "intermediate"
+    intermediate.mkdir()
+    consumer = intermediate / ".." / "consumer"
+    consumer.mkdir()
+    assert consumer.parent != consumer.parent.resolve()
+    executable = Path(sys.executable).with_name("yaga.exe" if os.name == "nt" else "yaga")
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().startswith("PYTHON")
+        and key not in {"YAGA_ACTION_RUNTIME", "YAGA_COMMIT_ACTION_RUNTIME"}
+    }
+    check_build.exercise_installed_description(executable, consumer=consumer, env=environment)
+
+
 def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     actionlint_image = ACTIONLINT_IMAGE
     assert actionlint_image == (
@@ -37,6 +53,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     build_requirements = project["build-system"]["requires"]
     assert build_requirements == ["hatchling==1.32.4"]
     assert "hatchling==1.32.4" in project["dependency-groups"]["dev"]
+    assert "pip-audit==2.10.1" in project["dependency-groups"]["dev"]
     assert "pre-commit>=4.6.2,<5" in project["dependency-groups"]["dev"]
     assert project["tool"]["uv"]["required-version"] == ">=0.12.7"
     commit_policy = project["tool"]["yaga"]["commit"]
@@ -165,7 +182,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert ci.count('version: "0.13.0"') == 2
+    assert ci.count('version: "0.13.0"') == 3
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
     assert "yaga_message=\"$(printf '%s\\n\\n%s'" in ci

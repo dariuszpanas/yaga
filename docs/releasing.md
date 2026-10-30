@@ -51,13 +51,19 @@ package users. Twine's metadata check does not prove remote images or links are 
 2. Run [minimum runtime qualification](minimum-runtime.md) and audit the exact recorded
    dependency pins with no skipped distributions or known advisories. Also audit the release
    lock; functional smoke and locked-dependency success do not qualify the lowest set.
+   The minimum-runtime helper includes this audit automatically; CI requires it on both Linux
+   and Windows with Python 3.12.
 3. Merge the release changes and require all hosted CI lanes to pass for the exact commit,
    including Windows. Resolve dependency PR failures before choosing the candidate.
 4. After publication is explicitly authorized, create and push the matching `v0.1.0` tag at that
    verified commit. Use the corresponding version for later releases.
 5. The workflow requires the tagged commit to be on the default branch, checks that the tag matches
-   package metadata and a dated changelog entry, and reruns `uv run make ci`. Only then does it
-   offer the `pypi` environment approval and upload the validated distributions with attestations.
+   package metadata and a dated changelog entry, and reruns `uv run make ci`. Separate Linux and
+   Windows jobs then download the retained wheel, install its lowest base dependencies, run the
+   installed smoke, and audit every resolved pin. Both jobs must pass before the `pypi` environment
+   approval and upload can run. The publisher uses the validated distributions without rebuilding.
+   The platform-specific minimum-runtime receipts are retained as separate Actions artifacts for
+   seven days, including failure evidence when available. Manual rehearsals require the same audit.
 6. Verify the PyPI project files and install `yaga-cli==0.1.0` from PyPI in a clean tool environment.
    Confirm `yaga --help` and the automatically created GitHub Release. Its wheel and source
    archive must be the same artifacts published to PyPI. Repeat the lowest-resolved installed

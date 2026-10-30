@@ -380,7 +380,7 @@ def exercise_installed_description(
         and document.get("status") == "passed"
         and document.get("valid") is True
         and document.get("policy_path") == str(policy.resolve())
-        and document.get("template_path") == str(template.resolve())
+        and document.get("template_path") == str(template)
         and document.get("pull_request_number") is None
         and document.get("word_count") == 10
         and document.get("diagnostic_count") == 0

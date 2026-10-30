@@ -36,7 +36,7 @@ def test_release_workflow_isolates_upload_from_source_and_manual_runs() -> None:
     assert set(workflow["on"]) == {"push", "workflow_dispatch"}
     assert workflow["permissions"] == {"contents": "read"}
     publish = workflow["jobs"]["publish"]
-    assert publish["needs"] == "build"
+    assert publish["needs"] == ["build", "minimum-runtime"]
     assert publish["if"] == "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
     assert publish["permissions"] == {"id-token": "write"}
     assert publish["environment"]["name"] == "pypi"
@@ -48,6 +48,63 @@ def test_release_workflow_isolates_upload_from_source_and_manual_runs() -> None:
     assert any(
         'make ci BUILD_ARGS="--output-dir dist"' in step.get("run", "") for step in build["steps"]
     )
+
+
+@pytest.mark.parametrize("filename", ["ci.yml", "release.yml"])
+def test_minimum_security_matrix_is_complete_and_preserves_evidence(filename: str) -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.load(
+        (root / ".github/workflows" / filename).read_text("utf-8"), yaml.BaseLoader
+    )
+    audit = workflow["jobs"]["minimum-runtime"]
+    assert workflow["permissions"] == {"contents": "read"}
+    assert audit.get("permissions", workflow["permissions"]) == {"contents": "read"}
+    assert audit["strategy"]["matrix"] == {"os": ["ubuntu-latest", "windows-latest"]}
+    assert audit["strategy"]["fail-fast"] == "false"
+    assert audit["runs-on"] == "${{ matrix.os }}"
+    assert "if" not in audit and "continue-on-error" not in audit
+    assert all("continue-on-error" not in step for step in audit["steps"])
+    assert all("if" not in step for step in audit["steps"][:-1])
+    checkout = audit["steps"][0]
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"]["persist-credentials"] == "false"
+    expected_ref = (
+        "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        if filename == "ci.yml"
+        else "${{ github.sha }}"
+    )
+    assert checkout["with"]["ref"] == expected_ref
+    commands = [step["run"] for step in audit["steps"] if "run" in step]
+    assert "uv sync --frozen --group dev --python 3.12" in commands
+    assert len(commands) == 2
+    qualification = audit["steps"][-2]
+    assert qualification["shell"] == "bash"
+    assert "uv run --frozen --python 3.12 python scripts/check_minimum_runtime.py" in commands[-1]
+    assert '--report "$YAGA_MINIMUM_REPORT"' in commands[-1]
+    assert qualification["env"]["YAGA_MINIMUM_REPORT"] == "${{ runner.temp }}/minimum-runtime.json"
+    evidence = audit["steps"][-1]
+    assert evidence["if"] == "always()"
+    assert evidence["uses"].startswith("actions/upload-artifact@")
+    assert evidence["with"]["path"] == "${{ runner.temp }}/minimum-runtime.json"
+    assert evidence["with"]["if-no-files-found"] == "error"
+    assert "${{ matrix.os }}" in evidence["with"]["name"]
+    assert evidence["with"]["name"] != "distributions"
+    if filename == "release.yml":
+        assert audit["needs"] == "build"
+        download = audit["steps"][1]
+        assert download["uses"].startswith("actions/download-artifact@")
+        assert download["with"] == {"name": "distributions", "path": "dist/"}
+        assert "--wheel dist/*.whl" in qualification["run"]
+        assert "uv build" not in "\n".join(commands)
+    else:
+        gate = workflow["jobs"]["gate"]
+        assert gate["needs"] == ["check", "test", "minimum-runtime"]
+        assert gate["if"] == "always()"
+        assert "continue-on-error" not in gate
+        step = gate["steps"][0]
+        assert step["env"]["MINIMUM_RUNTIME_RESULT"] == "${{ needs.minimum-runtime.result }}"
+        assert '[[ "$MINIMUM_RUNTIME_RESULT" == success ]]' in step["run"]
+        assert "set -euo pipefail" in step["run"]
 
 
 def test_release_notes_select_only_the_requested_version() -> None:
