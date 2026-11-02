@@ -120,11 +120,7 @@ def check_pull_request_review_source(
         ):
             remaining = effective_wait_seconds - elapsed_wait
             step: int | float = (
-                POLL_INTERVAL_SECONDS
-                if remaining >= POLL_INTERVAL_SECONDS
-                else (
-                    int(round(remaining)) if abs(remaining - round(remaining)) < 0.05 else remaining
-                )
+                POLL_INTERVAL_SECONDS if remaining >= POLL_INTERVAL_SECONDS else remaining
             )
             sleep_started_at = monotonic_seconds()
             sleep_for_review_poll(step)

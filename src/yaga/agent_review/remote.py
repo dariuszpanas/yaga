@@ -520,7 +520,11 @@ def _normalize_review_comments(raw: Any) -> list[dict[str, Any]]:
         body = entry.get("body")
         if body is None:
             body = ""
-        commit_id = entry.get("commit_id")
+        commit_id = (
+            entry.get("original_commit_id")
+            if entry.get("original_commit_id") is not None
+            else entry.get("commit_id")
+        )
         if isinstance(commit_id, str):
             commit_id = commit_id.lower()
         items.append(
