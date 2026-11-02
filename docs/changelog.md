@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add `pull-request review check` for offline review-state snapshots (`--file`) and live GitHub
+  pull requests (`--pr`, or a positive number with `--repo`) fetched read-only through the
+  installed authenticated `gh` CLI. Reports support text, schema-v1 JSON, and GitHub annotations
+  with exit codes `0`, `1`, and `2`.
+- Add built-in `codex`, `copilot`, and `claude` bot presets plus custom bot identity, reaction,
+  head-commit `check-runs`, and `delay-seconds` (`0..300`) settings to `[agent-review]`. Allow
+  omitting `[agent-review.agents]` when `required` only names built-in presets, default `preset`,
+  `outcome`, and `publication` on custom agent tables, and remove the unused `instruction` field.
+
+### Changed
+
+- Parallelize test suite execution with `pytest-xdist` (`-n auto --dist worksteal`) in local and
+  hosted CI runs.
+
 ### Fixed
 
 - Require lowest-supported base dependency smoke and security audits on Linux and Windows in CI.

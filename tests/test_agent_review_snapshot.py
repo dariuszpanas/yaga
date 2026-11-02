@@ -464,6 +464,129 @@ def test_codex_review_state_summary_comment_supports_pass_fail_pending_stale_and
         with pytest.raises(InputError):
             evaluate_pull_request_snapshot(policy, malformed)
 
+    security_completed_null_flags = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            issue_comments=[
+                {
+                    "id": 101,
+                    "author_login": CODEX_DEFAULT_BOT_LOGIN,
+                    "author_id": CODEX_DEFAULT_BOT_USER_ID,
+                    "app_id": CODEX_DEFAULT_BOT_APP_ID,
+                    "created_at": "2026-11-01T18:01:00Z",
+                    "updated_at": "2026-11-01T18:05:00Z",
+                    "body": (
+                        "<!-- codex-pull-request-review-summary -->\n"
+                        "<!-- codex-review-state:v1 "
+                        + json.dumps(
+                            {
+                                "code_review": {
+                                    "commit_sha": HEAD_SHA,
+                                    "has_any_findings": False,
+                                    "has_unresolved_findings": False,
+                                    "status": "completed",
+                                },
+                                "security_review": {
+                                    "commit_sha": HEAD_SHA,
+                                    "has_any_findings": None,
+                                    "has_unresolved_findings": None,
+                                    "status": "completed",
+                                },
+                            },
+                            separators=(",", ":"),
+                        )
+                        + " -->\n\n## Codex Review Summary"
+                    ),
+                }
+            ]
+        )
+    )
+    assert (
+        evaluate_pull_request_snapshot(policy, security_completed_null_flags).aggregate.state
+        is LensOutcome.PASSED
+    )
+
+    security_running_on_head = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            issue_comments=[
+                {
+                    "id": 102,
+                    "author_login": CODEX_DEFAULT_BOT_LOGIN,
+                    "author_id": CODEX_DEFAULT_BOT_USER_ID,
+                    "app_id": CODEX_DEFAULT_BOT_APP_ID,
+                    "created_at": "2026-11-01T18:01:00Z",
+                    "updated_at": "2026-11-01T18:05:00Z",
+                    "body": (
+                        "<!-- codex-pull-request-review-summary -->\n"
+                        "<!-- codex-review-state:v1 "
+                        + json.dumps(
+                            {
+                                "code_review": {
+                                    "commit_sha": HEAD_SHA,
+                                    "has_any_findings": False,
+                                    "has_unresolved_findings": False,
+                                    "status": "completed",
+                                },
+                                "security_review": {
+                                    "commit_sha": HEAD_SHA,
+                                    "has_any_findings": None,
+                                    "has_unresolved_findings": None,
+                                    "status": "running",
+                                },
+                            },
+                            separators=(",", ":"),
+                        )
+                        + " -->\n\n## Codex Review Summary"
+                    ),
+                }
+            ]
+        )
+    )
+    assert (
+        evaluate_pull_request_snapshot(policy, security_running_on_head).aggregate.state
+        is LensOutcome.PENDING
+    )
+
+    security_retained_from_pr_opened = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            issue_comments=[
+                {
+                    "id": 103,
+                    "author_login": CODEX_DEFAULT_BOT_LOGIN,
+                    "author_id": CODEX_DEFAULT_BOT_USER_ID,
+                    "app_id": CODEX_DEFAULT_BOT_APP_ID,
+                    "created_at": "2026-11-01T18:01:00Z",
+                    "updated_at": "2026-11-01T18:05:00Z",
+                    "body": (
+                        "<!-- codex-pull-request-review-summary -->\n"
+                        "<!-- codex-review-state:v1 "
+                        + json.dumps(
+                            {
+                                "code_review": {
+                                    "commit_sha": HEAD_SHA,
+                                    "has_any_findings": False,
+                                    "has_unresolved_findings": False,
+                                    "status": "completed",
+                                },
+                                "security_review": {
+                                    "commit_sha": OLD_SHA,
+                                    "has_any_findings": None,
+                                    "has_unresolved_findings": None,
+                                    "status": "completed",
+                                },
+                            },
+                            separators=(",", ":"),
+                        )
+                        + " -->\n\n## Codex Review Summary"
+                    ),
+                }
+            ]
+        )
+    )
+    assert (
+        evaluate_pull_request_snapshot(policy, security_retained_from_pr_opened).aggregate.state
+        is LensOutcome.PASSED
+    )
+
 
 def test_stale_review_on_previous_commit_reports_pending_with_stale_summary() -> None:
     policy = codex_and_copilot_policy()
