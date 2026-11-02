@@ -203,6 +203,26 @@ read credentials. Run the installed `policy check`, `plan`, `template`, and `eva
 that adapter's trusted workflow. The fixed GitHub composite Action does not accept configured policies. PR-controlled policy or receipt content must
 never be used as security authority.
 
+## Pull-request review state
+
+To evaluate a pull request's review state directly against an `[agent-review]` policy without a
+custom receipt generator, use `yaga pull-request review check` with either an offline snapshot
+JSON file (`--file`) or a live GitHub pull request (`--pr`) fetched via the installed authenticated
+`gh` CLI:
+
+```bash
+yaga pull-request review check --policy .yaga/agent-review-policy.toml --file pr-review-snapshot.json
+yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr https://github.com/OWNER/REPO/pull/123
+yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr 123 --repo OWNER/REPO --format json
+```
+
+Each configured lens resolves its review bot identity from built-in presets (`codex` defaults to
+`chatgpt-codex-connector[bot]` with user ID `199175422` and app ID `1144995`; `copilot` defaults to
+`copilot-pull-request-reviewer[bot]`) or explicit lens keys (`bot-login`, `bot-user-id`,
+`bot-app-id`, `pass-reactions`, `pending-reactions`). Reviews and summary comments bound to an
+older commit SHA, or reactions predating the current head commit timestamp, report `pending` (stale)
+and exit `1` so stale approvals never pass a new head commit.
+
 ## Evidence responsibility
 
 An external adapter must correlate results to the exact pull request, base and head commits,

@@ -1,4 +1,4 @@
-"""Installed commands for explicit pull-request description checks."""
+"""Installed commands for explicit pull-request description and review checks."""
 
 from __future__ import annotations
 
@@ -7,6 +7,13 @@ from typing import Annotated
 
 import typer
 
+from yaga.agent_review.evaluation import LensOutcome
+from yaga.agent_review.service import (
+    ReviewOutputFormat,
+    check_pull_request_review_source,
+    render_pull_request_review_error,
+    render_pull_request_review_report,
+)
 from yaga.descriptions.reporting import (
     DescriptionOutputFormat,
     render_description_error,
@@ -17,18 +24,27 @@ from yaga.errors import YagaError
 
 app = typer.Typer(help="Check pull-request content.", no_args_is_help=True)
 description_app = typer.Typer(help="Check a Markdown PR description.", no_args_is_help=True)
+review_app = typer.Typer(help="Check pull-request review state.", no_args_is_help=True)
 github_description_app = typer.Typer(
     help="Check the description in one explicit GitHub event.", no_args_is_help=True
 )
 app.add_typer(description_app, name="description")
+app.add_typer(review_app, name="review")
 
 PolicyOption = Annotated[Path, typer.Option("--policy", help="Explicit description policy TOML.")]
+ReviewPolicyOption = Annotated[
+    Path, typer.Option("--policy", help="Explicit Agent review policy TOML.")
+]
 TemplateOption = Annotated[
     Path | None,
     typer.Option("--template", help="Explicit Markdown template with required headings."),
 ]
 FormatOption = Annotated[
     DescriptionOutputFormat,
+    typer.Option("--format", case_sensitive=False, help="Report format."),
+]
+ReviewFormatOption = Annotated[
+    ReviewOutputFormat,
     typer.Option("--format", case_sensitive=False, help="Report format."),
 ]
 QuietOption = Annotated[
@@ -71,6 +87,43 @@ def check_local_description(
         output_format=output_format,
         quiet=quiet,
     )
+
+
+@review_app.command("check")
+def check_pull_request_review(
+    policy_path: ReviewPolicyOption,
+    file_path: Annotated[
+        Path | None,
+        typer.Option("--file", help="UTF-8 review snapshot JSON; exclusive with --pr."),
+    ] = None,
+    pull_request: Annotated[
+        str | None,
+        typer.Option(
+            "--pr", help="Fetch the current review state with gh: PR URL or positive number."
+        ),
+    ] = None,
+    github_repository: Annotated[
+        str | None,
+        typer.Option("--repo", help="[HOST/]OWNER/REPO; required only with a numeric --pr."),
+    ] = None,
+    output_format: ReviewFormatOption = ReviewOutputFormat.TEXT,
+    quiet: QuietOption = False,
+) -> None:
+    """Validate pull-request review state from a snapshot file or live gh PR against policy."""
+    try:
+        checked = check_pull_request_review_source(
+            policy_path=policy_path,
+            file_path=file_path,
+            pull_request=pull_request,
+            github_repository=github_repository,
+        )
+    except YagaError as error:
+        typer.echo(render_pull_request_review_error(error, output_format), err=True)
+        raise typer.Exit(code=2) from error
+    if not quiet:
+        typer.echo(render_pull_request_review_report(checked, output_format))
+    if checked.evaluation.aggregate.state is not LensOutcome.PASSED:
+        raise typer.Exit(code=1)
 
 
 @github_description_app.command("check")
