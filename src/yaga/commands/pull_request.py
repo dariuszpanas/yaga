@@ -10,6 +10,7 @@ import typer
 from yaga.agent_review.evaluation import LensOutcome
 from yaga.agent_review.service import (
     ReviewOutputFormat,
+    ReviewSubmitMode,
     check_pull_request_review_source,
     render_pull_request_review_error,
     render_pull_request_review_report,
@@ -46,6 +47,14 @@ FormatOption = Annotated[
 ReviewFormatOption = Annotated[
     ReviewOutputFormat,
     typer.Option("--format", case_sensitive=False, help="Report format."),
+]
+ReviewSubmitOption = Annotated[
+    ReviewSubmitMode,
+    typer.Option(
+        "--submit-review",
+        case_sensitive=False,
+        help="Submit a commit-bound PR review for --pr: none, approve, request-changes, or both.",
+    ),
 ]
 QuietOption = Annotated[
     bool, typer.Option("--quiet", "-q", help="Suppress reports; errors still appear on stderr.")
@@ -106,6 +115,14 @@ def check_pull_request_review(
         str | None,
         typer.Option("--repo", help="[HOST/]OWNER/REPO; required only with a numeric --pr."),
     ] = None,
+    wait_seconds: Annotated[
+        int | None,
+        typer.Option(
+            "--wait-seconds",
+            help="Bounded poll budget (0..600) while a live --pr review is actively running.",
+        ),
+    ] = None,
+    submit_review: ReviewSubmitOption = ReviewSubmitMode.NONE,
     output_format: ReviewFormatOption = ReviewOutputFormat.TEXT,
     quiet: QuietOption = False,
 ) -> None:
@@ -116,6 +133,8 @@ def check_pull_request_review(
             file_path=file_path,
             pull_request=pull_request,
             github_repository=github_repository,
+            wait_seconds=wait_seconds,
+            submit_review=submit_review,
         )
     except YagaError as error:
         typer.echo(render_pull_request_review_error(error, output_format), err=True)

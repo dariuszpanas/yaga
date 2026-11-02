@@ -192,20 +192,60 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  review:
+    name: Pull Request Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          version: "0.13.0"
+      - run: uv sync --frozen --group dev --python 3.12
+      - name: Check pull-request review state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          YAGA_PR_NUMBER: ${{ github.event.pull_request.number }}
+          YAGA_REPOSITORY: ${{ github.repository }}
+        run: >-
+          uv run --frozen --python 3.12 yaga pull-request review check
+          --policy .yaga/agent-review-policy.toml
+          --pr "$YAGA_PR_NUMBER"
+          --repo "$YAGA_REPOSITORY"
+          --wait-seconds 300
+          --format github
+
   gate:
     name: CI Prerequisites
     if: always()
-    needs: [check, test, minimum-runtime]
+    needs: [check, test, minimum-runtime, review]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
       - name: Require the complete blocking matrix
         env:
+          EVENT_NAME: ${{ github.event_name }}
           CHECK_RESULT: ${{ needs.check.result }}
           TEST_RESULT: ${{ needs.test.result }}
           MINIMUM_RUNTIME_RESULT: ${{ needs.minimum-runtime.result }}
+          REVIEW_RESULT: ${{ needs.review.result }}
         run: |
           set -euo pipefail
           [[ "$CHECK_RESULT" == success ]]
           [[ "$TEST_RESULT" == success ]]
           [[ "$MINIMUM_RUNTIME_RESULT" == success ]]
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            [[ "$REVIEW_RESULT" == success ]]
+          else
+            [[ "$REVIEW_RESULT" == skipped ]]
+          fi

@@ -1053,3 +1053,82 @@ def test_check_runs_reject_malformed_or_spoofed_records() -> None:
     ):
         with pytest.raises(InputError):
             parse_pull_request_snapshot(base_snapshot_dict(policy=policy, check_runs=[bad_run]))
+
+
+def test_is_review_actively_in_progress_distinguishes_active_from_stale_or_inactive() -> None:
+    from yaga.agent_review import is_review_actively_in_progress
+
+    policy = single_codex_policy()
+    running_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            issue_comments=[
+                {
+                    "id": 200,
+                    "author_login": CODEX_DEFAULT_BOT_LOGIN,
+                    "author_id": CODEX_DEFAULT_BOT_USER_ID,
+                    "app_id": CODEX_DEFAULT_BOT_APP_ID,
+                    "created_at": "2026-11-01T18:02:00Z",
+                    "body": (
+                        "<!-- codex-pull-request-review-summary -->\n"
+                        "<!-- codex-review-state:v1 "
+                        + json.dumps(
+                            {
+                                "code_review": {
+                                    "commit_sha": HEAD_SHA,
+                                    "has_any_findings": None,
+                                    "has_unresolved_findings": None,
+                                    "status": "running",
+                                }
+                            },
+                            separators=(",", ":"),
+                        )
+                        + " -->"
+                    ),
+                }
+            ]
+        )
+    )
+    assert is_review_actively_in_progress(evaluate_pull_request_snapshot(policy, running_snapshot))
+
+    stale_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            issue_comments=[
+                {
+                    "id": 201,
+                    "author_login": CODEX_DEFAULT_BOT_LOGIN,
+                    "author_id": CODEX_DEFAULT_BOT_USER_ID,
+                    "app_id": CODEX_DEFAULT_BOT_APP_ID,
+                    "created_at": "2026-11-01T17:50:00Z",
+                    "body": (
+                        "<!-- codex-pull-request-review-summary -->\n"
+                        "<!-- codex-review-state:v1 "
+                        + json.dumps(
+                            {
+                                "code_review": {
+                                    "commit_sha": OLD_SHA,
+                                    "has_any_findings": False,
+                                    "has_unresolved_findings": False,
+                                    "status": "completed",
+                                }
+                            },
+                            separators=(",", ":"),
+                        )
+                        + " -->"
+                    ),
+                }
+            ]
+        )
+    )
+    assert not is_review_actively_in_progress(
+        evaluate_pull_request_snapshot(policy, stale_snapshot)
+    )
+
+    inactive_snapshot = parse_pull_request_snapshot(base_snapshot_dict())
+    assert not is_review_actively_in_progress(
+        evaluate_pull_request_snapshot(policy, inactive_snapshot)
+    )
+
+    draft_snapshot = parse_pull_request_snapshot(base_snapshot_dict(draft=True))
+    assert not is_review_actively_in_progress(
+        evaluate_pull_request_snapshot(policy, draft_snapshot)
+    )

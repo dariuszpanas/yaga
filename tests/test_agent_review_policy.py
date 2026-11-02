@@ -89,6 +89,7 @@ preset = "copilot"
 preset = "claude"
 check-runs = ["claude-review"]
 delay-seconds = 15
+wait-seconds = 120
 
 [agent-review.agents.custom-bot]
 outcome = "advisory"
@@ -99,6 +100,7 @@ pass-reactions = ["+1", "rocket"]
 pending-reactions = ["eyes"]
 check-runs = ["acme-lint", "acme-security"]
 delay-seconds = 30
+wait-seconds = 300
 """,
         )
     )
@@ -125,6 +127,7 @@ delay-seconds = 30
         pending_reactions=("eyes",),
         check_runs=("claude-review",),
         delay_seconds=15,
+        wait_seconds=120,
     )
     assert policy.lens("custom-bot").resolve_bot() == BotIdentity(
         bot_login="acme-reviewer[bot]",
@@ -134,6 +137,7 @@ delay-seconds = 30
         pending_reactions=("eyes",),
         check_runs=("acme-lint", "acme-security"),
         delay_seconds=30,
+        wait_seconds=300,
     )
 
 
@@ -160,6 +164,8 @@ def test_programmatic_lens_rejects_invalid_check_runs_or_delay() -> None:
         ReviewLens("codex", "codex", check_runs=()).resolve_bot()
     with pytest.raises(ConfigurationError, match="delay-seconds is invalid"):
         ReviewLens("codex", "codex", delay_seconds=301).resolve_bot()
+    with pytest.raises(ConfigurationError, match="wait-seconds is invalid"):
+        ReviewLens("codex", "codex", wait_seconds=601).resolve_bot()
 
 
 @pytest.mark.parametrize(
@@ -236,6 +242,18 @@ def test_programmatic_lens_rejects_invalid_check_runs_or_delay() -> None:
         (
             "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\ndelay-seconds=true",
             "delay-seconds is invalid",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\nwait-seconds=-1",
+            "wait-seconds is invalid",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\nwait-seconds=601",
+            "wait-seconds is invalid",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\nwait-seconds=true",
+            "wait-seconds is invalid",
         ),
     ],
 )

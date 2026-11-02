@@ -1415,3 +1415,37 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _reject_constant(value: str) -> None:
     raise ValueError(value)
+
+
+def is_review_actively_in_progress(
+    evaluation: SnapshotEvaluation,
+    *,
+    aggregation: str = "all-required",
+) -> bool:
+    """Return True only when blocking pending lenses are actively running on head_sha."""
+    if not isinstance(evaluation, SnapshotEvaluation):
+        raise TypeError("evaluation must be a SnapshotEvaluation")
+    if (
+        evaluation.snapshot.draft
+        or evaluation.aggregate.state is not LensOutcome.PENDING
+        or not evaluation.aggregate.blocking_pending
+    ):
+        return False
+    short_head = evaluation.snapshot.head_sha[:12]
+    results_by_lens = {item.lens: item for item in evaluation.results.results}
+    active_flags = [
+        _is_lens_actively_in_progress(results_by_lens.get(name), short_head=short_head)
+        for name in evaluation.aggregate.blocking_pending
+    ]
+    if aggregation == "any-required":
+        return any(active_flags)
+    return all(active_flags)
+
+
+def _is_lens_actively_in_progress(result: LensResult | None, *, short_head: str) -> bool:
+    if result is None or result.outcome is not LensOutcome.PENDING:
+        return False
+    summary = result.summary
+    if summary is None or not summary.endswith(f"for head {short_head}"):
+        return False
+    return " review is in progress " in summary or summary.startswith("check-run ")

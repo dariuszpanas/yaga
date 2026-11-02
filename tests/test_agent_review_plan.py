@@ -79,6 +79,7 @@ def test_explicit_bot_overrides_are_bound_into_plan_digest() -> None:
                     pass_reactions=("+1", "rocket"),
                     check_runs=("codex-review",),
                     delay_seconds=10,
+                    wait_seconds=180,
                 ),
             ),
         )
@@ -91,6 +92,7 @@ def test_explicit_bot_overrides_are_bound_into_plan_digest() -> None:
     assert document["lenses"][0]["pass_reactions"] == ["+1", "rocket"]
     assert document["lenses"][0]["check_runs"] == ["codex-review"]
     assert document["lenses"][0]["delay_seconds"] == 10
+    assert document["lenses"][0]["wait_seconds"] == 180
 
 
 def test_text_plan_is_actionable() -> None:

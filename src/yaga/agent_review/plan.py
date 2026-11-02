@@ -25,6 +25,7 @@ class ReviewPlanItem:
     pending_reactions: tuple[str, ...] | None = None
     check_runs: tuple[str, ...] | None = None
     delay_seconds: int = 0
+    wait_seconds: int = 0
 
 
 def _item_document(item: ReviewPlanItem) -> dict[str, object]:
@@ -49,6 +50,8 @@ def _item_document(item: ReviewPlanItem) -> dict[str, object]:
         document["check_runs"] = list(item.check_runs)
     if item.delay_seconds:
         document["delay_seconds"] = item.delay_seconds
+    if item.wait_seconds:
+        document["wait_seconds"] = item.wait_seconds
     return document
 
 
@@ -104,6 +107,7 @@ def build_plan(policy: AgentReviewPolicy) -> ReviewPlan:
                 pending_reactions=lens.pending_reactions,
                 check_runs=lens.check_runs,
                 delay_seconds=lens.delay_seconds,
+                wait_seconds=lens.wait_seconds,
             )
             for lens in policy.lenses
         ),
