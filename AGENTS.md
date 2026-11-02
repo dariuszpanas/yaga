@@ -36,6 +36,21 @@ Agent review gate is the public review contract. Its current provider adapter re
   check open/closed/merged PRs, without retrieving historical descriptions or writing to GitHub.
   Never discover templates or policy, access Git history, or inherit commit-author exemptions.
   Keep this provider outside repository plans and both Action import graphs.
+- Keep pull-request review checks (`yaga pull-request review check`) installed-only under
+  `src/yaga/agent_review/`, with one explicit versioned policy (`--policy`) and either an offline
+  snapshot file (`--file`) or an explicit live pull request (`--pr`) fetched through the installed
+  authenticated `gh` CLI. Require a canonical HTTPS URL or a positive number plus
+  `--repo [HOST/]OWNER/REPO`, reject mixed sources and URL/repository ambiguity, and never infer
+  checkout or environment selection. Use shell-free bounded process execution with 30-second,
+  512 KiB stdout, and 64 KiB stderr bounds, verify returned PR identity and strict JSON, and never
+  expose raw process output or credentials. Live `--pr` fetches are read-only, set
+  `head_committed_at = None`, and never derive reaction freshness from Git commit dates or
+  partially emulate `yaga-codex-authorization:v2` / `Review Policy Boundary` workflow-run
+  correlation (which belongs exclusively to the `yaga gate agent-review` publisher under
+  `src/yaga/agent_review/github/`): live `--pr` checks require head-bound review or summary
+  evidence (`commit_id == head_sha`, `Reviewed commit`, or `codex-review-state:v1`) to pass, while
+  offline `--file` snapshots may supply an explicit `head_committed_at` timestamp. Keep this CLI
+  check outside repository plans and both Action import graphs.
 - `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine sources,
   fetch history, reduce a Git selection, or ignore a missing base.
 - Treat commit messages, Git output, revisions, paths, and displayed labels as untrusted. Bound
