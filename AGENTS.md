@@ -47,10 +47,12 @@ Agent review gate is the public review contract. Its current provider adapter re
   `head_committed_at = None`, and never derive reaction freshness from Git commit dates or
   partially emulate `yaga-codex-authorization:v2` / `Review Policy Boundary` workflow-run
   correlation (which belongs exclusively to the `yaga gate agent-review` publisher under
-  `src/yaga/agent_review/github/`): live `--pr` checks require head-bound review or summary
-  evidence (`commit_id == head_sha`, `Reviewed commit`, or `codex-review-state:v1`) to pass, while
-  offline `--file` snapshots may supply an explicit `head_committed_at` timestamp. Keep this CLI
-  check outside repository plans and both Action import graphs.
+  `src/yaga/agent_review/github/`): live `--pr` checks require head-bound review, summary, or
+  check-run evidence (`commit_id == head_sha`, `Reviewed commit`, `codex-review-state:v1`, or
+  configured `check-runs` on `commits/{head_sha}/check-runs`) to pass and honor bounded
+  `delay-seconds` (`0..300`), while offline `--file` snapshots may supply an explicit
+  `head_committed_at` timestamp. Keep this CLI check outside repository plans and both Action
+  import graphs.
 - `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine sources,
   fetch history, reduce a Git selection, or ignore a missing base.
 - Treat commit messages, Git output, revisions, paths, and displayed labels as untrusted. Bound

@@ -174,7 +174,7 @@ merge configuration files, or treat the current working tree as a committed snap
 
 Use the Agent review policy when one pull request needs several independent lenses, such as
 correctness, security, and documentation. The policy names each lens, selects a provider preset,
-describes its instruction, chooses whether it blocks, and declares the intended publication mode.
+chooses whether it blocks, and declares the intended publication mode.
 Start with the checked-in [policy example](https://github.com/dariuszpanas/yaga/blob/main/examples/agent-review-policy.toml):
 
 ```bash

@@ -62,7 +62,15 @@ def check_pull_request_review_source(
     policy = load_policy(resolved_policy_path)
     plan_digest = build_plan(policy).digest()
     if reference is not None:
-        snapshot = fetch_pull_request_review_snapshot(reference, plan_digest=plan_digest)
+        resolved_bots = [lens.resolve_bot() for lens in policy.lenses]
+        include_check_runs = any(bool(bot.check_runs) for bot in resolved_bots)
+        delay_seconds = max((bot.delay_seconds for bot in resolved_bots), default=0)
+        snapshot = fetch_pull_request_review_snapshot(
+            reference,
+            plan_digest=plan_digest,
+            include_check_runs=include_check_runs,
+            delay_seconds=delay_seconds,
+        )
         source = snapshot.url or reference.url
     else:
         assert file_path is not None

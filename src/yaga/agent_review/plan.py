@@ -7,7 +7,6 @@ import json
 from dataclasses import dataclass
 
 from yaga.agent_review.policy import AgentReviewPolicy
-from yaga.errors import safe_error_text
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +15,6 @@ class ReviewPlanItem:
 
     name: str
     preset: str
-    instruction: str
     required: bool
     outcome: str
     publication: str
@@ -25,13 +23,14 @@ class ReviewPlanItem:
     bot_app_id: int | None = None
     pass_reactions: tuple[str, ...] | None = None
     pending_reactions: tuple[str, ...] | None = None
+    check_runs: tuple[str, ...] | None = None
+    delay_seconds: int = 0
 
 
 def _item_document(item: ReviewPlanItem) -> dict[str, object]:
     document: dict[str, object] = {
         "name": item.name,
         "preset": item.preset,
-        "instruction": item.instruction,
         "required": item.required,
         "outcome": item.outcome,
         "publication": item.publication,
@@ -46,6 +45,10 @@ def _item_document(item: ReviewPlanItem) -> dict[str, object]:
         document["pass_reactions"] = list(item.pass_reactions)
     if item.pending_reactions is not None:
         document["pending_reactions"] = list(item.pending_reactions)
+    if item.check_runs is not None:
+        document["check_runs"] = list(item.check_runs)
+    if item.delay_seconds:
+        document["delay_seconds"] = item.delay_seconds
     return document
 
 
@@ -91,7 +94,6 @@ def build_plan(policy: AgentReviewPolicy) -> ReviewPlan:
             ReviewPlanItem(
                 name=lens.name,
                 preset=lens.preset,
-                instruction=lens.instruction,
                 required=lens.name in required,
                 outcome=lens.outcome,
                 publication=lens.publication,
@@ -100,6 +102,8 @@ def build_plan(policy: AgentReviewPolicy) -> ReviewPlan:
                 bot_app_id=lens.bot_app_id,
                 pass_reactions=lens.pass_reactions,
                 pending_reactions=lens.pending_reactions,
+                check_runs=lens.check_runs,
+                delay_seconds=lens.delay_seconds,
             )
             for lens in policy.lenses
         ),
@@ -119,7 +123,6 @@ def render_plan(plan: ReviewPlan, output_format: str = "text") -> str:
     for item in plan.items:
         role = "required" if item.required else "advisory"
         lines.append(f"- {item.name} [{role}, {item.outcome}] via {item.preset}")
-        lines.append(f"  {safe_error_text(item.instruction, maximum=4096)}")
     return "\n".join(lines)
 
 

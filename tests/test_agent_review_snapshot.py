@@ -35,8 +35,8 @@ def codex_and_copilot_policy() -> AgentReviewPolicy:
         required=("codex", "copilot"),
         aggregation="all-required",
         lenses=(
-            ReviewLens("codex", "codex", "Review correctness.", "review"),
-            ReviewLens("copilot", "copilot", "Review structure.", "review"),
+            ReviewLens("codex", "codex", "review"),
+            ReviewLens("copilot", "copilot", "review"),
         ),
     )
 
@@ -46,7 +46,7 @@ def single_codex_policy() -> AgentReviewPolicy:
         version=1,
         required=("codex",),
         aggregation="all-required",
-        lenses=(ReviewLens("codex", "codex", "Review correctness.", "review"),),
+        lenses=(ReviewLens("codex", "codex", "review"),),
     )
 
 
@@ -123,8 +123,8 @@ def test_rejects_duplicate_bot_lenses_and_mismatched_plan_digest() -> None:
         required=("correctness", "security"),
         aggregation="all-required",
         lenses=(
-            ReviewLens("correctness", "codex", "Review correctness.", "review"),
-            ReviewLens("security", "codex", "Review security.", "review"),
+            ReviewLens("correctness", "codex", "review"),
+            ReviewLens("security", "codex", "review"),
         ),
     )
     snapshot = parse_pull_request_snapshot(base_snapshot_dict(policy=duplicate_bot_policy))
@@ -135,7 +135,7 @@ def test_rejects_duplicate_bot_lenses_and_mismatched_plan_digest() -> None:
         version=1,
         required=("codex",),
         aggregation="all-required",
-        lenses=(ReviewLens("codex", "codex", "Updated instruction.", "review"),),
+        lenses=(ReviewLens("codex", "codex", "review", publication="inline"),),
     )
     single_snapshot = parse_pull_request_snapshot(base_snapshot_dict())
     with pytest.raises(ConfigurationError, match="plan_digest does not match"):
@@ -654,3 +654,279 @@ def test_snapshot_rejects_truncated_hundred_record_page() -> None:
     ]
     with pytest.raises(InputError, match="page is incomplete"):
         parse_pull_request_snapshot(base_snapshot_dict(reactions=reactions))
+
+
+def test_check_runs_pass_pending_stale_and_fail() -> None:
+    policy = AgentReviewPolicy(
+        version=1,
+        required=("claude",),
+        aggregation="all-required",
+        lenses=(
+            ReviewLens(
+                "claude",
+                "claude",
+                "review",
+                bot_app_id=777,
+                check_runs=("claude-review",),
+            ),
+        ),
+    )
+
+    missing_snapshot = parse_pull_request_snapshot(base_snapshot_dict(policy=policy))
+    missing_eval = evaluate_pull_request_snapshot(policy, missing_snapshot)
+    assert missing_eval.aggregate.state is LensOutcome.PENDING
+    assert "waiting for check-run claude-review" in (missing_eval.results.results[0].summary or "")
+
+    stale_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=policy,
+            check_runs=[
+                {
+                    "id": 1,
+                    "name": "claude-review",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": OLD_SHA,
+                    "app_id": 777,
+                    "started_at": "2026-11-01T17:50:00Z",
+                    "completed_at": "2026-11-01T17:55:00Z",
+                }
+            ],
+        )
+    )
+    stale_eval = evaluate_pull_request_snapshot(policy, stale_snapshot)
+    assert stale_eval.aggregate.state is LensOutcome.PENDING
+    assert "last check-run claude-review for claude[bot] is stale" in (
+        stale_eval.results.results[0].summary or ""
+    )
+
+    in_progress_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=policy,
+            check_runs=[
+                {
+                    "id": 2,
+                    "name": "claude-review",
+                    "status": "in_progress",
+                    "conclusion": None,
+                    "head_sha": HEAD_SHA,
+                    "app_id": 777,
+                    "started_at": "2026-11-01T18:01:00Z",
+                }
+            ],
+        )
+    )
+    in_progress_eval = evaluate_pull_request_snapshot(policy, in_progress_snapshot)
+    assert in_progress_eval.aggregate.state is LensOutcome.PENDING
+    assert "is in_progress" in (in_progress_eval.results.results[0].summary or "")
+
+    failed_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=policy,
+            check_runs=[
+                {
+                    "id": 3,
+                    "name": "claude-review",
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "head_sha": HEAD_SHA,
+                    "app_id": 777,
+                    "started_at": "2026-11-01T18:01:00Z",
+                    "completed_at": "2026-11-01T18:02:00Z",
+                }
+            ],
+        )
+    )
+    failed_eval = evaluate_pull_request_snapshot(policy, failed_snapshot)
+    assert failed_eval.aggregate.state is LensOutcome.FAILED
+    assert "completed with failure" in (failed_eval.results.results[0].summary or "")
+
+    passed_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=policy,
+            head_committed_at=None,
+            check_runs=[
+                {
+                    "id": 4,
+                    "name": "claude-review",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": HEAD_SHA,
+                    "app_id": 777,
+                    "started_at": "2026-11-01T18:01:00Z",
+                    "completed_at": "2026-11-01T18:02:00Z",
+                }
+            ],
+        )
+    )
+    passed_eval = evaluate_pull_request_snapshot(policy, passed_snapshot)
+    assert passed_eval.aggregate.state is LensOutcome.PASSED
+    assert "check-run claude-review for claude[bot] passed" in (
+        passed_eval.results.results[0].summary or ""
+    )
+
+    queued_rerun_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=policy,
+            head_committed_at=None,
+            check_runs=[
+                {
+                    "id": 4,
+                    "name": "claude-review",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": HEAD_SHA,
+                    "app_id": 777,
+                    "started_at": "2026-11-01T18:01:00Z",
+                    "completed_at": "2026-11-01T18:02:00Z",
+                },
+                {
+                    "id": 5,
+                    "name": "claude-review",
+                    "status": "queued",
+                    "conclusion": None,
+                    "head_sha": HEAD_SHA,
+                    "app_id": 777,
+                    "started_at": None,
+                    "completed_at": None,
+                },
+            ],
+        )
+    )
+    queued_rerun_eval = evaluate_pull_request_snapshot(policy, queued_rerun_snapshot)
+    assert queued_rerun_eval.aggregate.state is LensOutcome.PENDING
+    assert "is queued" in (queued_rerun_eval.results.results[0].summary or "")
+
+    overlapping_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=policy,
+            head_committed_at=None,
+            check_runs=[
+                {
+                    "id": 1,
+                    "name": "claude-review",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": HEAD_SHA,
+                    "app_id": 777,
+                    "started_at": "2026-11-01T18:01:00Z",
+                    "completed_at": "2026-11-01T18:05:00Z",
+                },
+                {
+                    "id": 2,
+                    "name": "claude-review",
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "head_sha": HEAD_SHA,
+                    "app_id": 777,
+                    "started_at": "2026-11-01T18:02:00Z",
+                    "completed_at": "2026-11-01T18:03:00Z",
+                },
+            ],
+        )
+    )
+    overlapping_eval = evaluate_pull_request_snapshot(policy, overlapping_snapshot)
+    assert overlapping_eval.aggregate.state is LensOutcome.FAILED
+    assert "completed with failure" in (overlapping_eval.results.results[0].summary or "")
+
+    inline_finding_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=policy,
+            head_committed_at=None,
+            review_comments=[
+                {
+                    "id": 90,
+                    "author_login": "claude[bot]",
+                    "commit_id": HEAD_SHA,
+                    "created_at": "2026-11-01T18:01:30Z",
+                    "path": "src/app.py",
+                    "body": "Potential bug here.",
+                }
+            ],
+            check_runs=[
+                {
+                    "id": 4,
+                    "name": "claude-review",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": HEAD_SHA,
+                    "app_id": 777,
+                    "started_at": "2026-11-01T18:01:00Z",
+                    "completed_at": "2026-11-01T18:02:00Z",
+                }
+            ],
+        )
+    )
+    inline_eval = evaluate_pull_request_snapshot(policy, inline_finding_snapshot)
+    assert inline_eval.aggregate.state is LensOutcome.FAILED
+
+
+def test_check_runs_reject_malformed_or_spoofed_records() -> None:
+    policy = AgentReviewPolicy(
+        version=1,
+        required=("claude",),
+        aggregation="all-required",
+        lenses=(
+            ReviewLens("claude", "claude", "review", bot_app_id=777, check_runs=("claude-review",)),
+        ),
+    )
+    spoofed = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=policy,
+            check_runs=[
+                {
+                    "id": 1,
+                    "name": "claude-review",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": HEAD_SHA,
+                    "app_id": 999,
+                }
+            ],
+        )
+    )
+    with pytest.raises(InputError, match="unexpected app_id"):
+        evaluate_pull_request_snapshot(policy, spoofed)
+
+    for bad_run in (
+        {"id": 1, "name": "claude-review", "status": "completed", "conclusion": "success"},
+        {
+            "id": 1,
+            "name": "claude-review",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": None,
+        },
+        {
+            "id": 1,
+            "name": "claude-review",
+            "status": "in_progress",
+            "conclusion": "success",
+            "head_sha": HEAD_SHA,
+        },
+        {
+            "id": 1,
+            "name": "claude-review",
+            "status": "completed",
+            "conclusion": None,
+            "head_sha": HEAD_SHA,
+        },
+        {
+            "id": 1,
+            "name": "claude-review",
+            "status": "completed",
+            "conclusion": "unknown",
+            "head_sha": HEAD_SHA,
+        },
+        {
+            "id": 1,
+            "name": "claude-review",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": HEAD_SHA,
+            "started_at": "2026-11-01T18:05:00Z",
+            "completed_at": "2026-11-01T18:01:00Z",
+        },
+    ):
+        with pytest.raises(InputError):
+            parse_pull_request_snapshot(base_snapshot_dict(policy=policy, check_runs=[bad_run]))

@@ -28,18 +28,22 @@ def review_policy() -> AgentReviewPolicy:
         required=("correctness", "security"),
         aggregation="all-required",
         lenses=(
-            ReviewLens("correctness", "codex", "Review behavior.", "review"),
-            ReviewLens("security", "codex", "Review trust.", "review"),
-            ReviewLens("docs", "other-agent", "Review docs.", "advisory"),
+            ReviewLens("correctness", "codex", "review"),
+            ReviewLens("security", "codex", "review"),
+            ReviewLens("docs", "other-agent", "advisory"),
         ),
     )
+
+
+def review_plan_digest() -> str:
+    return build_plan(review_policy()).digest()
 
 
 def test_pending_results_template_covers_every_plan_lens() -> None:
     results = build_pending_results(review_policy())
 
     assert results.version == 1
-    assert results.plan_digest == "9adadb5cca1a70c8fc2958c3c786551772fc588764d6d10d2842a03572f1edeb"
+    assert results.plan_digest == review_plan_digest()
     assert [(result.lens, result.outcome.value, result.summary) for result in results.results] == [
         ("correctness", "pending", None),
         ("security", "pending", None),
@@ -52,17 +56,13 @@ def test_results_template_is_valid_receipt_json() -> None:
 
     assert document == {
         "version": 1,
-        "plan_digest": "9adadb5cca1a70c8fc2958c3c786551772fc588764d6d10d2842a03572f1edeb",
+        "plan_digest": review_plan_digest(),
         "results": [
             {"lens": "correctness", "outcome": "pending"},
             {"lens": "security", "outcome": "pending"},
             {"lens": "docs", "outcome": "pending"},
         ],
     }
-
-
-def review_plan_digest() -> str:
-    return build_plan(review_policy()).digest()
 
 
 def write_results(tmp_path: Path, document: object) -> Path:

@@ -13,6 +13,7 @@ from yaga.agent_review.results import (
     render_results_template,
 )
 from yaga.agent_review.snapshot import (
+    PullRequestCheckRunRecord,
     PullRequestIssueCommentRecord,
     PullRequestReactionRecord,
     PullRequestReviewCommentRecord,
@@ -30,6 +31,7 @@ __all__ = [
     "BotIdentity",
     "LensOutcome",
     "LensResult",
+    "PullRequestCheckRunRecord",
     "PullRequestIssueCommentRecord",
     "PullRequestReactionRecord",
     "PullRequestReviewCommentRecord",
