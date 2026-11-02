@@ -7,6 +7,9 @@
 - Require lowest-supported base dependency smoke and security audits on Linux and Windows in CI.
   Release publication now waits for both platforms to audit the exact retained release wheel;
   advisories, incomplete results, and audit failures block publication.
+- Switch Python Dependabot updates from pip to uv with increase-if-necessary versioning,
+  validate exact hatchling and pip-audit pins against uv.lock instead of hardcoded test
+  literals, and update hatchling to 1.33.0.
 
 ## [0.4.1] - 2026-10-29
 

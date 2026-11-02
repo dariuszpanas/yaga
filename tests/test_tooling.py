@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import re
 import sys
@@ -11,11 +12,117 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+import yaml
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+from packaging.version import Version
 
-from scripts import check_build
+from scripts import check_build, check_dependency_audit
 from yaga.workflows.lint import ACTIONLINT_IMAGE
 
 ROOT = Path(__file__).parents[1]
+
+
+def _extract_exact_pin(requirements: list[str], package: str) -> str:
+    matches: list[str] = []
+    for item in requirements:
+        requirement = Requirement(item)
+        if canonicalize_name(requirement.name) != package:
+            continue
+        if (
+            requirement.extras
+            or requirement.marker is not None
+            or requirement.url is not None
+            or not item.startswith(f"{package}==")
+        ):
+            raise ValueError(f"{package} requirement must be an exact pin")
+        version = item.removeprefix(f"{package}==")
+        if not re.fullmatch(r"\d+\.\d+\.\d+", version) or str(Version(version)) != version:
+            raise ValueError(f"{package} version is not canonical")
+        matches.append(version)
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one {package} pin")
+    return matches[0]
+
+
+def validate_exact_supply_chain_pins(
+    project: dict[str, object], lock: dict[str, object]
+) -> tuple[str, str]:
+    build_system = project.get("build-system")
+    assert isinstance(build_system, dict)
+    build_requirements = build_system.get("requires")
+    if not isinstance(build_requirements, list) or len(build_requirements) != 1:
+        raise ValueError("build-system.requires must contain exactly one requirement")
+    hatchling_version = _extract_exact_pin(build_requirements, "hatchling")
+
+    dependency_groups = project.get("dependency-groups")
+    assert isinstance(dependency_groups, dict)
+    dev_requirements = dependency_groups.get("dev")
+    if not isinstance(dev_requirements, list):
+        raise ValueError("dependency-groups.dev must be a list")
+    if _extract_exact_pin(dev_requirements, "hatchling") != hatchling_version:
+        raise ValueError("hatchling build and dev pins do not match")
+    pip_audit_version = _extract_exact_pin(dev_requirements, "pip-audit")
+
+    packages = lock.get("package")
+    if not isinstance(packages, list):
+        raise ValueError("uv.lock package table is missing")
+    for package_name, expected_version in (
+        ("hatchling", hatchling_version),
+        ("pip-audit", pip_audit_version),
+    ):
+        entries = [
+            entry
+            for entry in packages
+            if isinstance(entry, dict) and entry.get("name") == package_name
+        ]
+        if len(entries) != 1:
+            raise ValueError(f"uv.lock must contain one {package_name} package entry")
+        entry = entries[0]
+        if entry.get("version") != expected_version:
+            raise ValueError(f"uv.lock {package_name} version does not match pyproject.toml")
+        if entry.get("source") != {"registry": "https://pypi.org/simple"}:
+            raise ValueError(f"uv.lock {package_name} source must be PyPI")
+        sdist = entry.get("sdist")
+        if not isinstance(sdist, dict) or not re.fullmatch(
+            r"sha256:[0-9a-f]{64}", str(sdist.get("hash", ""))
+        ):
+            raise ValueError(f"uv.lock {package_name} sdist hash is missing")
+        wheels = entry.get("wheels")
+        if (
+            not isinstance(wheels, list)
+            or not wheels
+            or not all(
+                isinstance(wheel, dict)
+                and bool(re.fullmatch(r"sha256:[0-9a-f]{64}", str(wheel.get("hash", ""))))
+                for wheel in wheels
+            )
+        ):
+            raise ValueError(f"uv.lock {package_name} wheel hashes are missing")
+
+    yaga_entries = [
+        entry for entry in packages if isinstance(entry, dict) and entry.get("name") == "yaga-cli"
+    ]
+    if len(yaga_entries) != 1:
+        raise ValueError("uv.lock must contain one yaga-cli package entry")
+    metadata = yaga_entries[0].get("metadata")
+    requires_dev = (
+        metadata.get("requires-dev", {}).get("dev") if isinstance(metadata, dict) else None
+    )
+    if not isinstance(requires_dev, list):
+        raise ValueError("uv.lock yaga-cli requires-dev metadata is missing")
+    for package_name, expected_version in (
+        ("hatchling", hatchling_version),
+        ("pip-audit", pip_audit_version),
+    ):
+        specifiers = [
+            item
+            for item in requires_dev
+            if isinstance(item, dict) and item.get("name") == package_name
+        ]
+        if specifiers != [{"name": package_name, "specifier": f"=={expected_version}"}]:
+            raise ValueError(f"uv.lock requires-dev entry for {package_name} does not match")
+    return hatchling_version, pip_audit_version
 
 
 def test_installed_description_smoke_preserves_the_explicit_template_path(tmp_path: Path) -> None:
@@ -50,10 +157,27 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         "pyyaml>=6.0.3,<7",
         "typer>=0.27.2,<1",
     ]
-    build_requirements = project["build-system"]["requires"]
-    assert build_requirements == ["hatchling==1.32.4"]
-    assert "hatchling==1.32.4" in project["dependency-groups"]["dev"]
-    assert "pip-audit==2.10.1" in project["dependency-groups"]["dev"]
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    _, pip_audit_version = validate_exact_supply_chain_pins(project, lock)
+    assert pip_audit_version == check_dependency_audit.AUDITOR_VERSION
+
+    dependabot = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    assert dependabot == {
+        "version": 2,
+        "updates": [
+            {
+                "package-ecosystem": "github-actions",
+                "directory": "/",
+                "schedule": {"interval": "weekly"},
+            },
+            {
+                "package-ecosystem": "uv",
+                "directory": "/",
+                "schedule": {"interval": "weekly"},
+                "versioning-strategy": "increase-if-necessary",
+            },
+        ],
+    }
     assert "pre-commit>=4.6.2,<5" in project["dependency-groups"]["dev"]
     assert project["tool"]["uv"]["required-version"] == ">=0.12.7"
     commit_policy = project["tool"]["yaga"]["commit"]
@@ -567,3 +691,44 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         assert "import yaga.paths" not in source, path
         assert "import yaga.test_planning" not in source, path
         assert "GITHUB_TOKEN" not in source, path
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "build-range",
+        "dev-hatchling-mismatch",
+        "dev-pip-audit-range",
+        "lock-hatchling-version",
+        "lock-pip-audit-version",
+        "lock-sdist-hash",
+        "lock-wheel-hash",
+        "lock-requires-dev",
+    ],
+)
+def test_supply_chain_pin_validation_rejects_unpinned_or_drifted_inputs(mutation: str) -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    project = copy.deepcopy(project)
+    lock = copy.deepcopy(lock)
+    packages = {entry["name"]: entry for entry in lock["package"]}
+
+    if mutation == "build-range":
+        project["build-system"]["requires"] = ["hatchling>=1.33.0"]
+    elif mutation == "dev-hatchling-mismatch":
+        project["dependency-groups"]["dev"][0] = "hatchling==1.32.4"
+    elif mutation == "dev-pip-audit-range":
+        project["dependency-groups"]["dev"][1] = "pip-audit>=2.10.1"
+    elif mutation == "lock-hatchling-version":
+        packages["hatchling"]["version"] = "1.32.4"
+    elif mutation == "lock-pip-audit-version":
+        packages["pip-audit"]["version"] = "2.10.0"
+    elif mutation == "lock-sdist-hash":
+        packages["hatchling"]["sdist"]["hash"] = "sha256:bad"
+    elif mutation == "lock-wheel-hash":
+        packages["pip-audit"]["wheels"][0]["hash"] = "sha256:bad"
+    else:
+        packages["yaga-cli"]["metadata"]["requires-dev"]["dev"][0]["specifier"] = "==1.32.4"
+
+    with pytest.raises(ValueError):
+        validate_exact_supply_chain_pins(project, lock)
