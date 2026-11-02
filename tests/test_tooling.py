@@ -179,6 +179,11 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         ],
     }
     assert "pre-commit>=4.6.2,<5" in project["dependency-groups"]["dev"]
+    assert "pytest-xdist>=3.6" in project["dependency-groups"]["dev"]
+    assert (
+        project["tool"]["pytest"]["ini_options"]["addopts"]
+        == "-v --tb=short -n auto --dist worksteal"
+    )
     assert project["tool"]["uv"]["required-version"] == ">=0.12.7"
     commit_policy = project["tool"]["yaga"]["commit"]
     assert commit_policy["breaking-markers"] == "paired"

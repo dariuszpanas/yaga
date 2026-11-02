@@ -75,6 +75,7 @@ dev = [
     "pip-audit==2.10.1",
     "pre-commit>=4.6.2,<5",
     "pytest>=8.3",
+    "pytest-xdist>=3.6",
     "readme-renderer[md]>=46.0",
     "ruff>=0.14.13",
     "ty>=0.0.12",
@@ -86,7 +87,7 @@ packages = ["src/yaga"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -n auto --dist worksteal"
 pythonpath = ["."]
 
 [tool.ruff]
