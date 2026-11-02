@@ -2,7 +2,7 @@
 
 from yaga.agent_review.evaluation import LensOutcome, ReviewAggregate, evaluate_policy
 from yaga.agent_review.plan import ReviewPlan, ReviewPlanItem, build_plan, render_plan
-from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens, load_policy
+from yaga.agent_review.policy import AgentReviewPolicy, BotIdentity, ReviewLens, load_policy
 from yaga.agent_review.results import (
     AgentReviewResults,
     LensResult,
@@ -12,23 +12,44 @@ from yaga.agent_review.results import (
     render_evaluation,
     render_results_template,
 )
+from yaga.agent_review.snapshot import (
+    PullRequestIssueCommentRecord,
+    PullRequestReactionRecord,
+    PullRequestReviewCommentRecord,
+    PullRequestReviewRecord,
+    PullRequestReviewSnapshot,
+    SnapshotEvaluation,
+    evaluate_pull_request_snapshot,
+    load_pull_request_snapshot,
+    parse_pull_request_snapshot,
+)
 
 __all__ = [
     "AgentReviewPolicy",
     "AgentReviewResults",
+    "BotIdentity",
     "LensOutcome",
+    "LensResult",
+    "PullRequestIssueCommentRecord",
+    "PullRequestReactionRecord",
+    "PullRequestReviewCommentRecord",
+    "PullRequestReviewRecord",
+    "PullRequestReviewSnapshot",
     "ReviewAggregate",
     "ReviewLens",
     "ReviewPlan",
     "ReviewPlanItem",
-    "LensResult",
-    "build_plan",
+    "SnapshotEvaluation",
     "build_pending_results",
+    "build_plan",
     "evaluate_policy",
+    "evaluate_pull_request_snapshot",
     "evaluate_results",
     "load_policy",
+    "load_pull_request_snapshot",
     "load_results",
-    "render_plan",
+    "parse_pull_request_snapshot",
     "render_evaluation",
+    "render_plan",
     "render_results_template",
 ]
