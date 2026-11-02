@@ -375,6 +375,8 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
         if comment.author_login.casefold() != bot_key:
             continue
         _verify_user_id(comment.author_id, bot.bot_user_id, bot.bot_login, "review comment")
+        if comment.pull_request_review_id in stale_review_ids:
+            continue
         if comment.commit_id is not None:
             if comment.commit_id == snapshot.head_sha and (
                 snapshot.head_committed_at is None
@@ -383,7 +385,7 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
                 current_inline_comments.append(comment)
         elif comment.pull_request_review_id in current_review_ids:
             current_inline_comments.append(comment)
-        elif comment.pull_request_review_id not in stale_review_ids:
+        else:
             raise InputError(
                 f"review comment {comment.comment_id} from {bot.bot_login} has no commit binding"
             )

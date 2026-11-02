@@ -1076,6 +1076,61 @@ required = ["codex"]
     # Each poll cycle takes 15s sleep + 20s fetch = 35s, so 2 cycles (70s) reach the 60s deadline.
     assert slept == [15, 15]
 
+    # A sub-50ms remaining budget (e.g. 15s sleep + 14.98s fetch against --wait-seconds 30)
+    # preserves the positive fractional sleep rather than rounding to 0.
+    slept.clear()
+    clock = 100.0
+
+    def run_sub_50ms(command: list[str], **options: Any) -> ProcessResult:
+        nonlocal clock
+        endpoint = command[-1]
+        if endpoint == "repos/example/project/issues/23/comments?per_page=100":
+            clock += 14.98
+        elif endpoint == "repos/example/project/pulls/23/comments?per_page=100":
+            # GitHub REST API may re-anchor commit_id to HEAD_SHA while keeping original_commit_id on OLD_SHA.
+            reanchored = [
+                {
+                    "id": 99,
+                    "pull_request_review_id": 11,
+                    "user": {
+                        "login": CODEX_DEFAULT_BOT_LOGIN,
+                        "id": CODEX_DEFAULT_BOT_USER_ID,
+                    },
+                    "commit_id": HEAD_SHA,
+                    "original_commit_id": OLD_SHA,
+                    "created_at": "2026-11-01T17:50:00Z",
+                    "path": "src/app.py",
+                    "body": "Stale inline finding re-anchored by GitHub diff tracker.",
+                }
+            ]
+            return ProcessResult(
+                0, json.dumps(reanchored).encode("utf-8"), b"", False, False, False
+            )
+        return ProcessResult(
+            0, json.dumps(endpoints[endpoint]).encode("utf-8"), b"", False, False, False
+        )
+
+    monkeypatch.setattr(remote, "run_bounded_process", run_sub_50ms)
+    sub_res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--wait-seconds",
+            "30",
+            "--format",
+            "json",
+        ],
+    )
+    assert sub_res.exit_code == 1
+    assert len(slept) == 2
+    assert slept[0] == 15
+    assert 0 < slept[1] < 0.05
+    assert json.loads(sub_res.stdout)["status"] == "pending"
+
 
 def test_submit_review_resubmits_when_later_unmarked_review_overrode_marked_approval(
     tmp_path: Path,
