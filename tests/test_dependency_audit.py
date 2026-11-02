@@ -45,6 +45,26 @@ def process(stdout: bytes, *, returncode: int = 0, **flags: bool) -> ProcessResu
     )
 
 
+def test_locked_auditor_version_requires_one_canonical_exact_pin(tmp_path: Path) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text('[dependency-groups]\ndev = ["pip-audit==2.10.1"]\n', encoding="utf-8")
+    assert audit.locked_auditor_version(pyproject) == "2.10.1"
+
+    for invalid in (
+        "not = [valid\n",
+        "[dependency-groups]\ndev = []\n",
+        '[dependency-groups]\ndev = ["pip-audit>=2.10.1"]\n',
+        '[dependency-groups]\ndev = ["pip_audit==2.10.1"]\n',
+        '[dependency-groups]\ndev = ["pip-audit==02.10.1"]\n',
+        '[dependency-groups]\ndev = ["pip-audit[extra]==2.10.1"]\n',
+        "[dependency-groups]\ndev = [\"pip-audit==2.10.1 ; python_version >= '3.12'\"]\n",
+        '[dependency-groups]\ndev = ["pip-audit==2.10.1", "pip-audit==2.10.2"]\n',
+    ):
+        pyproject.write_text(invalid, encoding="utf-8")
+        with pytest.raises(ValueError, match="pip-audit|pyproject"):
+            audit.locked_auditor_version(pyproject)
+
+
 def test_exact_installed_pins_exclude_only_the_verified_project() -> None:
     selected = distributions()
     selected["colorama"] = "0.3.5"
@@ -165,7 +185,7 @@ def test_auditor_uses_separate_locked_interpreter_and_private_inputs(
     def run(command, **options):
         calls.append((command, options))
         if command[-1] == "--version":
-            return process(b"pip-audit 2.10.1\n")
+            return process(f"pip-audit {audit.AUDITOR_VERSION}\n".encode())
         requirements = Path(command[command.index("--requirement") + 1])
         assert requirements.read_text().splitlines() == [
             f"{name}=={version}" for name, version in pins().items()
@@ -189,7 +209,7 @@ def test_auditor_uses_separate_locked_interpreter_and_private_inputs(
     assert "PYTHONPATH" not in environment and "GH_TOKEN" not in environment
     assert not options["cwd"].exists()
     assert result["status"] == "passed"
-    assert result["auditor_version"] == "2.10.1"
+    assert result["auditor_version"] == audit.AUDITOR_VERSION
     assert result["dependencies"] == pins()
     assert result["response"] == response()
 
@@ -203,7 +223,9 @@ def test_audit_failures_retain_evidence_and_never_pass(
     def run(command, **_options):
         if command[-1] == "--version":
             return process(
-                b"wrong-version\n" if failure == "missing-tool" else b"pip-audit 2.10.1\n"
+                b"wrong-version\n"
+                if failure == "missing-tool"
+                else f"pip-audit {audit.AUDITOR_VERSION}\n".encode()
             )
         if failure == "findings":
             document = response()
@@ -242,7 +264,9 @@ def test_audit_cleanup_failure_cannot_retain_a_passed_status(
 
     def run(command, **_options):
         return process(
-            b"pip-audit 2.10.1\n" if command[-1] == "--version" else json.dumps(response()).encode()
+            f"pip-audit {audit.AUDITOR_VERSION}\n".encode()
+            if command[-1] == "--version"
+            else json.dumps(response()).encode()
         )
 
     monkeypatch.setattr(audit.tempfile, "TemporaryDirectory", cleanup_failure)

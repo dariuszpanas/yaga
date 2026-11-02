@@ -6,15 +6,17 @@ import json
 import os
 import sys
 import tempfile
+import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 
+from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 from yaga.git.runtime import ProcessResult, run_bounded_process
 
-AUDITOR_VERSION = "2.10.1"
+ROOT = Path(__file__).resolve().parents[1]
 MAX_AUDIT_BYTES = 4 * 1024 * 1024
 MAX_AUDIT_ERROR_BYTES = 64 * 1024
 MAX_DEPENDENCIES = 128
@@ -55,6 +57,43 @@ def normalize_pin(name: object, version: object) -> tuple[str, str]:
         return str(canonicalize_name(name, validate=True)), str(Version(version))
     except ValueError as error:
         raise ValueError("dependency name or exact version is invalid") from error
+
+
+def locked_auditor_version(pyproject: Path = ROOT / "pyproject.toml") -> str:
+    """Read the single canonical exact development pip-audit pin from pyproject.toml."""
+    try:
+        document = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise ValueError("pyproject.toml could not be parsed") from error
+    dev_group = document.get("dependency-groups", {}).get("dev")
+    if not isinstance(dev_group, list) or not all(isinstance(item, str) for item in dev_group):
+        raise ValueError("development dependency group is missing or malformed")
+    matches: list[str] = []
+    for item in dev_group:
+        try:
+            requirement = Requirement(item)
+        except InvalidRequirement as error:
+            raise ValueError("development dependency requirement is invalid") from error
+        if canonicalize_name(requirement.name) != "pip-audit":
+            continue
+        if (
+            requirement.extras
+            or requirement.marker is not None
+            or requirement.url is not None
+            or not item.startswith("pip-audit==")
+        ):
+            raise ValueError("development pip-audit requirement must be an exact pin")
+        version = item.removeprefix("pip-audit==")
+        _, normalized = normalize_pin("pip-audit", version)
+        if version != normalized:
+            raise ValueError("development pip-audit pin must use canonical version syntax")
+        matches.append(normalized)
+    if len(matches) != 1:
+        raise ValueError("development dependencies must contain exactly one pip-audit pin")
+    return matches[0]
+
+
+AUDITOR_VERSION = locked_auditor_version()
 
 
 def _unique_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
