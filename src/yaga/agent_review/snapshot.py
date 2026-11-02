@@ -401,7 +401,7 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
                 f"issue comment {issue_comment.comment_id} from {bot.bot_login} "
                 "has an unexpected app_id"
             )
-        codex_state = _parse_codex_comment_state(issue_comment)
+        codex_state = _parse_codex_comment_state(issue_comment, head_sha=snapshot.head_sha)
         if codex_state is not None:
             if codex_state.commit_sha == snapshot.head_sha and (
                 snapshot.head_committed_at is None
@@ -932,6 +932,8 @@ def _extract_reviewed_commit_prefix(body: str, *, label: str) -> str | None:
 
 def _parse_codex_comment_state(
     comment: PullRequestIssueCommentRecord,
+    *,
+    head_sha: str,
 ) -> _CodexCommentState | None:
     matches = _CODEX_REVIEW_STATE_RE.findall(comment.body)
     if not matches:
@@ -1004,6 +1006,8 @@ def _parse_codex_comment_state(
             outcome = LensOutcome.FAILED
         elif has_any is False or has_unresolved is False:
             outcome = LensOutcome.PASSED
+        elif section_name == "security_review" and has_any is None and has_unresolved is None:
+            outcome = LensOutcome.PASSED
         else:
             raise InputError(
                 f"issue comment {comment.comment_id} {section_name} finding flags are invalid"
@@ -1013,10 +1017,13 @@ def _parse_codex_comment_state(
         raise InputError(
             f"issue comment {comment.comment_id} codex-review-state has no active review section"
         )
-    shas = {item[0] for item in active_sections}
-    if len(shas) != 1:
-        raise InputError(f"issue comment {comment.comment_id} codex-review-state mixes commit SHAs")
-    outcomes = {item[1] for item in active_sections}
+    current_outcomes = [outcome for sha, outcome in active_sections if sha == head_sha]
+    if current_outcomes:
+        target_sha = head_sha
+        outcomes = set(current_outcomes)
+    else:
+        target_sha = active_sections[0][0]
+        outcomes = {outcome for _, outcome in active_sections}
     if LensOutcome.FAILED in outcomes:
         aggregate_outcome = LensOutcome.FAILED
     elif LensOutcome.PENDING in outcomes:
@@ -1024,7 +1031,7 @@ def _parse_codex_comment_state(
     else:
         aggregate_outcome = LensOutcome.PASSED
     return _CodexCommentState(
-        commit_sha=next(iter(shas)),
+        commit_sha=target_sha,
         outcome=aggregate_outcome,
         effective_at=comment.effective_at,
         comment_id=comment.comment_id,

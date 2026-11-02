@@ -66,8 +66,8 @@ After validation, configure your repository's branch protection to require the i
 ## Optional capabilities are separate decisions
 
 [Commit quality](commit-quality.md) adds model-backed advice and its own dependency/cache or
-credential requirements. [Agent review plans](agent-review-gate.md) describe work for an external
-adapter. Neither is needed to adopt the deterministic checks above.
+credential requirements. [Agent review checks and plans](agent-review-gate.md) inspect pull-request review state or
+describe work for an external adapter. Neither is needed to adopt the deterministic checks above.
 
 The experimental [GitHub review adapter](github-review-adapter.md) writes comments and statuses
 from trusted workflows and requires a separate security review and deployment canary. Do not add

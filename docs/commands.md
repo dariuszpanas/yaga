@@ -8,7 +8,7 @@ Checks never imply an all-checks mode or automatically run another provider.
 
 "Offline" below describes checking after installation. Optional spelling requires an installed
 Typos executable; Git-backed commands require local objects and never fetch. No command in the
-first table needs GitHub credentials except an explicit description `--pr` fetch.
+first table needs GitHub credentials except explicit description or review `--pr` fetches.
 
 | Command and reference | Source and required selection | External tools and execution |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ structured operational errors use stderr. CLI usage errors may be plain text eve
 | --- | --- | --- | --- |
 | `commit check`; `workflow check`, `security`, `lint`; `tree`, `path`, `mode`, `size` checks | Text, JSON, GitHub; `0/1/2` | Exactly these eight providers; tree/path/mode/size require plan v2. | None directly; commit policy is reused by the event-aware commit Action. |
 | `repo check` | Text, JSON, GitHub; `0/1/2` with operational errors taking precedence | Runs a selected plan. | None. |
-| `branch check`, `change check`, both description checks, `commit quality` | Text, JSON, GitHub; `0/1/2` | No. | None. |
+| `branch check`, `change check`, both description checks, `pull-request review check`, `commit quality` | Text, JSON, GitHub; `0/1/2` | No. | None. |
 | `github pull-request check` | Text, JSON, GitHub; `0/1/2` | No. | Read-only `actions/commit-check`. |
 | `test policy check`, `test plan` | Text, JSON; `0/2` | No. | None. |
 | `test evaluate` | Text, JSON; `0/1/2` | No. | None. |
@@ -109,18 +109,20 @@ can miss earlier source changes followed by a docs-only commit. YAGA contributor
 explicit local qualification override in [Contributing](contributing.md#development-loop).
 For a plan without committed-tree providers, omit `--revision`.
 
-### Descriptions when Actions are unavailable
+### Descriptions and reviews when Actions are unavailable
 
-The local command above works offline. To read a current published description, authenticate
-`gh` for the intended host and supply the full canonical PR URL; no checkout is required:
+The local command above works offline. To read a current published description or review state,
+authenticate `gh` for the intended host and supply the full canonical PR URL; no checkout is
+required:
 
 ```bash
 : "${YAGA_PR_URL:?Set the canonical HTTPS pull-request URL}"
 yaga pull-request description check --policy .yaga/description-policy.toml --pr "$YAGA_PR_URL"
+yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr "$YAGA_PR_URL"
 ```
 
-Use `--pr 123 --repo OWNER/REPO` instead when choosing a numeric PR explicitly. This reads the
-current body; it does not check event-bound commit history or edit the pull request.
+Use `--pr 123 --repo OWNER/REPO` instead when choosing a numeric PR explicitly. These read current
+pull-request state; they do not check event-bound commit history or edit the pull request.
 
 ## Authoring and installation helpers
 

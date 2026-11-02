@@ -41,7 +41,7 @@ The core CLI is tested on Python 3.12 through 3.15. Optional model dependencies 
 
 For feedback beyond deterministic rules, YAGA offers
 [model-backed commit advice](https://dariuszpanas.github.io/yaga/commit-quality.html) and
-[agent review plans and receipts](https://dariuszpanas.github.io/yaga/agent-review-gate.html).
+[agent review checks, plans, and receipts](https://dariuszpanas.github.io/yaga/agent-review-gate.html).
 These are optional. The experimental GitHub review adapter has separate deployment and security
 requirements; it is not needed for ordinary local or CI checks.
 

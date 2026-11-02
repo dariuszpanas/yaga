@@ -33,6 +33,7 @@ to capabilities, prerequisites, and integration steps.
 | Workflow references, permissions, or syntax | [Workflow checks](workflow-checks.md) |
 | Pull-request validation | [GitHub Actions](github-actions.md) |
 | Description content, spelling, and template sections | [Pull-request descriptions](pull-request-descriptions.md) |
+| Pull-request review state, bot presets, and receipts | [Agent review gate](agent-review-gate.md) |
 | Selecting test suites and qualification work | [Test planning](test-planning.md) |
 | Mapping plans to existing jobs and measuring adoption | [Executor handoff and shadow pilot](test-planning-handoff.md) |
 | A failing command or missing prerequisite | [Troubleshooting](troubleshooting.md) |
@@ -43,7 +44,7 @@ The [command index](commands.md) links each command to its detailed reference.
 ## Optional review tools
 
 Deterministic checks work without a model or review service. If you need additional review,
-see [commit quality advice](commit-quality.md) or [agent review plans and receipts](agent-review-gate.md).
+see [commit quality advice](commit-quality.md) or [agent review checks, plans, and receipts](agent-review-gate.md).
 The [GitHub review adapter](github-review-adapter.md) is experimental and requires a separate
 trusted-workflow deployment.
 
