@@ -16,6 +16,7 @@ from yaga.agent_review.remote import (
     STARTUP_GRACE_SECONDS,
     SubmittedPullRequestReview,
     fetch_pull_request_review_snapshot,
+    monotonic_seconds,
     parse_pull_request_reference,
     sleep_for_review_poll,
     submit_pull_request_review,
@@ -105,7 +106,9 @@ def check_pull_request_review_source(
             delay_seconds=delay_seconds,
         )
         evaluation = evaluate_pull_request_snapshot(policy, snapshot)
-        elapsed_wait = 0
+        poll_started_at = monotonic_seconds()
+        simulated_sleep = 0.0
+        elapsed_wait = 0.0
         while (
             elapsed_wait < effective_wait_seconds
             and evaluation.aggregate.state is LensOutcome.PENDING
@@ -115,9 +118,19 @@ def check_pull_request_review_source(
                 or elapsed_wait < STARTUP_GRACE_SECONDS
             )
         ):
-            step = min(POLL_INTERVAL_SECONDS, effective_wait_seconds - elapsed_wait)
+            remaining = effective_wait_seconds - elapsed_wait
+            step: int | float = (
+                POLL_INTERVAL_SECONDS
+                if remaining >= POLL_INTERVAL_SECONDS
+                else (
+                    int(round(remaining)) if abs(remaining - round(remaining)) < 0.05 else remaining
+                )
+            )
+            sleep_started_at = monotonic_seconds()
             sleep_for_review_poll(step)
-            elapsed_wait += step
+            sleep_wall_elapsed = max(0.0, monotonic_seconds() - sleep_started_at)
+            if sleep_wall_elapsed < step:
+                simulated_sleep += step - sleep_wall_elapsed
             snapshot = fetch_pull_request_review_snapshot(
                 reference,
                 plan_digest=plan_digest,
@@ -125,6 +138,7 @@ def check_pull_request_review_source(
                 delay_seconds=0,
             )
             evaluation = evaluate_pull_request_snapshot(policy, snapshot)
+            elapsed_wait = max(0.0, monotonic_seconds() - poll_started_at) + simulated_sleep
         desired_event = _desired_review_event(evaluation.aggregate.state, submit_review)
         if desired_event is not None:
             if evaluation.snapshot.state != "open":

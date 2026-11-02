@@ -102,10 +102,19 @@ class SubmittedPullRequestReview:
         }
 
 
-def sleep_for_review_poll(seconds: int) -> None:
+def monotonic_seconds() -> float:
+    """Return the current monotonic clock value in seconds."""
+    return time.monotonic()
+
+
+def sleep_for_review_poll(seconds: int | float) -> None:
     """Sleep for a bounded poll interval while waiting for an active PR review."""
-    if type(seconds) is not int or not 1 <= seconds <= MAX_WAIT_SECONDS:
-        raise ValueError(f"poll sleep seconds must be an integer between 1 and {MAX_WAIT_SECONDS}")
+    if (
+        not isinstance(seconds, (int, float))
+        or isinstance(seconds, bool)
+        or not 0 < seconds <= MAX_WAIT_SECONDS
+    ):
+        raise ValueError(f"poll sleep seconds must be between 0 and {MAX_WAIT_SECONDS}")
     time.sleep(seconds)
 
 
@@ -272,14 +281,14 @@ def submit_pull_request_review(
         raise ValueError("event must be APPROVE or REQUEST_CHANGES")
 
     executable = _find_gh()
-    marked_reviews = [
+    substantive_reviews = [
         review
         for review in existing_reviews
-        if _YAGA_REVIEW_MARKER in review.body and review.state in {"APPROVED", "CHANGES_REQUESTED"}
+        if review.state in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
     ]
     has_matching_target = any(
         review.commit_id == normalized_sha and review.state == expected_state
-        for review in marked_reviews
+        for review in substantive_reviews
     )
     if has_matching_target:
         actor = _resolve_review_actor(executable, reference)
@@ -287,7 +296,7 @@ def submit_pull_request_review(
             actor_login, actor_id = actor
             actor_reviews = [
                 review
-                for review in marked_reviews
+                for review in substantive_reviews
                 if review.author_login.casefold() == actor_login.casefold()
                 and review.author_id == actor_id
             ]
