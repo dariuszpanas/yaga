@@ -17,9 +17,9 @@ def policy(aggregation: str = "all-required") -> AgentReviewPolicy:
         required=("correctness", "security"),
         aggregation=aggregation,
         lenses=(
-            ReviewLens("correctness", "codex", "Review behavior.", "review"),
-            ReviewLens("security", "codex", "Review trust.", "review"),
-            ReviewLens("docs", "codex", "Review docs.", "advisory"),
+            ReviewLens("correctness", "codex", "review"),
+            ReviewLens("security", "codex", "review"),
+            ReviewLens("docs", "codex", "advisory"),
         ),
     )
 

@@ -43,7 +43,7 @@ def single_lens_plan_digest() -> str:
             version=1,
             required=("correctness",),
             aggregation="all-required",
-            lenses=(ReviewLens("correctness", "codex", "Review behavior.", "review"),),
+            lenses=(ReviewLens("correctness", "codex", "review"),),
         )
     ).digest()
 
@@ -960,7 +960,6 @@ version = 1
 required = ["correctness"]
 [agent-review.agents.correctness]
 preset = "codex"
-instruction = "Review behavior."
 """,
         encoding="utf-8",
     )
@@ -976,8 +975,7 @@ def test_agent_review_policy_check_reports_a_digest_bound_json_summary(tmp_path:
         "version = 1\n"
         "required = ['correctness']\n"
         "[agent-review.agents.correctness]\n"
-        "preset = 'codex'\n"
-        "instruction = 'Review behavior.'\n",
+        "preset = 'codex'\n",
         encoding="utf-8",
     )
 
@@ -1015,8 +1013,7 @@ def test_agent_review_policy_plan_reports_json(tmp_path: Path) -> None:
         "version = 1\n"
         "required = ['correctness']\n"
         "[agent-review.agents.correctness]\n"
-        "preset = 'codex'\n"
-        "instruction = 'Review behavior.'\n",
+        "preset = 'codex'\n",
         encoding="utf-8",
     )
 
@@ -1046,10 +1043,8 @@ def test_agent_review_policy_template_reports_complete_pending_receipt(tmp_path:
         "required = ['correctness']\n"
         "[agent-review.agents.correctness]\n"
         "preset = 'codex'\n"
-        "instruction = 'Review behavior.'\n"
         "[agent-review.agents.docs]\n"
         "preset = 'other-agent'\n"
-        "instruction = 'Review docs.'\n"
         "outcome = 'advisory'\n",
         encoding="utf-8",
     )
@@ -1063,7 +1058,17 @@ def test_agent_review_policy_template_reports_complete_pending_receipt(tmp_path:
     document = json.loads(result.stdout)
     assert (
         document["plan_digest"]
-        == "c11734dc01020bbd3a358a9847b6bdc05a1abfec857172888d3e0061fca489d1"
+        == build_plan(
+            AgentReviewPolicy(
+                version=1,
+                required=("correctness",),
+                aggregation="all-required",
+                lenses=(
+                    ReviewLens("correctness", "codex", "review"),
+                    ReviewLens("docs", "other-agent", "advisory"),
+                ),
+            )
+        ).digest()
     )
     assert document["results"] == [
         {"lens": "correctness", "outcome": "pending"},
@@ -1080,8 +1085,7 @@ def test_agent_review_policy_evaluate_uses_result_contract_and_exit_one_for_bloc
         "version = 1\n"
         "required = ['correctness']\n"
         "[agent-review.agents.correctness]\n"
-        "preset = 'codex'\n"
-        "instruction = 'Review behavior.'\n",
+        "preset = 'codex'\n",
         encoding="utf-8",
     )
     results = tmp_path / "results.json"
@@ -1116,8 +1120,7 @@ def test_agent_review_policy_evaluate_supports_github_format(tmp_path: Path) -> 
         "version = 1\n"
         "required = ['correctness']\n"
         "[agent-review.agents.correctness]\n"
-        "preset = 'codex'\n"
-        "instruction = 'Review behavior.'\n",
+        "preset = 'codex'\n",
         encoding="utf-8",
     )
     results = tmp_path / "results.json"
@@ -1155,8 +1158,7 @@ def test_agent_review_policy_evaluate_formats_invalid_receipts_as_json(tmp_path:
         "version = 1\n"
         "required = ['correctness']\n"
         "[agent-review.agents.correctness]\n"
-        "preset = 'codex'\n"
-        "instruction = 'Review behavior.'\n",
+        "preset = 'codex'\n",
         encoding="utf-8",
     )
     results = tmp_path / "results.json"

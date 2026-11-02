@@ -7,11 +7,13 @@ import os
 import re
 import shutil
 import stat
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from yaga.agent_review.policy import MAX_DELAY_SECONDS
 from yaga.agent_review.snapshot import (
     MAX_SNAPSHOT_RECORDS,
     PullRequestReviewSnapshot,
@@ -45,56 +47,60 @@ class PullRequestReference:
 
     def __post_init__(self) -> None:
         if not _valid_host(self.host):
-            raise ValueError("pull request host must be a bounded ASCII DNS hostname")
-        if not isinstance(self.owner, str) or _OWNER.fullmatch(self.owner) is None:
-            raise ValueError("pull request owner must be a bounded ASCII repository owner")
+            raise ValueError("invalid GitHub host")
+        if _OWNER.fullmatch(self.owner) is None:
+            raise ValueError("invalid GitHub owner")
+        if _REPOSITORY.fullmatch(self.repository) is None or self.repository in {".", ".."}:
+            raise ValueError("invalid GitHub repository")
         if (
-            not isinstance(self.repository, str)
-            or _REPOSITORY.fullmatch(self.repository) is None
-            or self.repository in {".", ".."}
+            isinstance(self.number, bool)
+            or not isinstance(self.number, int)
+            or not 1 <= self.number <= MAX_PULL_REQUEST_NUMBER
         ):
-            raise ValueError("pull request repository must be a bounded ASCII repository name")
-        if type(self.number) is not int or not 1 <= self.number <= MAX_PULL_REQUEST_NUMBER:
-            raise ValueError("pull request number must be a bounded positive integer")
-        object.__setattr__(self, "host", self.host.lower())
-
-    @property
-    def url(self) -> str:
-        """Return the selected canonical HTTPS PR URL."""
-        return f"https://{self.host}/{self.owner}/{self.repository}/pull/{self.number}"
+            raise ValueError("invalid pull request number")
 
     @property
     def gh_repository(self) -> str:
-        """Return an explicit gh repository selector, including its host."""
-        return f"{self.host}/{self.owner}/{self.repository}"
+        """Return the explicit HOST/OWNER/REPO selector passed to gh."""
+        return f"{self.host.lower()}/{self.owner}/{self.repository}"
+
+    @property
+    def url(self) -> str:
+        """Return the canonical HTTPS pull request URL."""
+        return f"https://{self.host.lower()}/{self.owner}/{self.repository}/pull/{self.number}"
 
 
-def parse_pull_request_reference(value: str, repository: str | None = None) -> PullRequestReference:
-    """Accept an explicit positive number plus repository, or one HTTPS PR URL."""
-    _require_selector(value, label="--pr")
-    if value.isdecimal():
-        if _NUMBER.fullmatch(value) is None:
-            raise InputError("--pr number must be positive ASCII digits without leading zeroes")
-        number = _parse_number(value)
+def parse_pull_request_reference(
+    pull_request: str,
+    repository: str | None = None,
+) -> PullRequestReference:
+    """Parse one explicit PR number + repository or canonical HTTPS PR URL."""
+    _require_selector(pull_request, label="--pr")
+    value = pull_request
+    if _NUMBER.fullmatch(value) is not None:
         if repository is None:
-            raise InputError("a numeric --pr requires --repo [HOST/]OWNER/REPO")
+            raise InputError(
+                "numeric --pr requires --repo [HOST/]OWNER/REPO or an HTTPS pull request URL"
+            )
         _require_selector(repository, label="--repo")
         parts = repository.split("/")
         if len(parts) == 2:
-            parts.insert(0, "github.com")
-        if len(parts) != 3:
-            raise InputError("--repo must use [HOST/]OWNER/REPO")
-        return _reference(*parts, number=number)
+            host, owner, repo = "github.com", parts[0], parts[1]
+        elif len(parts) == 3:
+            host, owner, repo = parts
+        else:
+            raise InputError("--repo must be OWNER/REPO or HOST/OWNER/REPO")
+        return _reference(host, owner, repo, number=_parse_number(value))
     if repository is not None:
-        raise InputError("--repo is supported only with a numeric --pr, not a PR URL")
+        raise InputError("--repo cannot be combined with a pull request URL in --pr")
     try:
         url = urlsplit(value)
         if (
-            url.scheme != "https"
+            url.scheme.lower() != "https"
+            or not url.netloc
             or url.username is not None
             or url.password is not None
             or url.port is not None
-            or url.netloc.casefold() != (url.hostname or "").casefold()
             or url.query
             or url.fragment
             or "?" in value
@@ -117,11 +123,17 @@ def fetch_pull_request_review_snapshot(
     reference: PullRequestReference,
     *,
     plan_digest: str,
+    include_check_runs: bool = False,
+    delay_seconds: int = 0,
 ) -> PullRequestReviewSnapshot:
     """Fetch one current PR review snapshot using gh authentication, without Git or writes."""
     if not isinstance(reference, PullRequestReference):
         raise TypeError("remote review fetch requires a PullRequestReference")
+    if type(delay_seconds) is not int or not 0 <= delay_seconds <= MAX_DELAY_SECONDS:
+        raise ValueError("delay_seconds must be an integer between 0 and 300")
     executable = _find_gh()
+    if delay_seconds > 0:
+        time.sleep(delay_seconds)
     base_endpoint = f"repos/{reference.owner}/{reference.repository}"
 
     pr_doc = _gh_api_json(executable, reference, f"{base_endpoint}/pulls/{reference.number}")
@@ -171,11 +183,19 @@ def fetch_pull_request_review_snapshot(
         reference,
         f"{base_endpoint}/issues/{reference.number}/reactions?per_page={MAX_SNAPSHOT_RECORDS}",
     )
+    check_runs_items: list[dict[str, Any]] = []
+    if include_check_runs:
+        check_runs_doc = _gh_api_json(
+            executable,
+            reference,
+            f"{base_endpoint}/commits/{head_sha}/check-runs?per_page={MAX_SNAPSHOT_RECORDS}",
+        )
+        check_runs_items = _normalize_check_runs(check_runs_doc)
 
     # Live --pr fetches never derive reaction freshness from Git commit dates
     # or partially emulate the gate publisher's boundary/workflow-run state;
-    # head_committed_at is None so live checks require head-bound review or
-    # summary evidence to pass rather than unbound PR-body reactions.
+    # head_committed_at is None so live checks require head-bound review,
+    # summary, or check-run evidence to pass rather than unbound PR-body reactions.
     snapshot_document: dict[str, Any] = {
         "version": 1,
         "plan_digest": plan_digest,
@@ -190,6 +210,7 @@ def fetch_pull_request_review_snapshot(
         "review_comments": _normalize_review_comments(review_comments_doc),
         "issue_comments": _normalize_issue_comments(issue_comments_doc),
         "reactions": _normalize_reactions(reactions_doc),
+        "check_runs": check_runs_items,
     }
     return parse_pull_request_snapshot(snapshot_document, source=actual.url)
 
@@ -357,6 +378,51 @@ def _normalize_reactions(raw: Any) -> list[dict[str, Any]]:
     return items
 
 
+def _normalize_check_runs(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, dict):
+        raise InputError("gh returned a non-object commit check-runs payload")
+    runs_raw = raw.get("check_runs")
+    if not isinstance(runs_raw, list):
+        raise InputError("gh returned a non-list commit check_runs field")
+    total_count = raw.get("total_count")
+    if (
+        type(total_count) is not int
+        or total_count < len(runs_raw)
+        or total_count >= MAX_SNAPSHOT_RECORDS
+        or len(runs_raw) >= MAX_SNAPSHOT_RECORDS
+    ):
+        raise InputError("gh returned an invalid or truncated commit check-runs count")
+    items: list[dict[str, Any]] = []
+    for entry in runs_raw:
+        if not isinstance(entry, dict):
+            raise InputError("gh returned a non-object commit check-run entry")
+        app_raw = entry.get("app")
+        app_id = None
+        app_slug = None
+        if app_raw is not None:
+            if not isinstance(app_raw, dict):
+                raise InputError("gh returned an invalid check-run app field")
+            app_id = app_raw.get("id")
+            app_slug = app_raw.get("slug")
+        head_sha = entry.get("head_sha")
+        if isinstance(head_sha, str):
+            head_sha = head_sha.lower()
+        items.append(
+            {
+                "id": entry.get("id"),
+                "name": entry.get("name"),
+                "status": entry.get("status"),
+                "conclusion": entry.get("conclusion"),
+                "head_sha": head_sha,
+                "app_id": app_id,
+                "app_slug": app_slug,
+                "started_at": entry.get("started_at"),
+                "completed_at": entry.get("completed_at"),
+            }
+        )
+    return items
+
+
 def _extract_user(raw: Any, *, label: str) -> tuple[Any, Any]:
     if not isinstance(raw, dict):
         raise InputError(f"gh returned a {label} without an author user object")
@@ -390,7 +456,7 @@ def _parse_number(value: str) -> int:
 
 def _reference(host: str, owner: str, repository: str, *, number: int) -> PullRequestReference:
     try:
-        return PullRequestReference(host, owner, repository, number)
+        return PullRequestReference(host.lower(), owner, repository, number)
     except ValueError:
         raise InputError(
             "pull request host, owner, or repository has an unsupported format"

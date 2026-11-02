@@ -74,14 +74,14 @@ def test_operation_name_is_closed() -> None:
 
 @pytest.mark.parametrize("operation", sorted(runtime.OPERATIONS))
 @pytest.mark.parametrize(
-    "instruction",
-    ["Review behavior.", "Perform a dedicated security audit of all authentication code."],
+    "preset",
+    ["codex", "copilot"],
 )
 def test_configured_lens_policy_fails_before_api_access(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     operation: str,
-    instruction: str,
+    preset: str,
 ) -> None:
     output = _environment(
         monkeypatch,
@@ -96,8 +96,7 @@ def test_configured_lens_policy_fails_before_api_access(
         "version = 1\n"
         "required = ['correctness']\n"
         "[agent-review.agents.correctness]\n"
-        "preset = 'codex'\n"
-        f"instruction = '{instruction}'\n",
+        f"preset = '{preset}'\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))

@@ -15,14 +15,18 @@ MAX_POLICY_BYTES = 1024 * 1024
 MAX_LENSES = 32
 MAX_NAME_LENGTH = 64
 MAX_PRESET_LENGTH = 64
-MAX_INSTRUCTION_BYTES = 4096
 MAX_REACTIONS = 8
+MAX_CHECK_RUNS = 16
+MAX_CHECK_RUN_NAME_LENGTH = 128
+MAX_DELAY_SECONDS = 300
 MAX_PORTABLE_INT = (1 << 53) - 1
 
 CODEX_DEFAULT_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 CODEX_DEFAULT_BOT_USER_ID = 199175422
 CODEX_DEFAULT_BOT_APP_ID = 1144995
 COPILOT_DEFAULT_BOT_LOGIN = "copilot-pull-request-reviewer[bot]"
+CLAUDE_DEFAULT_BOT_LOGIN = "claude[bot]"
+BUILTIN_PRESETS = frozenset({"codex", "copilot", "claude"})
 DEFAULT_PASS_REACTIONS: tuple[str, ...] = ("+1",)
 DEFAULT_PENDING_REACTIONS: tuple[str, ...] = ("eyes",)
 
@@ -33,7 +37,6 @@ _ROOT_KEYS = frozenset({"version", "required", "aggregation", "agents"})
 _LENS_KEYS = frozenset(
     {
         "preset",
-        "instruction",
         "outcome",
         "publication",
         "bot-login",
@@ -41,6 +44,8 @@ _LENS_KEYS = frozenset(
         "bot-app-id",
         "pass-reactions",
         "pending-reactions",
+        "check-runs",
+        "delay-seconds",
     }
 )
 _AGGREGATIONS = frozenset({"all-required", "any-required"})
@@ -51,13 +56,15 @@ _REACTIONS = frozenset({"+1", "-1", "laugh", "confused", "heart", "hooray", "roc
 
 @dataclass(frozen=True, slots=True)
 class BotIdentity:
-    """Resolved review-bot identity and reaction markers for one lens."""
+    """Resolved review-bot identity, reaction markers, and check runs for one lens."""
 
     bot_login: str
     bot_user_id: int | None = None
     bot_app_id: int | None = None
     pass_reactions: tuple[str, ...] = DEFAULT_PASS_REACTIONS
     pending_reactions: tuple[str, ...] = DEFAULT_PENDING_REACTIONS
+    check_runs: tuple[str, ...] = ()
+    delay_seconds: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,15 +72,16 @@ class ReviewLens:
     """One named agent review lens."""
 
     name: str
-    preset: str
-    instruction: str
-    outcome: str
+    preset: str = "custom"
+    outcome: str = "review"
     publication: str = "review"
     bot_login: str | None = None
     bot_user_id: int | None = None
     bot_app_id: int | None = None
     pass_reactions: tuple[str, ...] | None = None
     pending_reactions: tuple[str, ...] | None = None
+    check_runs: tuple[str, ...] | None = None
+    delay_seconds: int = 0
 
     def resolve_bot(self) -> BotIdentity:
         """Resolve explicit bot identity or built-in preset defaults."""
@@ -87,6 +95,11 @@ class ReviewLens:
             raise ConfigurationError(
                 f"Agent review lens {self.name} pass-reactions and pending-reactions overlap"
             )
+        check_runs = () if self.check_runs is None else self.check_runs
+        if self.check_runs is not None and not _valid_check_runs_tuple(self.check_runs):
+            raise ConfigurationError(f"Agent review lens {self.name} check-runs is invalid")
+        if type(self.delay_seconds) is not int or not 0 <= self.delay_seconds <= MAX_DELAY_SECONDS:
+            raise ConfigurationError(f"Agent review lens {self.name} delay-seconds is invalid")
         if self.preset == "codex":
             bot_login = CODEX_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
             use_codex_defaults = bot_login.casefold() == CODEX_DEFAULT_BOT_LOGIN.casefold()
@@ -106,6 +119,8 @@ class ReviewLens:
                 bot_app_id=bot_app_id,
                 pass_reactions=pass_reactions,
                 pending_reactions=pending_reactions,
+                check_runs=check_runs,
+                delay_seconds=self.delay_seconds,
             )
         if self.preset == "copilot":
             bot_login = COPILOT_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
@@ -115,6 +130,19 @@ class ReviewLens:
                 bot_app_id=self.bot_app_id,
                 pass_reactions=pass_reactions,
                 pending_reactions=pending_reactions,
+                check_runs=check_runs,
+                delay_seconds=self.delay_seconds,
+            )
+        if self.preset == "claude":
+            bot_login = CLAUDE_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
+            return BotIdentity(
+                bot_login=bot_login,
+                bot_user_id=self.bot_user_id,
+                bot_app_id=self.bot_app_id,
+                pass_reactions=pass_reactions,
+                pending_reactions=pending_reactions,
+                check_runs=check_runs,
+                delay_seconds=self.delay_seconds,
             )
         if self.bot_login is None:
             raise ConfigurationError(
@@ -127,6 +155,8 @@ class ReviewLens:
             bot_app_id=self.bot_app_id,
             pass_reactions=pass_reactions,
             pending_reactions=pending_reactions,
+            check_runs=check_runs,
+            delay_seconds=self.delay_seconds,
         )
 
 
@@ -185,11 +215,15 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
     aggregation = root.get("aggregation", "all-required")
     if not isinstance(aggregation, str) or aggregation not in _AGGREGATIONS:
         raise ConfigurationError(f"agent-review.aggregation is invalid in {path}")
+    required_names = _parse_required_names(root.get("required", []), path)
     raw_agents = root.get("agents")
-    if not isinstance(raw_agents, dict) or not raw_agents:
+    if raw_agents is None:
+        raw_agents = {}
+    elif not isinstance(raw_agents, dict) or not raw_agents:
         raise ConfigurationError(f"agent-review.agents must be a nonempty table in {path}")
     if len(raw_agents) > MAX_LENSES:
         raise ConfigurationError(f"agent-review.agents exceeds {MAX_LENSES} entries in {path}")
+
     lenses: list[ReviewLens] = []
     seen: set[str] = set()
     for raw_name, raw_lens in raw_agents.items():
@@ -200,18 +234,13 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
         if not isinstance(raw_lens, dict):
             raise ConfigurationError(f"agent-review.agents.{name} must be a table in {path}")
         _reject_unknown(raw_lens, _LENS_KEYS, f"agent-review.agents.{name}", path)
-        preset = raw_lens.get("preset")
-        if not isinstance(preset, str) or not _PRESET.fullmatch(preset):
-            raise ConfigurationError(f"agent-review.agents.{name}.preset is invalid in {path}")
-        instruction = raw_lens.get("instruction")
-        if not isinstance(instruction, str) or not instruction.strip():
-            raise ConfigurationError(
-                f"agent-review.agents.{name}.instruction is required in {path}"
-            )
-        if len(instruction.encode("utf-8")) > MAX_INSTRUCTION_BYTES or "\x00" in instruction:
-            raise ConfigurationError(
-                f"agent-review.agents.{name}.instruction is oversized or unsafe"
-            )
+        has_explicit_preset = "preset" in raw_lens
+        if has_explicit_preset:
+            preset = raw_lens.get("preset")
+            if not isinstance(preset, str) or not _PRESET.fullmatch(preset):
+                raise ConfigurationError(f"agent-review.agents.{name}.preset is invalid in {path}")
+        else:
+            preset = name if name in BUILTIN_PRESETS else "custom"
         outcome = raw_lens.get("outcome", "review")
         if not isinstance(outcome, str) or outcome not in _OUTCOMES:
             raise ConfigurationError(f"agent-review.agents.{name}.outcome is invalid in {path}")
@@ -219,6 +248,10 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
         if not isinstance(publication, str) or publication not in _PUBLICATIONS:
             raise ConfigurationError(f"agent-review.agents.{name}.publication is invalid in {path}")
         bot_login = _optional_bot_login(raw_lens.get("bot-login"), name=name, path=path)
+        if not has_explicit_preset and name not in BUILTIN_PRESETS and bot_login is None:
+            raise ConfigurationError(
+                f"agent-review.agents.{name} requires preset or bot-login in {path}"
+            )
         bot_user_id = _optional_positive_int(
             raw_lens.get("bot-user-id"), key="bot-user-id", name=name, path=path
         )
@@ -247,11 +280,12 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
             raise ConfigurationError(
                 f"agent-review.agents.{name} pass-reactions and pending-reactions overlap in {path}"
             )
+        check_runs = _optional_check_runs(raw_lens.get("check-runs"), name=name, path=path)
+        delay_seconds = _optional_delay_seconds(raw_lens.get("delay-seconds"), name=name, path=path)
         lenses.append(
             ReviewLens(
                 name=name,
                 preset=preset,
-                instruction=instruction,
                 outcome=outcome,
                 publication=publication,
                 bot_login=bot_login,
@@ -259,12 +293,34 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
                 bot_app_id=bot_app_id,
                 pass_reactions=pass_reactions,
                 pending_reactions=pending_reactions,
+                check_runs=check_runs,
+                delay_seconds=delay_seconds,
             )
         )
-    required = _required(root.get("required", []), seen, lenses, path)
-    if not required:
-        raise ConfigurationError(f"agent-review.required must name at least one lens in {path}")
-    return AgentReviewPolicy(version, required, aggregation, tuple(lenses))
+
+    for req_name in required_names:
+        if req_name not in seen:
+            if req_name not in BUILTIN_PRESETS:
+                raise ConfigurationError(
+                    f"agent-review.required names unknown lens {req_name} in {path}"
+                )
+            seen.add(req_name)
+            lenses.append(
+                ReviewLens(
+                    name=req_name,
+                    preset=req_name,
+                    outcome="review",
+                    publication="review",
+                )
+            )
+        elif next(lens for lens in lenses if lens.name == req_name).outcome != "review":
+            raise ConfigurationError(
+                f"agent-review.required lens {req_name} must have outcome review"
+            )
+
+    if len(lenses) > MAX_LENSES:
+        raise ConfigurationError(f"agent-review.agents exceeds {MAX_LENSES} entries in {path}")
+    return AgentReviewPolicy(version, required_names, aggregation, tuple(lenses))
 
 
 def _optional_bot_login(value: Any, *, name: str, path: Path) -> str | None:
@@ -304,7 +360,48 @@ def _optional_reactions(
     return tuple(seen)
 
 
-def _required(raw: Any, names: set[str], lenses: list[ReviewLens], path: Path) -> tuple[str, ...]:
+def _valid_check_run_name(item: Any) -> bool:
+    return (
+        isinstance(item, str)
+        and 1 <= len(item) <= MAX_CHECK_RUN_NAME_LENGTH
+        and item.strip() == item
+        and not any(ord(ch) < 32 or ord(ch) == 127 for ch in item)
+    )
+
+
+def _valid_check_runs_tuple(items: tuple[str, ...]) -> bool:
+    if not isinstance(items, tuple) or not 1 <= len(items) <= MAX_CHECK_RUNS:
+        return False
+    seen: set[str] = set()
+    for item in items:
+        if not _valid_check_run_name(item) or item in seen:
+            return False
+        seen.add(item)
+    return True
+
+
+def _optional_check_runs(value: Any, *, name: str, path: Path) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_CHECK_RUNS:
+        raise ConfigurationError(f"agent-review.agents.{name}.check-runs is invalid in {path}")
+    seen: list[str] = []
+    for item in value:
+        if not _valid_check_run_name(item) or item in seen:
+            raise ConfigurationError(f"agent-review.agents.{name}.check-runs is invalid in {path}")
+        seen.append(item)
+    return tuple(seen)
+
+
+def _optional_delay_seconds(value: Any, *, name: str, path: Path) -> int:
+    if value is None:
+        return 0
+    if type(value) is not int or not 0 <= value <= MAX_DELAY_SECONDS:
+        raise ConfigurationError(f"agent-review.agents.{name}.delay-seconds is invalid in {path}")
+    return value
+
+
+def _parse_required_names(raw: Any, path: Path) -> tuple[str, ...]:
     if not isinstance(raw, list) or not raw or len(raw) > MAX_LENSES:
         raise ConfigurationError(
             f"agent-review.required must be a nonempty bounded array in {path}"
@@ -314,10 +411,6 @@ def _required(raw: Any, names: set[str], lenses: list[ReviewLens], path: Path) -
         name = _name(value, "required Agent review lens", path)
         if name in result:
             raise ConfigurationError(f"agent-review.required repeats {name} in {path}")
-        if name not in names:
-            raise ConfigurationError(f"agent-review.required names unknown lens {name} in {path}")
-        if next(lens for lens in lenses if lens.name == name).outcome != "review":
-            raise ConfigurationError(f"agent-review.required lens {name} must have outcome review")
         result.append(name)
     return tuple(result)
 

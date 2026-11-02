@@ -21,24 +21,21 @@ aggregation = "all-required"
 
 [agent-review.agents.correctness]
 preset = "codex"
-instruction = "Review behavior, tests, and compatibility."
 outcome = "review"
 publication = "inline"
 
 [agent-review.agents.security]
 preset = "codex"
-instruction = "Review trust boundaries and least privilege."
 outcome = "review"
 
 [agent-review.agents.documentation]
 preset = "codex"
-instruction = "Review public documentation and developer ergonomics."
 outcome = "advisory"
 publication = "comment"
 ```
 
 Required lenses participate in the aggregate gate; advisory lenses can publish findings without
-blocking it. Every lens must have a unique name, a bounded instruction, a bounded adapter preset
+blocking it. Every lens must have a unique name, a bounded adapter preset
 label, and one publication mode: `comment`, `inline`, `reaction`, `review`, or `check`. The mode describes
 the intended provider output; it does not grant credentials or bypass provider capabilities.
 Credentials, tokens, and provider-specific secrets stay in the trusted workflow environment.
@@ -58,7 +55,7 @@ yaga gate agent-review policy check --file .yaga.toml --format json
 The JSON check report is a validation summary for wrappers and CI tooling. It contains the schema
 version, `passed` status, aggregation mode, lens and required counts, required lens order, and the
 matching `plan_digest`; it does not contact a provider or include credentials. Use `policy plan
---format json` when an adapter needs the full instructions and provider-neutral lens items.
+--format json` when an adapter needs the provider-neutral lens items.
 
 To inspect the exact provider-neutral work the policy describes, render its execution plan:
 
@@ -100,9 +97,8 @@ outside YAGA and make the YAGA boundary a small, deterministic handoff:
 
 1. Load the trusted policy and run `policy check` before contacting a provider.
 2. Render `policy plan --format json` and retain its `plan_digest` with the adapter run.
-3. For each ordered lens, select the adapter named by `preset`, pass its `instruction` as data,
-   and preserve the requested `outcome` and `publication` mode. Do not treat the instruction as
-   executable shell or workflow source.
+3. For each ordered lens, select the adapter named by `preset` and preserve the requested
+   `outcome` and `publication` mode.
 4. Correlate every provider result to the exact pull request, base SHA, head SHA, lifecycle
    boundary, and adapter request before accepting it. An uncorrelated result is `pending` or an
    operational failure, never an implicit pass.
@@ -125,14 +121,14 @@ the explicit `pending` result and report the operational cause separately rather
 Treat the plan and receipt as one versioned handoff. A trusted adapter should generate the plan from
 the policy, pass each ordered lens to its selected provider, preserve the lens name and requested
 publication mode in its own provider work, and write one result for every plan item. If the policy
-file, lens order, aggregation, instruction, preset label, outcome role, or publication mode changes,
+file, lens order, aggregation, preset label, outcome role, or publication mode changes,
 the digest changes and the adapter must generate a new receipt before evaluation.
 The result contract is deliberately small:
 
 ```json
 {
   "version": 1,
-  "plan_digest": "8fab465b0b8ea9bf25e0c993387673ddde272405e885573f2094e09611c02cf0",
+  "plan_digest": "02ea06065a23a1b2baa7177f150f9f96548d3a1ee4e736437ebf037934fb5249",
   "results": [
     {"lens": "correctness", "outcome": "passed", "summary": "No findings."},
     {"lens": "documentation", "outcome": "failed", "summary": "The setup example is stale."}
@@ -176,14 +172,14 @@ The example exits `0`: both blocking lenses passed even though the advisory docu
 failed. A real adapter replaces the example result file after it runs its configured lenses. It
 should translate provider-specific comments, inline findings, reactions, native reviews, or check
 runs into exactly one result per configured lens, preserving a short human-readable summary.
-YAGA does not execute the configured preset or instruction and does not grant provider credentials;
+YAGA does not execute the configured preset and does not grant provider credentials;
 the trusted integration owns that work and must correlate its evidence to the current pull request,
 commit, lifecycle boundary, and request before writing the receipt.
 
 Use a blocking failure to exercise CI behavior:
 
 ```json
-{"version":1,"plan_digest":"8fab465b0b8ea9bf25e0c993387673ddde272405e885573f2094e09611c02cf0","results":[
+{"version":1,"plan_digest":"02ea06065a23a1b2baa7177f150f9f96548d3a1ee4e736437ebf037934fb5249","results":[
   {"lens":"correctness","outcome":"failed","summary":"A regression is present."},
   {"lens":"security","outcome":"passed"},
   {"lens":"documentation","outcome":"passed"}
@@ -196,7 +192,7 @@ from a broken handoff. The result document is a bounded local interchange format
 authorization token or security authority by itself.
 
 The validator requires schema version `1`, at least one required lens, unique lower-case lens names,
-known outcomes (`review` or `advisory`), publication modes, bounded instructions, and a bounded
+known outcomes (`review` or `advisory`), publication modes, and a bounded
 preset label. The label is intentionally not a YAGA provider registry: an external adapter decides
 which service, model, or human workflow it represents. The validator does not contact an agent or
 read credentials. Run the installed `policy check`, `plan`, `template`, and `evaluate` commands in
@@ -216,10 +212,15 @@ yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr http
 yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr 123 --repo OWNER/REPO --format json
 ```
 
-Each configured lens resolves its review bot identity from built-in presets (`codex` defaults to
-`chatgpt-codex-connector[bot]` with user ID `199175422` and app ID `1144995`; `copilot` defaults to
-`copilot-pull-request-reviewer[bot]`) or explicit lens keys (`bot-login`, `bot-user-id`,
-`bot-app-id`, `pass-reactions`, `pending-reactions`). Reviews and summary comments bound to an
+When `required` only names built-in presets (`codex`, `copilot`, or `claude`), the
+`[agent-review.agents]` table can be omitted entirely. Each configured lens resolves its review bot
+identity from built-in presets (`codex` defaults to `chatgpt-codex-connector[bot]` with user ID
+`199175422` and app ID `1144995`; `copilot` defaults to `copilot-pull-request-reviewer[bot]`;
+`claude` defaults to `claude[bot]`) or explicit lens keys (`bot-login`, `bot-user-id`,
+`bot-app-id`, `pass-reactions`, `pending-reactions`, `check-runs`, `delay-seconds`). Lenses with
+`check-runs` also inspect head-commit check runs (`repos/OWNER/REPO/commits/HEAD_SHA/check-runs`)
+and require every configured check-run to complete with `success`, while `delay-seconds` (`0..300`)
+waits before fetching live `--pr` state. Reviews, check runs, and summary comments bound to an
 older commit SHA, or reactions predating the current head commit timestamp, report `pending` (stale)
 and exit `1` so stale approvals never pass a new head commit.
 

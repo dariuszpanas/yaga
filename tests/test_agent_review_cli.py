@@ -53,13 +53,11 @@ aggregation = "all-required"
 
 [agent-review.agents.codex]
 preset = "codex"
-instruction = "Review correctness and security."
 outcome = "review"
 publication = "review"
 
 [agent-review.agents.copilot]
 preset = "copilot"
-instruction = "Review maintainability."
 outcome = "review"
 publication = "review"
 """.strip()
@@ -630,3 +628,72 @@ def test_action_bootstrap_does_not_import_pull_request_review_cli_modules(
         "service": False,
         "pull_request_cmd": False,
     }
+
+
+def test_live_pr_fetch_honors_delay_seconds_and_check_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_path = tmp_path / "claude-policy.toml"
+    policy_path.write_text(
+        """
+[agent-review]
+version = 1
+required = ["claude"]
+
+[agent-review.agents.claude]
+check-runs = ["claude-review"]
+delay-seconds = 12
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    slept: list[int] = []
+    monkeypatch.setattr(remote.time, "sleep", lambda seconds: slept.append(seconds))
+
+    endpoints = _default_gh_endpoints(reviews=[], issue_comments=[], reactions=[])
+    check_runs_endpoint = f"repos/example/project/commits/{HEAD_SHA}/check-runs?per_page=100"
+    endpoints[check_runs_endpoint] = {
+        "total_count": 1,
+        "check_runs": [
+            {
+                "id": 900,
+                "name": "claude-review",
+                "status": "completed",
+                "conclusion": "success",
+                "head_sha": HEAD_SHA,
+                "started_at": "2026-11-01T18:01:00Z",
+                "completed_at": "2026-11-01T18:02:00Z",
+                "app": {"id": 555, "slug": "claude"},
+            }
+        ],
+    }
+    calls = _mock_gh_api(monkeypatch, endpoints)
+
+    res = runner.invoke(
+        app,
+        [*COMMAND, "--policy", str(policy_path), "--pr", REFERENCE.url, "--format", "json"],
+    )
+    assert res.exit_code == 0, res.stderr
+    assert slept == [12]
+    assert len(calls) == 6
+    doc = json.loads(res.stdout)
+    assert doc["status"] == "passed"
+    assert doc["results"] == [
+        {
+            "lens": "claude",
+            "outcome": "passed",
+            "summary": f"check-run claude-review for claude[bot] passed on head {HEAD_SHA[:12]}",
+        }
+    ]
+
+    endpoints[check_runs_endpoint] = {
+        "total_count": 100,
+        "check_runs": [],
+    }
+    _mock_gh_api(monkeypatch, endpoints)
+    truncated_res = runner.invoke(
+        app,
+        [*COMMAND, "--policy", str(policy_path), "--pr", REFERENCE.url, "--format", "json"],
+    )
+    assert truncated_res.exit_code == 2

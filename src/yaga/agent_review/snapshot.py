@@ -21,6 +21,8 @@ MAX_SNAPSHOT_RECORDS = 100
 MAX_SNAPSHOT_BODY_BYTES = 65536
 MAX_PATH_BYTES = 4096
 MAX_URL_BYTES = 1024
+MAX_CHECK_RUN_NAME_BYTES = 256
+MAX_APP_SLUG_BYTES = 128
 MAX_PORTABLE_INT = (1 << 53) - 1
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -29,6 +31,21 @@ _LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?
 _REVIEW_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"})
 _PR_STATES = frozenset({"open", "closed"})
 _REACTIONS = frozenset({"+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes"})
+_CHECK_RUN_STATUSES = frozenset(
+    {"queued", "in_progress", "completed", "waiting", "requested", "pending"}
+)
+_CHECK_RUN_CONCLUSIONS = frozenset(
+    {
+        "success",
+        "failure",
+        "neutral",
+        "cancelled",
+        "skipped",
+        "timed_out",
+        "action_required",
+        "stale",
+    }
+)
 _CODEX_FINDING_BADGE = re.compile(r"!\[P[0-3]\s+Badge\]", re.IGNORECASE)
 _CLEAN_CODEX_COMMENT = re.compile(
     r"(?:agent|codex)\s+review:\s*didn['\u2019]t\s+find\s+any\s+major\s+issues\.",
@@ -58,6 +75,7 @@ _ROOT_KEYS = frozenset(
         "review_comments",
         "issue_comments",
         "reactions",
+        "check_runs",
     }
 )
 _REVIEW_KEYS = frozenset(
@@ -79,6 +97,19 @@ _ISSUE_COMMENT_KEYS = frozenset(
     {"id", "author_login", "author_id", "app_id", "created_at", "updated_at", "body"}
 )
 _REACTION_KEYS = frozenset({"id", "author_login", "author_id", "content", "created_at"})
+_CHECK_RUN_KEYS = frozenset(
+    {
+        "id",
+        "name",
+        "status",
+        "conclusion",
+        "head_sha",
+        "app_slug",
+        "app_id",
+        "started_at",
+        "completed_at",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +171,21 @@ class PullRequestReactionRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class PullRequestCheckRunRecord:
+    """One head-commit check-run entry from a snapshot."""
+
+    check_run_id: int
+    name: str
+    status: str
+    conclusion: str | None = None
+    head_sha: str | None = None
+    app_slug: str | None = None
+    app_id: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PullRequestReviewSnapshot:
     """Validated, bounded snapshot of one pull request's review state."""
 
@@ -154,6 +200,7 @@ class PullRequestReviewSnapshot:
     review_comments: tuple[PullRequestReviewCommentRecord, ...] = ()
     issue_comments: tuple[PullRequestIssueCommentRecord, ...] = ()
     reactions: tuple[PullRequestReactionRecord, ...] = ()
+    check_runs: tuple[PullRequestCheckRunRecord, ...] = ()
     plan_digest: str | None = None
 
 
@@ -228,6 +275,7 @@ def parse_pull_request_snapshot(
     review_comments = _parse_review_comments(document.get("review_comments", []), source)
     issue_comments = _parse_issue_comments(document.get("issue_comments", []), source)
     reactions = _parse_reactions(document.get("reactions", []), source)
+    check_runs = _parse_check_runs(document.get("check_runs", []), source)
     return PullRequestReviewSnapshot(
         number=number,
         head_sha=head_sha,
@@ -240,6 +288,7 @@ def parse_pull_request_snapshot(
         review_comments=review_comments,
         issue_comments=issue_comments,
         reactions=reactions,
+        check_runs=check_runs,
         plan_digest=plan_digest,
     )
 
@@ -416,6 +465,56 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
             continue
         _verify_user_id(reaction.author_id, bot.bot_user_id, bot.bot_login, "reaction")
         matched_reactions.append(reaction)
+
+    failed_check_runs: list[tuple[str, str]] = []
+    in_progress_check_runs: list[tuple[str, str]] = []
+    missing_check_runs: list[str] = []
+    passed_check_runs: list[tuple[str, PullRequestCheckRunRecord]] = []
+    stale_check_runs: list[PullRequestCheckRunRecord] = []
+    if bot.check_runs:
+        configured_names = set(bot.check_runs)
+        current_by_name: dict[str, list[PullRequestCheckRunRecord]] = {
+            name: [] for name in bot.check_runs
+        }
+        for check_run in snapshot.check_runs:
+            if check_run.name not in configured_names:
+                continue
+            if bot.bot_app_id is not None and check_run.app_id != bot.bot_app_id:
+                raise InputError(
+                    f"check-run {check_run.check_run_id} ({check_run.name}) "
+                    f"for {bot.bot_login} has an unexpected app_id"
+                )
+            if check_run.head_sha is None or _SHA.fullmatch(check_run.head_sha) is None:
+                raise InputError(
+                    f"check-run {check_run.check_run_id} ({check_run.name}) "
+                    f"for {bot.bot_login} is missing a valid head_sha"
+                )
+            if check_run.head_sha != snapshot.head_sha:
+                stale_check_runs.append(check_run)
+                continue
+            effective_run_time = check_run.completed_at or check_run.started_at
+            if (
+                snapshot.head_committed_at is not None
+                and effective_run_time is not None
+                and effective_run_time < snapshot.head_committed_at
+            ):
+                stale_check_runs.append(check_run)
+                continue
+            current_by_name[check_run.name].append(check_run)
+
+        for run_name in bot.check_runs:
+            runs = current_by_name[run_name]
+            if not runs:
+                missing_check_runs.append(run_name)
+                continue
+            latest_run = _select_latest_check_run(runs)
+            if latest_run.status != "completed":
+                in_progress_check_runs.append((run_name, latest_run.status))
+            elif latest_run.conclusion != "success":
+                assert latest_run.conclusion is not None
+                failed_check_runs.append((run_name, latest_run.conclusion))
+            else:
+                passed_check_runs.append((run_name, latest_run))
 
     # Non-commit-bound signals (ordinary issue comments without a Reviewed
     # commit marker and PR-body reactions) have no commit_id of their own and
@@ -612,6 +711,42 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
             summary=f"{bot.bot_login} posted a non-clean issue comment on head {short_head}",
         )
 
+    if failed_check_runs:
+        run_name, conclusion = failed_check_runs[0]
+        return LensResult(
+            lens=lens.name,
+            outcome=LensOutcome.FAILED,
+            summary=(
+                f"check-run {run_name} for {bot.bot_login} completed with {conclusion} "
+                f"on head {short_head}"
+            ),
+        )
+
+    if in_progress_check_runs:
+        run_name, status = in_progress_check_runs[0]
+        return LensResult(
+            lens=lens.name,
+            outcome=LensOutcome.PENDING,
+            summary=f"check-run {run_name} for {bot.bot_login} is {status} for head {short_head}",
+        )
+
+    if missing_check_runs:
+        run_name = missing_check_runs[0]
+        if any(item.name == run_name for item in stale_check_runs):
+            return LensResult(
+                lens=lens.name,
+                outcome=LensOutcome.PENDING,
+                summary=(
+                    f"last check-run {run_name} for {bot.bot_login} is stale; "
+                    f"waiting for head {short_head}"
+                ),
+            )
+        return LensResult(
+            lens=lens.name,
+            outcome=LensOutcome.PENDING,
+            summary=f"waiting for check-run {run_name} for {bot.bot_login} on head {short_head}",
+        )
+
     codex_pending_times = [
         state.effective_at for state in current_codex_states if state.outcome is LensOutcome.PENDING
     ]
@@ -655,15 +790,18 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
         completion_times.append(latest_clean_comment.created_at)
     if latest_pass is not None:
         completion_times.append(latest_pass.created_at)
+    for _, check_run in passed_check_runs:
+        run_time = check_run.completed_at or check_run.started_at
+        if run_time is not None:
+            completion_times.append(run_time)
     latest_completion_time = max(completion_times, default=None)
 
-    if latest_completion_time is not None:
-        pending_reaction_newer = (
-            latest_pending is not None and latest_pending.created_at > latest_completion_time
+    if latest_completion_time is not None or passed_check_runs:
+        pending_reaction_newer = latest_pending is not None and (
+            latest_completion_time is None or latest_pending.created_at > latest_completion_time
         )
-        pending_summary_newer = (
-            latest_codex_pending_time is not None
-            and latest_codex_pending_time > latest_completion_time
+        pending_summary_newer = latest_codex_pending_time is not None and (
+            latest_completion_time is None or latest_codex_pending_time > latest_completion_time
         )
         if pending_reaction_newer or pending_summary_newer:
             if pending_reaction_newer and (
@@ -711,6 +849,13 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
                 lens=lens.name,
                 outcome=LensOutcome.PASSED,
                 summary=f"{bot.bot_login} reported no findings on head {short_head}",
+            )
+        if passed_check_runs:
+            names = ", ".join(name for name, _ in passed_check_runs)
+            return LensResult(
+                lens=lens.name,
+                outcome=LensOutcome.PASSED,
+                summary=f"check-run {names} for {bot.bot_login} passed on head {short_head}",
             )
         assert latest_pass is not None
         return LensResult(
@@ -1032,6 +1177,100 @@ def _parse_reactions(raw: Any, source: str) -> tuple[PullRequestReactionRecord, 
             )
         )
     return tuple(parsed)
+
+
+def _parse_check_runs(raw: Any, source: str) -> tuple[PullRequestCheckRunRecord, ...]:
+    items = _record_list(raw, "check_runs", source)
+    seen_ids: set[int] = set()
+    parsed: list[PullRequestCheckRunRecord] = []
+    for index, item in enumerate(items):
+        label = f"check_runs[{index}]"
+        if not isinstance(item, dict):
+            raise InputError(f"{label} must be an object in {source}")
+        _reject_unknown(item, _CHECK_RUN_KEYS, label, source)
+        check_run_id = _positive_int(item.get("id"), f"{label}.id", source)
+        if check_run_id in seen_ids:
+            raise InputError(f"{label}.id is repeated in {source}")
+        seen_ids.add(check_run_id)
+        name = _required_text(
+            item.get("name"), f"{label}.name", source, maximum=MAX_CHECK_RUN_NAME_BYTES
+        )
+        if name.strip() != name or any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+            raise InputError(f"{label}.name is invalid in {source}")
+        status = item.get("status")
+        if not isinstance(status, str) or status not in _CHECK_RUN_STATUSES:
+            raise InputError(f"{label}.status is invalid in {source}")
+        raw_conclusion = item.get("conclusion")
+        if status == "completed":
+            if not isinstance(raw_conclusion, str) or raw_conclusion not in _CHECK_RUN_CONCLUSIONS:
+                raise InputError(f"{label}.conclusion is invalid in {source}")
+            conclusion: str | None = raw_conclusion
+        else:
+            if raw_conclusion is not None:
+                raise InputError(f"{label}.conclusion must be null when not completed in {source}")
+            conclusion = None
+        head_sha = _sha(item.get("head_sha"), f"{label}.head_sha", source)
+        app_slug = _optional_text(
+            item.get("app_slug"), f"{label}.app_slug", source, maximum=MAX_APP_SLUG_BYTES
+        )
+        app_id = _optional_positive_int(item.get("app_id"), f"{label}.app_id", source)
+        started_at = _optional_timestamp(item.get("started_at"), f"{label}.started_at", source)
+        completed_at = _optional_timestamp(
+            item.get("completed_at"), f"{label}.completed_at", source
+        )
+        if started_at is not None and completed_at is not None and completed_at < started_at:
+            raise InputError(f"{label}.completed_at precedes started_at in {source}")
+        parsed.append(
+            PullRequestCheckRunRecord(
+                check_run_id=check_run_id,
+                name=name,
+                status=status,
+                conclusion=conclusion,
+                head_sha=head_sha,
+                app_slug=app_slug,
+                app_id=app_id,
+                started_at=started_at,
+                completed_at=completed_at,
+            )
+        )
+    return tuple(parsed)
+
+
+def _select_latest_check_run(
+    runs: list[PullRequestCheckRunRecord],
+) -> PullRequestCheckRunRecord:
+    def _pick_latest(items: list[PullRequestCheckRunRecord]) -> PullRequestCheckRunRecord:
+        latest = items[0]
+        for candidate in items[1:]:
+            if (
+                latest.started_at is not None
+                and candidate.started_at is not None
+                and candidate.started_at != latest.started_at
+            ):
+                if candidate.started_at > latest.started_at:
+                    latest = candidate
+            elif candidate.check_run_id > latest.check_run_id:
+                latest = candidate
+        return latest
+
+    completed_runs = [item for item in runs if item.status == "completed"]
+    incomplete_runs = [item for item in runs if item.status != "completed"]
+    if not completed_runs:
+        return _pick_latest(incomplete_runs)
+    if not incomplete_runs:
+        return _pick_latest(completed_runs)
+    latest_completed = _pick_latest(completed_runs)
+    latest_incomplete = _pick_latest(incomplete_runs)
+    if latest_incomplete.check_run_id > latest_completed.check_run_id:
+        return latest_incomplete
+    completed_start = latest_completed.started_at or latest_completed.completed_at
+    if (
+        latest_incomplete.started_at is not None
+        and completed_start is not None
+        and latest_incomplete.started_at >= completed_start
+    ):
+        return latest_incomplete
+    return latest_completed
 
 
 def _record_list(value: Any, label: str, source: str) -> list[Any]:
