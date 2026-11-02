@@ -16,14 +16,48 @@ MAX_LENSES = 32
 MAX_NAME_LENGTH = 64
 MAX_PRESET_LENGTH = 64
 MAX_INSTRUCTION_BYTES = 4096
+MAX_REACTIONS = 8
+MAX_PORTABLE_INT = (1 << 53) - 1
+
+CODEX_DEFAULT_BOT_LOGIN = "chatgpt-codex-connector[bot]"
+CODEX_DEFAULT_BOT_USER_ID = 199175422
+CODEX_DEFAULT_BOT_APP_ID = 1144995
+COPILOT_DEFAULT_BOT_LOGIN = "copilot-pull-request-reviewer[bot]"
+DEFAULT_PASS_REACTIONS: tuple[str, ...] = ("+1",)
+DEFAULT_PENDING_REACTIONS: tuple[str, ...] = ("eyes",)
 
 _NAME = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _PRESET = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
+_BOT_LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?$")
 _ROOT_KEYS = frozenset({"version", "required", "aggregation", "agents"})
-_LENS_KEYS = frozenset({"preset", "instruction", "outcome", "publication"})
+_LENS_KEYS = frozenset(
+    {
+        "preset",
+        "instruction",
+        "outcome",
+        "publication",
+        "bot-login",
+        "bot-user-id",
+        "bot-app-id",
+        "pass-reactions",
+        "pending-reactions",
+    }
+)
 _AGGREGATIONS = frozenset({"all-required", "any-required"})
 _OUTCOMES = frozenset({"review", "advisory"})
 _PUBLICATIONS = frozenset({"comment", "inline", "reaction", "review", "check"})
+_REACTIONS = frozenset({"+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes"})
+
+
+@dataclass(frozen=True, slots=True)
+class BotIdentity:
+    """Resolved review-bot identity and reaction markers for one lens."""
+
+    bot_login: str
+    bot_user_id: int | None = None
+    bot_app_id: int | None = None
+    pass_reactions: tuple[str, ...] = DEFAULT_PASS_REACTIONS
+    pending_reactions: tuple[str, ...] = DEFAULT_PENDING_REACTIONS
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +69,65 @@ class ReviewLens:
     instruction: str
     outcome: str
     publication: str = "review"
+    bot_login: str | None = None
+    bot_user_id: int | None = None
+    bot_app_id: int | None = None
+    pass_reactions: tuple[str, ...] | None = None
+    pending_reactions: tuple[str, ...] | None = None
+
+    def resolve_bot(self) -> BotIdentity:
+        """Resolve explicit bot identity or built-in preset defaults."""
+        pass_reactions = (
+            DEFAULT_PASS_REACTIONS if self.pass_reactions is None else self.pass_reactions
+        )
+        pending_reactions = (
+            DEFAULT_PENDING_REACTIONS if self.pending_reactions is None else self.pending_reactions
+        )
+        if set(pass_reactions) & set(pending_reactions):
+            raise ConfigurationError(
+                f"Agent review lens {self.name} pass-reactions and pending-reactions overlap"
+            )
+        if self.preset == "codex":
+            bot_login = CODEX_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
+            use_codex_defaults = bot_login.casefold() == CODEX_DEFAULT_BOT_LOGIN.casefold()
+            bot_user_id = (
+                CODEX_DEFAULT_BOT_USER_ID
+                if self.bot_user_id is None and use_codex_defaults
+                else self.bot_user_id
+            )
+            bot_app_id = (
+                CODEX_DEFAULT_BOT_APP_ID
+                if self.bot_app_id is None and use_codex_defaults
+                else self.bot_app_id
+            )
+            return BotIdentity(
+                bot_login=bot_login,
+                bot_user_id=bot_user_id,
+                bot_app_id=bot_app_id,
+                pass_reactions=pass_reactions,
+                pending_reactions=pending_reactions,
+            )
+        if self.preset == "copilot":
+            bot_login = COPILOT_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
+            return BotIdentity(
+                bot_login=bot_login,
+                bot_user_id=self.bot_user_id,
+                bot_app_id=self.bot_app_id,
+                pass_reactions=pass_reactions,
+                pending_reactions=pending_reactions,
+            )
+        if self.bot_login is None:
+            raise ConfigurationError(
+                f"Agent review lens {self.name} with preset {self.preset!r} requires "
+                "explicit bot-login for pull-request review checks"
+            )
+        return BotIdentity(
+            bot_login=self.bot_login,
+            bot_user_id=self.bot_user_id,
+            bot_app_id=self.bot_app_id,
+            pass_reactions=pass_reactions,
+            pending_reactions=pending_reactions,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,11 +218,90 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
         publication = raw_lens.get("publication", "review")
         if not isinstance(publication, str) or publication not in _PUBLICATIONS:
             raise ConfigurationError(f"agent-review.agents.{name}.publication is invalid in {path}")
-        lenses.append(ReviewLens(name, preset, instruction, outcome, publication))
+        bot_login = _optional_bot_login(raw_lens.get("bot-login"), name=name, path=path)
+        bot_user_id = _optional_positive_int(
+            raw_lens.get("bot-user-id"), key="bot-user-id", name=name, path=path
+        )
+        bot_app_id = _optional_positive_int(
+            raw_lens.get("bot-app-id"), key="bot-app-id", name=name, path=path
+        )
+        pass_reactions = _optional_reactions(
+            raw_lens.get("pass-reactions"),
+            key="pass-reactions",
+            name=name,
+            path=path,
+            allow_empty=False,
+        )
+        pending_reactions = _optional_reactions(
+            raw_lens.get("pending-reactions"),
+            key="pending-reactions",
+            name=name,
+            path=path,
+            allow_empty=True,
+        )
+        effective_pass = DEFAULT_PASS_REACTIONS if pass_reactions is None else pass_reactions
+        effective_pending = (
+            DEFAULT_PENDING_REACTIONS if pending_reactions is None else pending_reactions
+        )
+        if set(effective_pass) & set(effective_pending):
+            raise ConfigurationError(
+                f"agent-review.agents.{name} pass-reactions and pending-reactions overlap in {path}"
+            )
+        lenses.append(
+            ReviewLens(
+                name=name,
+                preset=preset,
+                instruction=instruction,
+                outcome=outcome,
+                publication=publication,
+                bot_login=bot_login,
+                bot_user_id=bot_user_id,
+                bot_app_id=bot_app_id,
+                pass_reactions=pass_reactions,
+                pending_reactions=pending_reactions,
+            )
+        )
     required = _required(root.get("required", []), seen, lenses, path)
     if not required:
         raise ConfigurationError(f"agent-review.required must name at least one lens in {path}")
     return AgentReviewPolicy(version, required, aggregation, tuple(lenses))
+
+
+def _optional_bot_login(value: Any, *, name: str, path: Path) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or _BOT_LOGIN.fullmatch(value) is None:
+        raise ConfigurationError(f"agent-review.agents.{name}.bot-login is invalid in {path}")
+    return value
+
+
+def _optional_positive_int(value: Any, *, key: str, name: str, path: Path) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int or not 1 <= value <= MAX_PORTABLE_INT:
+        raise ConfigurationError(f"agent-review.agents.{name}.{key} is invalid in {path}")
+    return value
+
+
+def _optional_reactions(
+    value: Any,
+    *,
+    key: str,
+    name: str,
+    path: Path,
+    allow_empty: bool,
+) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    minimum = 0 if allow_empty else 1
+    if not isinstance(value, list) or not minimum <= len(value) <= MAX_REACTIONS:
+        raise ConfigurationError(f"agent-review.agents.{name}.{key} is invalid in {path}")
+    seen: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or item not in _REACTIONS or item in seen:
+            raise ConfigurationError(f"agent-review.agents.{name}.{key} is invalid in {path}")
+        seen.append(item)
+    return tuple(seen)
 
 
 def _required(raw: Any, names: set[str], lenses: list[ReviewLens], path: Path) -> tuple[str, ...]:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 from yaga.agent_review.policy import AgentReviewPolicy
 from yaga.errors import safe_error_text
@@ -20,6 +20,33 @@ class ReviewPlanItem:
     required: bool
     outcome: str
     publication: str
+    bot_login: str | None = None
+    bot_user_id: int | None = None
+    bot_app_id: int | None = None
+    pass_reactions: tuple[str, ...] | None = None
+    pending_reactions: tuple[str, ...] | None = None
+
+
+def _item_document(item: ReviewPlanItem) -> dict[str, object]:
+    document: dict[str, object] = {
+        "name": item.name,
+        "preset": item.preset,
+        "instruction": item.instruction,
+        "required": item.required,
+        "outcome": item.outcome,
+        "publication": item.publication,
+    }
+    if item.bot_login is not None:
+        document["bot_login"] = item.bot_login
+    if item.bot_user_id is not None:
+        document["bot_user_id"] = item.bot_user_id
+    if item.bot_app_id is not None:
+        document["bot_app_id"] = item.bot_app_id
+    if item.pass_reactions is not None:
+        document["pass_reactions"] = list(item.pass_reactions)
+    if item.pending_reactions is not None:
+        document["pending_reactions"] = list(item.pending_reactions)
+    return document
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +71,7 @@ class ReviewPlan:
         return {
             "version": self.version,
             "aggregation": self.aggregation,
-            "lenses": [asdict(item) for item in self.items],
+            "lenses": [_item_document(item) for item in self.items],
         }
 
     def document(self) -> dict[str, object]:
@@ -68,6 +95,11 @@ def build_plan(policy: AgentReviewPolicy) -> ReviewPlan:
                 required=lens.name in required,
                 outcome=lens.outcome,
                 publication=lens.publication,
+                bot_login=lens.bot_login,
+                bot_user_id=lens.bot_user_id,
+                bot_app_id=lens.bot_app_id,
+                pass_reactions=lens.pass_reactions,
+                pending_reactions=lens.pending_reactions,
             )
             for lens in policy.lenses
         ),

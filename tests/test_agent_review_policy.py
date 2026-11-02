@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from yaga.agent_review.policy import load_policy
+from yaga.agent_review.policy import (
+    CODEX_DEFAULT_BOT_APP_ID,
+    CODEX_DEFAULT_BOT_LOGIN,
+    CODEX_DEFAULT_BOT_USER_ID,
+    COPILOT_DEFAULT_BOT_LOGIN,
+    BotIdentity,
+    load_policy,
+)
 from yaga.errors import ConfigurationError
 
 
@@ -46,6 +53,78 @@ publication = "comment"
     assert policy.lens("docs").publication == "comment"
 
 
+def test_load_policy_resolves_builtin_presets_and_explicit_bot_overrides(tmp_path: Path) -> None:
+    policy = load_policy(
+        write_policy(
+            tmp_path,
+            """
+[agent-review]
+version = 1
+required = ["codex-default", "copilot-default"]
+
+[agent-review.agents.codex-default]
+preset = "codex"
+instruction = "Review correctness."
+
+[agent-review.agents.copilot-default]
+preset = "copilot"
+instruction = "Review style and structure."
+
+[agent-review.agents.custom-bot]
+preset = "custom"
+instruction = "Review with a custom bot."
+outcome = "advisory"
+bot-login = "acme-reviewer[bot]"
+bot-user-id = 424242
+bot-app-id = 99999
+pass-reactions = ["+1", "rocket"]
+pending-reactions = ["eyes"]
+""",
+        )
+    )
+
+    assert policy.lens("codex-default").resolve_bot() == BotIdentity(
+        bot_login=CODEX_DEFAULT_BOT_LOGIN,
+        bot_user_id=CODEX_DEFAULT_BOT_USER_ID,
+        bot_app_id=CODEX_DEFAULT_BOT_APP_ID,
+        pass_reactions=("+1",),
+        pending_reactions=("eyes",),
+    )
+    assert policy.lens("copilot-default").resolve_bot() == BotIdentity(
+        bot_login=COPILOT_DEFAULT_BOT_LOGIN,
+        bot_user_id=None,
+        bot_app_id=None,
+        pass_reactions=("+1",),
+        pending_reactions=("eyes",),
+    )
+    assert policy.lens("custom-bot").resolve_bot() == BotIdentity(
+        bot_login="acme-reviewer[bot]",
+        bot_user_id=424242,
+        bot_app_id=99999,
+        pass_reactions=("+1", "rocket"),
+        pending_reactions=("eyes",),
+    )
+
+
+def test_custom_preset_requires_explicit_bot_login_for_resolution(tmp_path: Path) -> None:
+    policy = load_policy(
+        write_policy(
+            tmp_path,
+            """
+[agent-review]
+version = 1
+required = ["custom"]
+
+[agent-review.agents.custom]
+preset = "other-agent"
+instruction = "Review changes."
+""",
+        )
+    )
+    with pytest.raises(ConfigurationError, match="requires explicit bot-login"):
+        policy.lens("custom").resolve_bot()
+
+
 @pytest.mark.parametrize(
     "body, expected",
     [
@@ -68,6 +147,26 @@ publication = "comment"
         (
             "[agent-review]\nversion = 1\nrequired = ['missing']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'",
             "unknown lens",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'\nbot-login='-bad'",
+            "bot-login is invalid",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'\nbot-user-id=0",
+            "bot-user-id is invalid",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'\nbot-app-id=true",
+            "bot-app-id is invalid",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'\npass-reactions=[]",
+            "pass-reactions is invalid",
+        ),
+        (
+            "[agent-review]\nversion = 1\nrequired = ['x']\n[agent-review.agents.x]\npreset='codex'\ninstruction='x'\npass-reactions=['eyes']",
+            "overlap",
         ),
     ],
 )

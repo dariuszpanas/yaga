@@ -56,6 +56,41 @@ def test_json_plan_is_stable_and_contains_no_provider_credentials() -> None:
     }
 
 
+def test_explicit_bot_overrides_are_bound_into_plan_digest() -> None:
+    base_plan = build_plan(
+        AgentReviewPolicy(
+            version=1,
+            required=("correctness",),
+            aggregation="all-required",
+            lenses=(ReviewLens("correctness", "codex", "Review behavior.", "review"),),
+        )
+    )
+    custom_plan = build_plan(
+        AgentReviewPolicy(
+            version=1,
+            required=("correctness",),
+            aggregation="all-required",
+            lenses=(
+                ReviewLens(
+                    "correctness",
+                    "codex",
+                    "Review behavior.",
+                    "review",
+                    bot_login="custom-reviewer[bot]",
+                    bot_user_id=777,
+                    pass_reactions=("+1", "rocket"),
+                ),
+            ),
+        )
+    )
+
+    assert custom_plan.digest() != base_plan.digest()
+    document = json.loads(render_plan(custom_plan, "json"))
+    assert document["lenses"][0]["bot_login"] == "custom-reviewer[bot]"
+    assert document["lenses"][0]["bot_user_id"] == 777
+    assert document["lenses"][0]["pass_reactions"] == ["+1", "rocket"]
+
+
 def test_text_plan_is_actionable() -> None:
     rendered = render_plan(build_plan(review_policy()))
 
