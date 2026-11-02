@@ -996,3 +996,149 @@ def test_wait_and_submit_review_reject_invalid_options(
         [*COMMAND, "--policy", str(policy_path), *extra_args, "--format", "json"],
     )
     assert res.exit_code == 2
+
+
+def test_wait_seconds_counts_fetch_duration_toward_wall_clock_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_path = tmp_path / "codex-policy.toml"
+    policy_path.write_text(
+        """
+[agent-review]
+version = 1
+required = ["codex"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    clock = 100.0
+    slept: list[int | float] = []
+
+    def fake_monotonic() -> float:
+        return clock
+
+    def fake_sleep(seconds: int | float) -> None:
+        nonlocal clock
+        slept.append(seconds)
+        clock += seconds
+
+    monkeypatch.setattr(remote.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(remote.time, "sleep", fake_sleep)
+
+    running_comments = [
+        {
+            "id": 15,
+            "user": {
+                "login": CODEX_DEFAULT_BOT_LOGIN,
+                "id": CODEX_DEFAULT_BOT_USER_ID,
+            },
+            "performed_via_github_app": {"id": CODEX_DEFAULT_BOT_APP_ID},
+            "created_at": "2026-11-01T18:01:00Z",
+            "updated_at": "2026-11-01T18:02:00Z",
+            "body": _codex_summary_body(
+                HEAD_SHA,
+                status="running",
+                has_any_findings=None,
+                has_unresolved_findings=None,
+            ),
+        }
+    ]
+    endpoints = _default_gh_endpoints(reviews=[], issue_comments=running_comments, reactions=[])
+    monkeypatch.setattr(remote.shutil, "which", lambda _name: sys.executable)
+
+    def run(command: list[str], **options: Any) -> ProcessResult:
+        nonlocal clock
+        endpoint = command[-1]
+        if endpoint == "repos/example/project/issues/23/comments?per_page=100":
+            clock += 20.0
+        return ProcessResult(
+            0, json.dumps(endpoints[endpoint]).encode("utf-8"), b"", False, False, False
+        )
+
+    monkeypatch.setattr(remote, "run_bounded_process", run)
+
+    res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--wait-seconds",
+            "60",
+            "--format",
+            "json",
+        ],
+    )
+    assert res.exit_code == 1
+    # Each poll cycle takes 15s sleep + 20s fetch = 35s, so 2 cycles (70s) reach the 60s deadline.
+    assert slept == [15, 15]
+
+
+def test_submit_review_resubmits_when_later_unmarked_review_overrode_marked_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_path = tmp_path / "codex-policy.toml"
+    policy_path.write_text(
+        """
+[agent-review]
+version = 1
+required = ["codex"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    existing_reviews = [
+        {
+            "id": 501,
+            "user": {"login": "github-actions[bot]", "id": 41898282},
+            "state": "APPROVED",
+            "commit_id": HEAD_SHA,
+            "submitted_at": "2026-11-01T18:05:00Z",
+            "body": "YAGA pull-request review check passed.\n\n<!-- yaga-pull-request-review:v1 -->",
+        },
+        {
+            "id": 502,
+            "user": {"login": "github-actions[bot]", "id": 41898282},
+            "state": "CHANGES_REQUESTED",
+            "commit_id": HEAD_SHA,
+            "submitted_at": "2026-11-01T18:06:00Z",
+            "body": "Manual follow-up blocking review without YAGA marker.",
+        },
+    ]
+    endpoints = _default_gh_endpoints(reviews=existing_reviews, reactions=[])
+    endpoints["user"] = {"login": "github-actions[bot]", "id": 41898282}
+    endpoints["repos/example/project/pulls/23/reviews"] = {
+        "id": 503,
+        "state": "APPROVED",
+        "commit_id": HEAD_SHA,
+    }
+    calls = _mock_gh_api(monkeypatch, endpoints)
+
+    res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--submit-review",
+            "approve",
+            "--format",
+            "json",
+        ],
+    )
+    assert res.exit_code == 0, res.stderr
+    doc = json.loads(res.stdout)
+    assert doc["submitted_review"] == {
+        "action": "submitted",
+        "event": "APPROVE",
+        "state": "APPROVED",
+        "review_id": 503,
+        "commit_id": HEAD_SHA,
+    }
+    assert any("POST" in cmd for cmd, _ in calls)
