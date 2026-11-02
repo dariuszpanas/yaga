@@ -43,16 +43,18 @@ Agent review gate is the public review contract. Its current provider adapter re
   `--repo [HOST/]OWNER/REPO`, reject mixed sources and URL/repository ambiguity, and never infer
   checkout or environment selection. Use shell-free bounded process execution with 30-second,
   512 KiB stdout, and 64 KiB stderr bounds, verify returned PR identity and strict JSON, and never
-  expose raw process output or credentials. Live `--pr` fetches are read-only, set
+  expose raw process output or credentials. Live `--pr` fetches are read-only by default (unless
+  explicit `--submit-review approve|request-changes|both` is requested on an open PR), set
   `head_committed_at = None`, and never derive reaction freshness from Git commit dates or
   partially emulate `yaga-codex-authorization:v2` / `Review Policy Boundary` workflow-run
   correlation (which belongs exclusively to the `yaga gate agent-review` publisher under
   `src/yaga/agent_review/github/`): live `--pr` checks require head-bound review, summary, or
   check-run evidence (`commit_id == head_sha`, `Reviewed commit`, `codex-review-state:v1`, or
   configured `check-runs` on `commits/{head_sha}/check-runs`) to pass and honor bounded
-  `delay-seconds` (`0..300`), while offline `--file` snapshots may supply an explicit
-  `head_committed_at` timestamp. Keep this CLI check outside repository plans and both Action
-  import graphs.
+  `delay-seconds` (`0..300`) plus bounded `wait-seconds` / `--wait-seconds` (`0..600`, polling only
+  while a review is actively in progress on `head_sha` after a 30-second startup grace window),
+  while offline `--file` snapshots may supply an explicit `head_committed_at` timestamp. Keep this
+  CLI check outside repository plans and both Action import graphs.
 - `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine sources,
   fetch history, reduce a Git selection, or ignore a missing base.
 - Treat commit messages, Git output, revisions, paths, and displayed labels as untrusted. Bound

@@ -1,4 +1,4 @@
-"""Fetch one explicit pull-request review snapshot through a bounded installed gh CLI."""
+"""Fetch and submit explicit pull-request review state through a bounded installed gh CLI."""
 
 from __future__ import annotations
 
@@ -9,13 +9,15 @@ import shutil
 import stat
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from yaga.agent_review.policy import MAX_DELAY_SECONDS
+from yaga.agent_review.policy import MAX_DELAY_SECONDS, MAX_WAIT_SECONDS
 from yaga.agent_review.snapshot import (
     MAX_SNAPSHOT_RECORDS,
+    PullRequestReviewRecord,
     PullRequestReviewSnapshot,
     parse_pull_request_snapshot,
 )
@@ -27,6 +29,15 @@ MAX_REFERENCE_CHARACTERS = 1024
 MAX_GH_STDOUT_BYTES = 512 * 1024
 MAX_GH_STDERR_BYTES = 64 * 1024
 GH_TIMEOUT_SECONDS = 30
+POLL_INTERVAL_SECONDS = 15
+STARTUP_GRACE_SECONDS = 30
+GITHUB_ACTIONS_LOGIN = "github-actions[bot]"
+GITHUB_ACTIONS_USER_ID = 41_898_282
+_YAGA_REVIEW_MARKER = "<!-- yaga-pull-request-review:v1 -->"
+_EXPECTED_REVIEW_STATES = {
+    "APPROVE": "APPROVED",
+    "REQUEST_CHANGES": "CHANGES_REQUESTED",
+}
 
 _HOST_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 _OWNER = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,99}")
@@ -68,6 +79,34 @@ class PullRequestReference:
     def url(self) -> str:
         """Return the canonical HTTPS pull request URL."""
         return f"https://{self.host.lower()}/{self.owner}/{self.repository}/pull/{self.number}"
+
+
+@dataclass(frozen=True, slots=True)
+class SubmittedPullRequestReview:
+    """Result of an opt-in commit-bound pull-request review submission."""
+
+    action: str
+    event: str
+    state: str
+    review_id: int
+    commit_id: str
+
+    def document(self) -> dict[str, Any]:
+        """Return the JSON report representation of this review submission."""
+        return {
+            "action": self.action,
+            "event": self.event,
+            "state": self.state,
+            "review_id": self.review_id,
+            "commit_id": self.commit_id,
+        }
+
+
+def sleep_for_review_poll(seconds: int) -> None:
+    """Sleep for a bounded poll interval while waiting for an active PR review."""
+    if type(seconds) is not int or not 1 <= seconds <= MAX_WAIT_SECONDS:
+        raise ValueError(f"poll sleep seconds must be an integer between 1 and {MAX_WAIT_SECONDS}")
+    time.sleep(seconds)
 
 
 def parse_pull_request_reference(
@@ -215,6 +254,114 @@ def fetch_pull_request_review_snapshot(
     return parse_pull_request_snapshot(snapshot_document, source=actual.url)
 
 
+def submit_pull_request_review(
+    reference: PullRequestReference,
+    *,
+    head_sha: str,
+    event: str,
+    existing_reviews: tuple[PullRequestReviewRecord, ...] = (),
+) -> SubmittedPullRequestReview:
+    """Submit an idempotent commit-bound APPROVE or REQUEST_CHANGES review on head_sha."""
+    if not isinstance(reference, PullRequestReference):
+        raise TypeError("review submission requires a PullRequestReference")
+    if not isinstance(head_sha, str) or _SHA.fullmatch(head_sha) is None:
+        raise ValueError("head_sha must be a 40-character hexadecimal SHA")
+    normalized_sha = head_sha.lower()
+    expected_state = _EXPECTED_REVIEW_STATES.get(event)
+    if expected_state is None:
+        raise ValueError("event must be APPROVE or REQUEST_CHANGES")
+
+    executable = _find_gh()
+    marked_reviews = [
+        review
+        for review in existing_reviews
+        if _YAGA_REVIEW_MARKER in review.body and review.state in {"APPROVED", "CHANGES_REQUESTED"}
+    ]
+    has_matching_target = any(
+        review.commit_id == normalized_sha and review.state == expected_state
+        for review in marked_reviews
+    )
+    if has_matching_target:
+        actor = _resolve_review_actor(executable, reference)
+        if actor is not None:
+            actor_login, actor_id = actor
+            actor_reviews = [
+                review
+                for review in marked_reviews
+                if review.author_login.casefold() == actor_login.casefold()
+                and review.author_id == actor_id
+            ]
+            if actor_reviews:
+                latest = max(
+                    actor_reviews,
+                    key=lambda item: (
+                        item.submitted_at or datetime.min.replace(tzinfo=UTC),
+                        item.review_id,
+                    ),
+                )
+                if latest.commit_id == normalized_sha and latest.state == expected_state:
+                    return SubmittedPullRequestReview(
+                        action="unchanged",
+                        event=event,
+                        state=expected_state,
+                        review_id=latest.review_id,
+                        commit_id=normalized_sha,
+                    )
+
+    verdict = "passed" if event == "APPROVE" else "failed"
+    body = (
+        f"YAGA pull-request review check {verdict} for commit `{normalized_sha[:12]}`.\n\n"
+        f"{_YAGA_REVIEW_MARKER}"
+    )
+    endpoint = f"repos/{reference.owner}/{reference.repository}/pulls/{reference.number}/reviews"
+    created = _gh_api_post_json(
+        executable,
+        reference,
+        endpoint,
+        fields=(
+            ("commit_id", normalized_sha),
+            ("event", event),
+            ("body", body),
+        ),
+    )
+    if not isinstance(created, dict):
+        raise InputError("gh returned an invalid pull-request review submission document")
+    review_id = created.get("id")
+    if type(review_id) is not int or review_id < 1:
+        raise InputError("gh returned an invalid pull-request review id")
+    state = created.get("state")
+    if state != expected_state:
+        raise InputError("gh returned an unexpected pull-request review state")
+    commit_id = created.get("commit_id")
+    if not isinstance(commit_id, str) or commit_id.lower() != normalized_sha:
+        raise InputError("gh returned a pull-request review bound to a different commit_id")
+    return SubmittedPullRequestReview(
+        action="submitted",
+        event=event,
+        state=expected_state,
+        review_id=review_id,
+        commit_id=normalized_sha,
+    )
+
+
+def _resolve_review_actor(
+    executable: str,
+    reference: PullRequestReference,
+) -> tuple[str, int] | None:
+    try:
+        user_doc = _gh_api_json(executable, reference, "user")
+    except InputError:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            return GITHUB_ACTIONS_LOGIN, GITHUB_ACTIONS_USER_ID
+        return None
+    if isinstance(user_doc, dict):
+        login = user_doc.get("login")
+        user_id = user_doc.get("id")
+        if isinstance(login, str) and login and type(user_id) is int and user_id >= 1:
+            return login, user_id
+    return None
+
+
 def _gh_api_json(
     executable: str,
     reference: PullRequestReference,
@@ -251,6 +398,61 @@ def _gh_api_json(
         )
     if len(result.stdout) > MAX_GH_STDOUT_BYTES:
         raise InputError("gh exceeded the bounded pull-request review JSON limit")
+    try:
+        return json.loads(
+            result.stdout.decode("utf-8"),
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_constant,
+        )
+    except (ValueError, RecursionError):
+        raise InputError("gh returned invalid or ambiguous UTF-8 JSON") from None
+
+
+def _gh_api_post_json(
+    executable: str,
+    reference: PullRequestReference,
+    endpoint: str,
+    *,
+    fields: tuple[tuple[str, str], ...],
+) -> Any:
+    command = [
+        executable,
+        "api",
+        "--hostname",
+        reference.host,
+        "--method",
+        "POST",
+        "-H",
+        "Accept: application/vnd.github+json",
+        "-H",
+        "X-GitHub-Api-Version: 2022-11-28",
+    ]
+    for key, value in fields:
+        command.extend(("-f", f"{key}={value}"))
+    command.append(endpoint)
+    try:
+        result = run_bounded_process(
+            command,
+            stdout_limit=MAX_GH_STDOUT_BYTES,
+            stderr_limit=MAX_GH_STDERR_BYTES,
+            timeout_seconds=GH_TIMEOUT_SECONDS,
+            environment=_gh_environment(),
+        )
+    except (OSError, ValueError):
+        raise InputError(
+            "gh could not execute its bounded pull-request review submission"
+        ) from None
+    if result.timed_out:
+        raise InputError("gh exceeded the 30-second pull-request review submission timeout")
+    if result.stdout_overflow or result.stderr_overflow:
+        raise InputError("gh exceeded the bounded pull-request review submission output limit")
+    if result.returncode != 0:
+        raise InputError(
+            "gh could not submit the pull-request review; check gh authentication, "
+            "pull-requests: write permission, and repository Actions approval settings"
+        )
+    if len(result.stdout) > MAX_GH_STDOUT_BYTES:
+        raise InputError("gh exceeded the bounded pull-request review submission JSON limit")
     try:
         return json.loads(
             result.stdout.decode("utf-8"),

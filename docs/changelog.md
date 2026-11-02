@@ -5,13 +5,16 @@
 ### Added
 
 - Add `pull-request review check` for offline review-state snapshots (`--file`) and live GitHub
-  pull requests (`--pr`, or a positive number with `--repo`) fetched read-only through the
-  installed authenticated `gh` CLI. Reports support text, schema-v1 JSON, and GitHub annotations
+  pull requests (`--pr`, or a positive number with `--repo`) fetched through the installed
+  authenticated `gh` CLI, including bounded active-review polling (`wait-seconds` /
+  `--wait-seconds` `0..600`) and opt-in commit-bound PR review submission (`--submit-review
+  none|approve|request-changes|both`). Reports support text, schema-v1 JSON, and GitHub annotations
   with exit codes `0`, `1`, and `2`.
 - Add built-in `codex`, `copilot`, and `claude` bot presets plus custom bot identity, reaction,
-  head-commit `check-runs`, and `delay-seconds` (`0..300`) settings to `[agent-review]`. Allow
-  omitting `[agent-review.agents]` when `required` only names built-in presets, default `preset`,
-  `outcome`, and `publication` on custom agent tables, and remove the unused `instruction` field.
+  head-commit `check-runs`, `delay-seconds` (`0..300`), and `wait-seconds` (`0..600`) settings to
+  `[agent-review]`. Allow omitting `[agent-review.agents]` when `required` only names built-in
+  presets, default `preset`, `outcome`, and `publication` on custom agent tables, and remove the
+  unused `instruction` field.
 
 ### Changed
 

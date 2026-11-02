@@ -21,6 +21,7 @@ from yaga.agent_review.snapshot import (
     PullRequestReviewSnapshot,
     SnapshotEvaluation,
     evaluate_pull_request_snapshot,
+    is_review_actively_in_progress,
     load_pull_request_snapshot,
     parse_pull_request_snapshot,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "evaluate_policy",
     "evaluate_pull_request_snapshot",
     "evaluate_results",
+    "is_review_actively_in_progress",
     "load_policy",
     "load_pull_request_snapshot",
     "load_results",

@@ -697,3 +697,302 @@ delay-seconds = 12
         [*COMMAND, "--policy", str(policy_path), "--pr", REFERENCE.url, "--format", "json"],
     )
     assert truncated_res.exit_code == 2
+
+
+def test_wait_seconds_polls_while_actively_in_progress_and_stops_when_passed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_path = tmp_path / "codex-policy.toml"
+    policy_path.write_text(
+        """
+[agent-review]
+version = 1
+required = ["codex"]
+
+[agent-review.agents.codex]
+wait-seconds = 60
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    slept: list[int] = []
+    monkeypatch.setattr(remote.time, "sleep", lambda seconds: slept.append(seconds))
+
+    running_comments = [
+        {
+            "id": 15,
+            "user": {
+                "login": CODEX_DEFAULT_BOT_LOGIN,
+                "id": CODEX_DEFAULT_BOT_USER_ID,
+            },
+            "performed_via_github_app": {"id": CODEX_DEFAULT_BOT_APP_ID},
+            "created_at": "2026-11-01T18:01:00Z",
+            "updated_at": "2026-11-01T18:02:00Z",
+            "body": _codex_summary_body(
+                HEAD_SHA,
+                status="running",
+                has_any_findings=None,
+                has_unresolved_findings=None,
+            ),
+        }
+    ]
+    completed_comments = [
+        {
+            "id": 15,
+            "user": {
+                "login": CODEX_DEFAULT_BOT_LOGIN,
+                "id": CODEX_DEFAULT_BOT_USER_ID,
+            },
+            "performed_via_github_app": {"id": CODEX_DEFAULT_BOT_APP_ID},
+            "created_at": "2026-11-01T18:01:00Z",
+            "updated_at": "2026-11-01T18:04:00Z",
+            "body": _codex_summary_body(HEAD_SHA),
+        }
+    ]
+    endpoints = _default_gh_endpoints(reviews=[], issue_comments=running_comments, reactions=[])
+    fetch_count = 0
+    monkeypatch.setattr(remote.shutil, "which", lambda _name: sys.executable)
+
+    def run(command: list[str], **options: Any) -> ProcessResult:
+        nonlocal fetch_count
+        endpoint = command[-1]
+        if endpoint == "repos/example/project/issues/23/comments?per_page=100":
+            fetch_count += 1
+            comments = running_comments if fetch_count < 3 else completed_comments
+            return ProcessResult(0, json.dumps(comments).encode("utf-8"), b"", False, False, False)
+        return ProcessResult(
+            0, json.dumps(endpoints[endpoint]).encode("utf-8"), b"", False, False, False
+        )
+
+    monkeypatch.setattr(remote, "run_bounded_process", run)
+
+    res = runner.invoke(
+        app,
+        [*COMMAND, "--policy", str(policy_path), "--pr", REFERENCE.url, "--format", "json"],
+    )
+    assert res.exit_code == 0, res.stderr
+    assert slept == [15, 15]
+    assert json.loads(res.stdout)["status"] == "passed"
+
+
+def test_wait_seconds_stops_after_startup_grace_when_no_review_is_actively_running(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_path = tmp_path / "codex-policy.toml"
+    policy_path.write_text(
+        """
+[agent-review]
+version = 1
+required = ["codex"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    slept: list[int] = []
+    monkeypatch.setattr(remote.time, "sleep", lambda seconds: slept.append(seconds))
+
+    stale_comments = [
+        {
+            "id": 15,
+            "user": {
+                "login": CODEX_DEFAULT_BOT_LOGIN,
+                "id": CODEX_DEFAULT_BOT_USER_ID,
+            },
+            "performed_via_github_app": {"id": CODEX_DEFAULT_BOT_APP_ID},
+            "created_at": "2026-11-01T17:50:00Z",
+            "updated_at": "2026-11-01T17:52:00Z",
+            "body": _codex_summary_body(OLD_SHA),
+        }
+    ]
+    _mock_gh_api(
+        monkeypatch,
+        _default_gh_endpoints(reviews=[], issue_comments=stale_comments, reactions=[]),
+    )
+
+    res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--wait-seconds",
+            "300",
+            "--format",
+            "json",
+        ],
+    )
+    assert res.exit_code == 1
+    # Stops after the 30-second startup grace (two 15s polls) instead of waiting 300s.
+    assert slept == [15, 15]
+    assert json.loads(res.stdout)["status"] == "pending"
+
+
+def test_submit_review_posts_idempotent_approve_and_request_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_path = tmp_path / "codex-policy.toml"
+    policy_path.write_text(
+        """
+[agent-review]
+version = 1
+required = ["codex"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    endpoints = _default_gh_endpoints(reviews=[], reactions=[])
+    endpoints["repos/example/project/pulls/23/reviews"] = {
+        "id": 501,
+        "state": "APPROVED",
+        "commit_id": HEAD_SHA,
+    }
+    calls = _mock_gh_api(monkeypatch, endpoints)
+
+    approve_res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--submit-review",
+            "approve",
+            "--format",
+            "json",
+        ],
+    )
+    assert approve_res.exit_code == 0, approve_res.stderr
+    approve_doc = json.loads(approve_res.stdout)
+    assert approve_doc["submitted_review"] == {
+        "action": "submitted",
+        "event": "APPROVE",
+        "state": "APPROVED",
+        "review_id": 501,
+        "commit_id": HEAD_SHA,
+    }
+    post_cmd, _ = calls[-1]
+    assert "--method" in post_cmd and "POST" in post_cmd
+    assert f"commit_id={HEAD_SHA}" in post_cmd
+    assert "event=APPROVE" in post_cmd
+
+    # Re-running when the same actor already has the latest APPROVED YAGA review on HEAD_SHA skips POST.
+    existing_yaga_review = {
+        "id": 501,
+        "user": {"login": "dariuszpanas", "id": 15094983},
+        "state": "APPROVED",
+        "commit_id": HEAD_SHA,
+        "submitted_at": "2026-11-01T18:05:00Z",
+        "body": (
+            f"YAGA pull-request review check passed for commit `{HEAD_SHA[:12]}`.\n\n"
+            "<!-- yaga-pull-request-review:v1 -->"
+        ),
+    }
+    endpoints = _default_gh_endpoints(reviews=[existing_yaga_review], reactions=[])
+    endpoints["user"] = {"login": "dariuszpanas", "id": 15094983}
+    calls = _mock_gh_api(monkeypatch, endpoints)
+
+    unchanged_res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--submit-review",
+            "both",
+            "--format",
+            "json",
+        ],
+    )
+    assert unchanged_res.exit_code == 0, unchanged_res.stderr
+    unchanged_doc = json.loads(unchanged_res.stdout)
+    assert unchanged_doc["submitted_review"] == {
+        "action": "unchanged",
+        "event": "APPROVE",
+        "state": "APPROVED",
+        "review_id": 501,
+        "commit_id": HEAD_SHA,
+    }
+    assert all("POST" not in cmd for cmd, _ in calls)
+
+    # Failed evaluation with --submit-review request-changes submits REQUEST_CHANGES and exits 1.
+    failed_comments = [
+        {
+            "id": 15,
+            "user": {
+                "login": CODEX_DEFAULT_BOT_LOGIN,
+                "id": CODEX_DEFAULT_BOT_USER_ID,
+            },
+            "performed_via_github_app": {"id": CODEX_DEFAULT_BOT_APP_ID},
+            "created_at": "2026-11-01T18:01:00Z",
+            "updated_at": "2026-11-01T18:04:00Z",
+            "body": _codex_summary_body(
+                HEAD_SHA,
+                status="completed",
+                has_any_findings=True,
+                has_unresolved_findings=True,
+            ),
+        }
+    ]
+    endpoints = _default_gh_endpoints(reviews=[], issue_comments=failed_comments, reactions=[])
+    endpoints["repos/example/project/pulls/23/reviews"] = {
+        "id": 502,
+        "state": "CHANGES_REQUESTED",
+        "commit_id": HEAD_SHA,
+    }
+    calls = _mock_gh_api(monkeypatch, endpoints)
+
+    req_changes_res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--submit-review",
+            "request-changes",
+            "--format",
+            "json",
+        ],
+    )
+    assert req_changes_res.exit_code == 1
+    req_changes_doc = json.loads(req_changes_res.stdout)
+    assert req_changes_doc["status"] == "failed"
+    assert req_changes_doc["submitted_review"] == {
+        "action": "submitted",
+        "event": "REQUEST_CHANGES",
+        "state": "CHANGES_REQUESTED",
+        "review_id": 502,
+        "commit_id": HEAD_SHA,
+    }
+    post_cmd, _ = calls[-1]
+    assert "event=REQUEST_CHANGES" in post_cmd
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    [
+        ["--file", "snap.json", "--wait-seconds", "10"],
+        ["--pr", REFERENCE.url, "--wait-seconds", "-1"],
+        ["--pr", REFERENCE.url, "--wait-seconds", "601"],
+        ["--file", "snap.json", "--submit-review", "approve"],
+    ],
+)
+def test_wait_and_submit_review_reject_invalid_options(
+    tmp_path: Path,
+    extra_args: list[str],
+) -> None:
+    policy_path = _write_policy(tmp_path)
+    res = runner.invoke(
+        app,
+        [*COMMAND, "--policy", str(policy_path), *extra_args, "--format", "json"],
+    )
+    assert res.exit_code == 2

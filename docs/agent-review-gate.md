@@ -209,7 +209,8 @@ JSON file (`--file`) or a live GitHub pull request (`--pr`) fetched via the inst
 ```bash
 yaga pull-request review check --policy .yaga/agent-review-policy.toml --file pr-review-snapshot.json
 yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr https://github.com/OWNER/REPO/pull/123
-yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr 123 --repo OWNER/REPO --format json
+yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr 123 --repo OWNER/REPO --wait-seconds 300 --format json
+yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr 123 --repo OWNER/REPO --submit-review both
 ```
 
 When `required` only names built-in presets (`codex`, `copilot`, or `claude`), the
@@ -217,12 +218,18 @@ When `required` only names built-in presets (`codex`, `copilot`, or `claude`), t
 identity from built-in presets (`codex` defaults to `chatgpt-codex-connector[bot]` with user ID
 `199175422` and app ID `1144995`; `copilot` defaults to `copilot-pull-request-reviewer[bot]`;
 `claude` defaults to `claude[bot]`) or explicit lens keys (`bot-login`, `bot-user-id`,
-`bot-app-id`, `pass-reactions`, `pending-reactions`, `check-runs`, `delay-seconds`). Lenses with
-`check-runs` also inspect head-commit check runs (`repos/OWNER/REPO/commits/HEAD_SHA/check-runs`)
-and require every configured check-run to complete with `success`, while `delay-seconds` (`0..300`)
-waits before fetching live `--pr` state. Reviews, check runs, and summary comments bound to an
-older commit SHA, or reactions predating the current head commit timestamp, report `pending` (stale)
-and exit `1` so stale approvals never pass a new head commit.
+`bot-app-id`, `pass-reactions`, `pending-reactions`, `check-runs`, `delay-seconds`, `wait-seconds`).
+Lenses with `check-runs` also inspect head-commit check runs
+(`repos/OWNER/REPO/commits/HEAD_SHA/check-runs`) and require every configured check-run to complete
+with `success`, while `delay-seconds` (`0..300`) waits before fetching live `--pr` state.
+`wait-seconds` (`0..600`, or `--wait-seconds 0..600` on `--pr`) polls live PR state every 15
+seconds while an agent review is actively running on `head_sha` (after a 30-second startup grace
+window), failing fast if no review is running so disabled automatic reviews do not hang until
+timeout. Optional `--submit-review approve|request-changes|both` (default `none`, live `--pr` only
+on an open PR) posts an idempotent commit-bound `APPROVE` or `REQUEST_CHANGES` review on `head_sha`
+from a trusted workflow or token with `pull-requests: write`. Reviews, check runs, and summary
+comments bound to an older commit SHA, or reactions predating the current head commit timestamp,
+report `pending` (stale) and exit `1` so stale approvals never pass a new head commit.
 
 ## Evidence responsibility
 

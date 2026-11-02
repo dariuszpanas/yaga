@@ -19,6 +19,7 @@ MAX_REACTIONS = 8
 MAX_CHECK_RUNS = 16
 MAX_CHECK_RUN_NAME_LENGTH = 128
 MAX_DELAY_SECONDS = 300
+MAX_WAIT_SECONDS = 600
 MAX_PORTABLE_INT = (1 << 53) - 1
 
 CODEX_DEFAULT_BOT_LOGIN = "chatgpt-codex-connector[bot]"
@@ -46,6 +47,7 @@ _LENS_KEYS = frozenset(
         "pending-reactions",
         "check-runs",
         "delay-seconds",
+        "wait-seconds",
     }
 )
 _AGGREGATIONS = frozenset({"all-required", "any-required"})
@@ -65,6 +67,7 @@ class BotIdentity:
     pending_reactions: tuple[str, ...] = DEFAULT_PENDING_REACTIONS
     check_runs: tuple[str, ...] = ()
     delay_seconds: int = 0
+    wait_seconds: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +85,7 @@ class ReviewLens:
     pending_reactions: tuple[str, ...] | None = None
     check_runs: tuple[str, ...] | None = None
     delay_seconds: int = 0
+    wait_seconds: int = 0
 
     def resolve_bot(self) -> BotIdentity:
         """Resolve explicit bot identity or built-in preset defaults."""
@@ -100,6 +104,8 @@ class ReviewLens:
             raise ConfigurationError(f"Agent review lens {self.name} check-runs is invalid")
         if type(self.delay_seconds) is not int or not 0 <= self.delay_seconds <= MAX_DELAY_SECONDS:
             raise ConfigurationError(f"Agent review lens {self.name} delay-seconds is invalid")
+        if type(self.wait_seconds) is not int or not 0 <= self.wait_seconds <= MAX_WAIT_SECONDS:
+            raise ConfigurationError(f"Agent review lens {self.name} wait-seconds is invalid")
         if self.preset == "codex":
             bot_login = CODEX_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
             use_codex_defaults = bot_login.casefold() == CODEX_DEFAULT_BOT_LOGIN.casefold()
@@ -121,6 +127,7 @@ class ReviewLens:
                 pending_reactions=pending_reactions,
                 check_runs=check_runs,
                 delay_seconds=self.delay_seconds,
+                wait_seconds=self.wait_seconds,
             )
         if self.preset == "copilot":
             bot_login = COPILOT_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
@@ -132,6 +139,7 @@ class ReviewLens:
                 pending_reactions=pending_reactions,
                 check_runs=check_runs,
                 delay_seconds=self.delay_seconds,
+                wait_seconds=self.wait_seconds,
             )
         if self.preset == "claude":
             bot_login = CLAUDE_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
@@ -143,6 +151,7 @@ class ReviewLens:
                 pending_reactions=pending_reactions,
                 check_runs=check_runs,
                 delay_seconds=self.delay_seconds,
+                wait_seconds=self.wait_seconds,
             )
         if self.bot_login is None:
             raise ConfigurationError(
@@ -157,6 +166,7 @@ class ReviewLens:
             pending_reactions=pending_reactions,
             check_runs=check_runs,
             delay_seconds=self.delay_seconds,
+            wait_seconds=self.wait_seconds,
         )
 
 
@@ -282,6 +292,7 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
             )
         check_runs = _optional_check_runs(raw_lens.get("check-runs"), name=name, path=path)
         delay_seconds = _optional_delay_seconds(raw_lens.get("delay-seconds"), name=name, path=path)
+        wait_seconds = _optional_wait_seconds(raw_lens.get("wait-seconds"), name=name, path=path)
         lenses.append(
             ReviewLens(
                 name=name,
@@ -295,6 +306,7 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
                 pending_reactions=pending_reactions,
                 check_runs=check_runs,
                 delay_seconds=delay_seconds,
+                wait_seconds=wait_seconds,
             )
         )
 
@@ -398,6 +410,14 @@ def _optional_delay_seconds(value: Any, *, name: str, path: Path) -> int:
         return 0
     if type(value) is not int or not 0 <= value <= MAX_DELAY_SECONDS:
         raise ConfigurationError(f"agent-review.agents.{name}.delay-seconds is invalid in {path}")
+    return value
+
+
+def _optional_wait_seconds(value: Any, *, name: str, path: Path) -> int:
+    if value is None:
+        return 0
+    if type(value) is not int or not 0 <= value <= MAX_WAIT_SECONDS:
+        raise ConfigurationError(f"agent-review.agents.{name}.wait-seconds is invalid in {path}")
     return value
 
 
