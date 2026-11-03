@@ -15,8 +15,66 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: Check
+  yaga-checks:
+    name: YAGA Checks (branch, description, change, repo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Cache Typos registry
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/registry
+          key: yaga-typos-${{ runner.os }}-1.49.0
+          restore-keys: yaga-typos-${{ runner.os }}-
+      - name: Install Typos CLI
+        run: cargo install typos-cli --version 1.49.0 --locked
+      - name: Check pull-request branch name
+        if: github.event_name == 'pull_request'
+        uses: ./
+        with:
+          check: branch
+          policy: .yaga/branch-policy.toml
+          branch: ${{ github.head_ref }}
+      - name: Check pushed branch name
+        if: >-
+          github.event_name == 'push' &&
+          github.ref_type == 'branch' &&
+          github.event.deleted == false
+        uses: ./
+        with:
+          check: branch
+          policy: .yaga/branch-policy.toml
+          branch: ${{ github.ref_name }}
+      - name: Check pull-request description
+        if: >-
+          github.event_name == 'pull_request' &&
+          (github.event.pull_request.user.login != 'dependabot[bot]' ||
+          github.event.pull_request.user.type != 'Bot')
+        uses: ./
+        with:
+          check: pr-description
+          policy: .yaga/description-policy.toml
+      - name: Run changed-path policy
+        uses: ./
+        with:
+          check: change
+          policy: .yaga/change-policy.toml
+          range: ${{ github.event_name == 'pull_request' && format('{0}...{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+      - name: Run aggregate repository checks
+        uses: ./
+        with:
+          check: repo
+          plan: .yaga/checks/ci.toml
+          commit: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+  lint-and-build:
+    name: Lint, Package Build & Docs
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -48,27 +106,6 @@ jobs:
             'feat(ci): exercise the installed CLI' \
             'Keep the installed command path covered by this CI smoke test.')"
           uv run --frozen --python 3.12 yaga commit check --message "$yaga_message"
-      - name: Check pull-request branch name
-        if: github.event_name == 'pull_request'
-        env:
-          YAGA_BRANCH_NAME: ${{ github.head_ref }}
-        run: >-
-          uv run --frozen --python 3.12 yaga branch check
-          --policy .yaga/branch-policy.toml
-          --name "$YAGA_BRANCH_NAME"
-          --format github
-      - name: Check pushed branch name
-        if: >-
-          github.event_name == 'push' &&
-          github.ref_type == 'branch' &&
-          github.event.deleted == false
-        env:
-          YAGA_BRANCH_NAME: ${{ github.ref_name }}
-        run: >-
-          uv run --frozen --python 3.12 yaga branch check
-          --policy .yaga/branch-policy.toml
-          --name "$YAGA_BRANCH_NAME"
-          --format github
       - name: Exercise the pre-commit provider
         run: |
           printf '%s\n' 'not conventional' > "$RUNNER_TEMP/YAGA_COMMIT_EDITMSG"
@@ -82,25 +119,6 @@ jobs:
           grep -F -- 'hook id: yaga-commit-check' "$RUNNER_TEMP/yaga-pre-commit.log"
           grep -F -- 'exit code: 1' "$RUNNER_TEMP/yaga-pre-commit.log"
           grep -F -- '[syntax.header]' "$RUNNER_TEMP/yaga-pre-commit.log"
-      - name: Run aggregate repository checks
-        env:
-          YAGA_REPOSITORY_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: >-
-          uv run --frozen --python 3.12 yaga repo check
-          --plan .yaga/checks/ci.toml
-          --commit "$YAGA_REPOSITORY_REVISION"
-          --revision "$YAGA_REPOSITORY_REVISION"
-          --format github
-      - name: Run changed-path policy
-        env:
-          YAGA_CHANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-          YAGA_CHANGE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          YAGA_CHANGE_SEPARATOR: ${{ github.event_name == 'pull_request' && '...' || '..' }}
-        run: >-
-          uv run --frozen --python 3.12 yaga change check
-          --policy .yaga/change-policy.toml
-          --range "${YAGA_CHANGE_BASE}${YAGA_CHANGE_SEPARATOR}${YAGA_CHANGE_HEAD}"
-          --format github
       - name: Exercise the cached actionlint integration
         run: >-
           uv run --frozen --python 3.12 pytest -q -n 0
@@ -111,20 +129,7 @@ jobs:
         run: |
           uv run --frozen --python 3.12 zensical build --strict --clean
           uv run --frozen --python 3.12 python scripts/check_docs.py
-      - name: Exercise the unified CLI composite action
-        id: cli_action_smoke
-        uses: ./
-        with:
-          check: branch
-          policy: .yaga/branch-policy.toml
-          branch: feat/action-smoke
-      - name: Require the CLI composite smoke outcome
-        env:
-          CLI_ACTION_OUTCOME: ${{ steps.cli_action_smoke.outcome }}
-          CLI_ACTION_EXIT_CODE: ${{ steps.cli_action_smoke.outputs.exit-code }}
-        run: |
-          test "$CLI_ACTION_OUTCOME" = success
-          test "$CLI_ACTION_EXIT_CODE" = 0
+          uv run --frozen --python 3.12 python scripts/check_description.py
       - name: Install the composite smoke interpreter
         run: |
           install -D --mode=0755 \
@@ -133,6 +138,8 @@ jobs:
           echo "$RUNNER_TEMP/yaga-smoke-bin" >> "$GITHUB_PATH"
       - name: Exercise the composite action manifest and wiring
         id: action_smoke
+        env:
+          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/yaga-gate-smoke-summary.md
         uses: ./
         with:
           check: gate
@@ -146,6 +153,7 @@ jobs:
           ACTION_OUTCOME: ${{ steps.action_smoke.outcome }}
         run: |
           test "$ACTION_OUTCOME" = success
+          grep -F -- 'YAGA Checks · gate' "$RUNNER_TEMP/yaga-gate-smoke-summary.md"
 
   test:
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
@@ -210,17 +218,19 @@ jobs:
   gate:
     name: CI Prerequisites
     if: always()
-    needs: [check, test, minimum-runtime]
+    needs: [yaga-checks, lint-and-build, test, minimum-runtime]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
       - name: Require the complete blocking matrix
         env:
-          CHECK_RESULT: ${{ needs.check.result }}
+          YAGA_CHECKS_RESULT: ${{ needs.yaga-checks.result }}
+          LINT_AND_BUILD_RESULT: ${{ needs.lint-and-build.result }}
           TEST_RESULT: ${{ needs.test.result }}
           MINIMUM_RUNTIME_RESULT: ${{ needs.minimum-runtime.result }}
         run: |
           set -euo pipefail
-          [[ "$CHECK_RESULT" == success ]]
+          [[ "$YAGA_CHECKS_RESULT" == success ]]
+          [[ "$LINT_AND_BUILD_RESULT" == success ]]
           [[ "$TEST_RESULT" == success ]]
           [[ "$MINIMUM_RUNTIME_RESULT" == success ]]

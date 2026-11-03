@@ -177,9 +177,11 @@ def test_commit_action_is_an_isolated_read_only_branch_in_root_action() -> None:
 def test_ci_installs_the_pinned_typos_cli_for_the_repository_policy() -> None:
     workflow = read(".github/workflows/ci.yml")
 
-    assert "cargo install typos-cli --version 1.49.0 --locked" in workflow
-    assert "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" in workflow
-    assert "path: ~/.cargo/registry" in workflow
+    for job_id in ("yaga-checks", "lint-and-build"):
+        job = workflow_job(workflow, job_id)
+        assert "cargo install typos-cli --version 1.49.0 --locked" in job
+        assert "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" in job
+        assert "path: ~/.cargo/registry" in job
 
 
 def test_commit_quality_action_publishes_advisory_annotations() -> None:
@@ -211,41 +213,43 @@ def test_commit_quality_action_publishes_advisory_annotations() -> None:
 
 def test_ci_changed_path_policy_uses_explicit_unprivileged_event_boundaries() -> None:
     workflow = read(".github/workflows/ci.yml")
+    yaga_checks = workflow_job(workflow, "yaga-checks")
 
     assert section_keys(workflow, "permissions") == {"contents"}
     assert "pull_request_target:" not in workflow
     assert "workflow_run:" not in workflow
-    assert "fetch-depth: 0" in workflow
-    assert "persist-credentials: false" in workflow
-    assert "name: Run changed-path policy" in workflow
-    assert "YAGA_CHANGE_BASE: ${{ github.event_name == 'pull_request'" in workflow
-    assert "YAGA_CHANGE_HEAD: ${{ github.event_name == 'pull_request'" in workflow
-    assert "YAGA_CHANGE_SEPARATOR: ${{ github.event_name == 'pull_request'" in workflow
-    assert '--range "${YAGA_CHANGE_BASE}${YAGA_CHANGE_SEPARATOR}${YAGA_CHANGE_HEAD}"' in workflow
-    assert "--policy .yaga/change-policy.toml" in workflow
-    assert "--format github" in workflow
+    assert "fetch-depth: 0" in yaga_checks
+    assert "persist-credentials: false" in yaga_checks
+    assert "name: Run changed-path policy" in yaga_checks
+    assert "check: change" in yaga_checks
+    assert "policy: .yaga/change-policy.toml" in yaga_checks
+    assert (
+        "format('{0}...{1}', github.event.pull_request.base.sha, "
+        "github.event.pull_request.head.sha)" in yaga_checks
+    )
+    assert "format('{0}..{1}', github.event.before, github.sha)" in yaga_checks
 
 
-def test_ci_branch_policy_uses_explicit_unprivileged_event_names() -> None:
+def test_ci_branch_and_description_policies_dogfood_root_action() -> None:
     workflow = read(".github/workflows/ci.yml")
+    yaga_checks = workflow_job(workflow, "yaga-checks")
 
     assert section_keys(workflow, "permissions") == {"contents"}
     assert "pull_request_target:" not in workflow
     assert "workflow_run:" not in workflow
-    assert "name: Check pull-request branch name" in workflow
-    assert "name: Check pushed branch name" in workflow
-    assert "if: github.event_name == 'pull_request'" in workflow
-    assert "github.event_name == 'push' &&" in workflow
-    assert "github.ref_type == 'branch' &&" in workflow
-    assert "github.event.deleted == false" in workflow
-    assert "YAGA_BRANCH_NAME: ${{ github.head_ref }}" in workflow
-    assert "YAGA_BRANCH_NAME: ${{ github.ref_name }}" in workflow
-    assert workflow.count("yaga branch check") == 2
-    assert workflow.count("--policy .yaga/branch-policy.toml") == 2
-    assert workflow.count('--name "$YAGA_BRANCH_NAME"') == 2
-    assert "--format github" in workflow
-    for context in ("github.head_ref", "github.ref_name"):
-        assert f'--name "${{{{ {context} }}}}"' not in workflow
+    assert "name: Check pull-request branch name" in yaga_checks
+    assert "name: Check pushed branch name" in yaga_checks
+    assert "if: github.event_name == 'pull_request'" in yaga_checks
+    assert "github.event_name == 'push' &&" in yaga_checks
+    assert "github.ref_type == 'branch' &&" in yaga_checks
+    assert "github.event.deleted == false" in yaga_checks
+    assert yaga_checks.count("check: branch") == 2
+    assert yaga_checks.count("policy: .yaga/branch-policy.toml") == 2
+    assert "branch: ${{ github.head_ref }}" in yaga_checks
+    assert "branch: ${{ github.ref_name }}" in yaga_checks
+    assert "name: Check pull-request description" in yaga_checks
+    assert "check: pr-description" in yaga_checks
+    assert "policy: .yaga/description-policy.toml" in yaga_checks
 
 
 def test_branch_policy_contract_is_documented_and_dogfooded() -> None:
@@ -268,24 +272,26 @@ def test_branch_policy_contract_is_documented_and_dogfooded() -> None:
 
 def test_ci_repository_plan_uses_one_exact_unprivileged_committed_tree_revision() -> None:
     workflow = read(".github/workflows/ci.yml")
+    yaga_checks = workflow_job(workflow, "yaga-checks")
 
     assert section_keys(workflow, "permissions") == {"contents"}
     assert "pull_request_target:" not in workflow
     assert "workflow_run:" not in workflow
-    assert "name: Run aggregate repository checks" in workflow
+    assert "name: Run aggregate repository checks" in yaga_checks
+    assert "check: repo" in yaga_checks
+    assert "plan: .yaga/checks/ci.toml" in yaga_checks
     assert (
-        "YAGA_REPOSITORY_REVISION: ${{ github.event_name == 'pull_request' && "
-        "github.event.pull_request.head.sha || github.sha }}" in workflow
+        "commit: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}" in yaga_checks
     )
-    assert "yaga repo check" in workflow
-    assert "--plan .yaga/checks/ci.toml" in workflow
-    assert '--commit "$YAGA_REPOSITORY_REVISION"' in workflow
-    assert '--revision "$YAGA_REPOSITORY_REVISION"' in workflow
-    assert '--revision "${{ github.' not in workflow
+    assert (
+        "revision: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}" in yaga_checks
+    )
     for command in ("tree check", "path check", "mode check", "size check"):
         assert f"yaga {command}" not in workflow
-    assert "fetch-depth: 0" in workflow
-    assert "persist-credentials: false" in workflow
+    assert "fetch-depth: 0" in yaga_checks
+    assert "persist-credentials: false" in yaga_checks
 
 
 def test_tree_policy_contract_is_documented_and_dogfooded_in_repo_plan_v2() -> None:
@@ -442,9 +448,10 @@ def test_recommended_v3_is_explicitly_dogfooded_and_bounded() -> None:
     contributing = read("CONTRIBUTING.md")
     agents = read("AGENTS.md")
 
+    assert "--plan .yaga/checks/ci.toml" in makefile
+    assert "plan: .yaga/checks/ci.toml" in ci
     for gate in (makefile, ci):
-        assert "--plan .yaga/checks/ci.toml" in gate
-        assert "--workflow-security-profile recommended-v2" not in gate
+        assert "recommended-v2" not in gate
 
     assert 'workflow-security-profile = "recommended-v3"' in plan
     assert "recommended-v2" not in plan
