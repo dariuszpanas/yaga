@@ -311,10 +311,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert ci.count('version: "0.13.0"') == 4
-    assert "yaga pull-request review check" in ci
-    assert "--policy .yaga/agent-review-policy.toml" in ci
-    assert "--wait-seconds 480" in ci
+    assert ci.count('version: "0.13.0"') == 3
+    assert "yaga pull-request review check" not in ci
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
     assert "yaga_message=\"$(printf '%s\\n\\n%s'" in ci
