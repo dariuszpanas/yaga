@@ -34,6 +34,7 @@ jobs:
         id: prepare
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
+          check: gate
           gate: agent-review
           operation: prepare
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -63,6 +64,7 @@ jobs:
       - name: Observe Agent Review
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
+          check: gate
           gate: agent-review
           operation: observe
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -91,6 +93,7 @@ jobs:
       - name: Request Owner Agent Review
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
+          check: gate
           gate: agent-review
           operation: request
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -122,6 +125,7 @@ jobs:
       - name: Record Protected Approval
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
+          check: gate
           gate: agent-review
           operation: authorize
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -156,6 +160,7 @@ jobs:
       - name: Request Approved Agent Review
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
+          check: gate
           gate: agent-review
           operation: request
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -183,6 +188,7 @@ jobs:
       - name: Finalize Review Policy
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
+          check: gate
           gate: agent-review
           operation: finalize
           github-token: ${{ secrets.GITHUB_TOKEN }}

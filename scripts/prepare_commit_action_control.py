@@ -165,9 +165,9 @@ def main() -> None:
         "GITHUB_BASE_REF": base_ref,
         "GITHUB_HEAD_REF": event["pull_request"]["head"]["ref"],
     }
-    action = Path(os.environ["GITHUB_WORKSPACE"]) / "actions/commit-check/action.yml"
+    action = Path(os.environ["GITHUB_WORKSPACE"]) / "action.yml"
     source = action.read_text(encoding="utf-8")
-    boundary = "        set -euo pipefail\n"
+    boundary = "        # yaga-commit-action-shell\n        set -euo pipefail\n"
     if source.count(boundary) != 1:
         raise ValueError("composite shell boundary changed")
     exports = "".join(

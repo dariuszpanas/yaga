@@ -34,6 +34,7 @@ jobs:
       - name: Invalidate Review Policy
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
+          check: gate
           gate: agent-review
           operation: invalidate
           github-token: ${{ secrets.GITHUB_TOKEN }}

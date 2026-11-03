@@ -106,9 +106,27 @@ def test_review_action_documented_inputs_match_manifest() -> None:
     manifest = (ROOT / "action.yml").read_text(encoding="utf-8")
     inputs = manifest.split("\ninputs:\n", 1)[1].split("\noutputs:\n", 1)[0]
     expected = set(re.findall(r"^  ([a-z][a-z-]+):", inputs, flags=re.MULTILINE))
+    actions_guide = (ROOT / "docs/github-actions.md").read_text(encoding="utf-8")
+    actions_interface = actions_guide.split("## Action interface\n", 1)[1].split("\n## ", 1)[0]
+    assert (
+        set(re.findall(r"^\| `([a-z][a-z-]+)` \|", actions_interface, flags=re.MULTILINE))
+        == expected
+    )
     guide = (ROOT / "docs/github-review-adapter.md").read_text(encoding="utf-8")
     interface = guide.split("## Action interface\n", 1)[1].split("\n## ", 1)[0]
-    assert set(re.findall(r"^\| `([a-z][a-z-]+)` \|", interface, flags=re.MULTILINE)) == expected
+    assert set(re.findall(r"^\| `([a-z][a-z-]+)` \|", interface, flags=re.MULTILINE)) == {
+        "check",
+        "gate",
+        "operation",
+        "github-token",
+        "prerequisite-workflow",
+        "lifecycle-workflow",
+        "owner-id",
+        "approval-marker",
+        "request-timeout",
+        "job-timeout-minutes",
+        "agent-review-policy-file",
+    }
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     declaration = contributing.split("The public inputs are exactly ", 1)[1].split(".", 1)[0]
     assert set(re.findall(r"`([a-z][a-z-]+)`", declaration)) == expected

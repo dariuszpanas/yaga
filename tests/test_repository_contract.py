@@ -6,11 +6,13 @@ import re
 import tomllib
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).parents[1]
 FULL_SHA = re.compile(r"dariuszpanas/yaga@([0-9a-f]{40})(?:\s|$)")
 RESERVED_STATUS_NAMES = {"agent review", "ci gate"}
 COMMIT_CHECK_ACTION = (
-    "dariuszpanas/yaga/actions/commit-check@cd02385e3216ac544e7783c7dd6929340e230e95"
+    "dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA"
 )
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 
@@ -65,9 +67,34 @@ def workflow_job(workflow: str, job: str) -> str:
 
 def test_action_has_one_closed_direct_publisher_interface() -> None:
     action = read("action.yml")
+    parsed = yaml.safe_load(action)
     smoke = read("scripts/composite_smoke_python")
 
+    assert not (ROOT / "actions" / "commit-check" / "action.yml").exists()
     assert section_keys(action, "inputs") == {
+        "check",
+        "trusted-config",
+        "policy",
+        "template",
+        "file",
+        "pr",
+        "repo",
+        "wait-seconds",
+        "submit-review",
+        "branch",
+        "range",
+        "revision",
+        "commit",
+        "config",
+        "plan",
+        "checks",
+        "workflow-paths",
+        "workflow-security-profile",
+        "workflow-security-rules",
+        "mode-policy",
+        "path-policy",
+        "size-policy",
+        "tree-policy",
         "gate",
         "approval-marker",
         "agent-review-policy-file",
@@ -79,9 +106,9 @@ def test_action_has_one_closed_direct_publisher_interface() -> None:
         "prerequisite-workflow",
         "request-timeout",
     }
-    assert section_keys(action, "outputs") == {"pull_request_number", "route"}
+    assert section_keys(action, "outputs") == {"exit-code", "pull_request_number", "route"}
     for legacy in (
-        "mode:",
+        "  mode:",
         "candidate:",
         "observer-workflow-path:",
         "poll-interval:",
@@ -90,46 +117,46 @@ def test_action_has_one_closed_direct_publisher_interface() -> None:
     ):
         assert legacy not in action
 
-    assert "YAGA_GATE" in action
-    assert "YAGA_APPROVAL_MARKER" in action
-    assert "YAGA_OPERATION" in action
-    assert "YAGA_JOB_TIMEOUT_MINUTES" in action
-    assert "YAGA_REQUEST_TIMEOUT" in action
-    assert "YAGA_MODE" not in action
-    assert "YAGA_CANDIDATE" not in action
-    assert "YAGA_OBSERVER" not in action
-    assert 'python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION"' in action
-    assert 'YAGA_ACTION_RUNTIME: "1"' in action
+    steps_by_id = {step["id"]: step for step in parsed["runs"]["steps"] if "id" in step}
+    gate_step = steps_by_id["gate"]
+    assert gate_step["if"] == "inputs.check == 'gate'"
+    assert gate_step["env"]["YAGA_ACTION_RUNTIME"] == "1"
+    assert "YAGA_GATE" in gate_step["env"]
+    assert "YAGA_APPROVAL_MARKER" in gate_step["env"]
+    assert "YAGA_OPERATION" in gate_step["env"]
+    assert "YAGA_JOB_TIMEOUT_MINUTES" in gate_step["env"]
+    assert "YAGA_REQUEST_TIMEOUT" in gate_step["env"]
+    assert 'python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION"' in gate_step["run"]
     assert "pip install" not in action
-    assert "uv " not in action
+    assert "uv " not in gate_step["run"]
     assert 'test "${YAGA_REQUEST_TIMEOUT:-}" = 5' in smoke
     assert 'test -z "${YAGA_APPROVAL_MARKER:-}"' in smoke
 
-    owner = re.search(
-        r"^  owner-id:\n(?P<body>.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)",
-        action,
-        re.MULTILINE | re.DOTALL,
-    )
-    assert owner is not None
-    assert "required: true" in owner.group("body")
-    assert "default:" not in owner.group("body")
 
-
-def test_commit_action_is_a_separate_read_only_closed_interface() -> None:
-    action = read("actions/commit-check/action.yml")
+def test_commit_action_is_an_isolated_read_only_branch_in_root_action() -> None:
+    action = read("action.yml")
+    parsed = yaml.safe_load(action)
     workflow = read(".github/workflows/commit-policy.yml")
 
-    assert section_keys(action, "inputs") == {"trusted-config"}
-    assert section_keys(action, "outputs") == {"exit-code"}
-    assert re.search(r"actions/setup-python@[0-9a-f]{40}", action)
-    assert 'token: ""' in action
-    assert 'YAGA_COMMIT_ACTION_RUNTIME: "1"' in action
-    assert "YAGA_ACTION_RUNTIME" not in action
-    assert "github-token" not in action.casefold()
-    assert "GITHUB_TOKEN" not in action
-    assert "pip install" not in action
-    assert "uv " not in action
-    assert "python -P -S -m yaga github pull-request check" in action
+    assert parsed["inputs"]["check"]["default"] == "commit"
+    setup_python = next(
+        step
+        for step in parsed["runs"]["steps"]
+        if step.get("uses", "").startswith("actions/setup-python@")
+    )
+    assert setup_python["if"] == "inputs.check == 'commit'"
+    assert re.fullmatch(r"actions/setup-python@[0-9a-f]{40}", setup_python["uses"])
+    assert setup_python["with"]["token"] == ""
+
+    commit_step = next(step for step in parsed["runs"]["steps"] if step.get("id") == "commit")
+    assert commit_step["if"] == "inputs.check == 'commit'"
+    assert commit_step["env"]["YAGA_COMMIT_ACTION_RUNTIME"] == "1"
+    assert "YAGA_ACTION_RUNTIME" not in commit_step["env"]
+    assert "GITHUB_TOKEN" not in commit_step["env"]
+    assert "GH_TOKEN" not in commit_step["env"]
+    assert "unset PYTHONHOME GITHUB_TOKEN GH_TOKEN" in commit_step["run"]
+    assert "uv " not in commit_step["run"]
+    assert "python -P -S -m yaga github pull-request check" in commit_step["run"]
 
     assert "types: [opened, synchronize, reopened, edited, ready_for_review]" in workflow
     assert "permissions:\n  contents: read" in workflow
@@ -140,7 +167,8 @@ def test_commit_action_is_a_separate_read_only_closed_interface() -> None:
     assert "ref: ${{ github.event.pull_request.head.sha }}" in workflow
     assert "fetch-depth: 0" in workflow
     assert "persist-credentials: false" in workflow
-    assert "uses: ./actions/commit-check" in workflow
+    assert "uses: ./" in workflow
+    assert "uses: ./actions/commit-check" not in workflow
     assert "cargo install typos-cli --version 1.49.0 --locked" in workflow
     assert "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" in workflow
     assert "path: ~/.cargo/registry" in workflow
@@ -445,8 +473,15 @@ def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> Non
     assert {path.name for path in (ROOT / "examples").glob("*.yml")} == {
         "agent-review.yml",
         "commit-policy.yml",
+        "pr-review.yml",
         "review-policy.yml",
     }
+    pr_review = read("examples/pr-review.yml")
+    assert "pull_request_target:" in pr_review
+    assert "pull_request:" not in pr_review
+    assert "check: pr-review" in pr_review
+    assert "submit-review: both" in pr_review
+    assert FULL_SHA.findall(pr_review) == ["0" * 40]
     assert lifecycle.startswith("name: YAGA Review Policy\n")
     assert "github.event.action == 'edited' && github.event.changes.base == null" in lifecycle
     assert "YAGA metadata edit for #{0}" in lifecycle
@@ -609,6 +644,7 @@ def test_example_jobs_execute_only_pinned_closed_operations() -> None:
         assert FULL_SHA.findall(job) == ["0" * 40]
         assert len(re.findall(r"^      - name:", job, re.MULTILINE)) == 1
         assert job.count("\n        uses: dariuszpanas/yaga@") == 1
+        assert "check: gate" in job
         assert f"operation: {operation}" in job
         assert "prerequisite-workflow: .github/workflows/ci.yml" in job
         assert "lifecycle-workflow: .github/workflows/review-policy.yml" in job

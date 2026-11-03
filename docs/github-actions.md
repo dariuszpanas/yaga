@@ -1,8 +1,106 @@
 # GitHub Actions
 
+YAGA publishes a single unified composite GitHub Action at the repository root (`action.yml`),
+selected with `uses: dariuszpanas/yaga@<audited-40-character-sha>` and controlled by `check`
+(defaulting to `commit`).
+
+## Execution runtimes and trust split
+
+To preserve YAGA's strict supply-chain and token boundaries while presenting one Marketplace-ready
+interface, the root Action dispatches into three isolated runtime branches:
+
+1. **`check: commit` (default, read-only stdlib fast path)**: Uses `actions/setup-python` with an
+   explicit empty `token: ""` and executes `YAGA_COMMIT_ACTION_RUNTIME=1` with `python -P -S` (no
+   site packages, no `uv` sync, and no `GITHUB_TOKEN` in the step environment).
+2. **Installed CLI checks (`pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`,
+   `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`)**: Syncs YAGA's
+   hash-locked `--no-dev` runtime closure into a temporary virtual environment outside the checkout
+   and runs `python -I -m yaga.cli_action`. Every mode rejects unused inputs and option-like values
+   fail-closed with exit `2`. `github-token` is stripped before `uv sync` and passed as `GH_TOKEN`
+   only when live `--pr` access is requested for `pr-review` or `pr-description`; offline checks
+   reject `github-token`.
+3. **`check: gate` (write-capable stdlib fast path)**: Runs `YAGA_ACTION_RUNTIME=1` with
+   `python -P -S -m yaga gate` (no site packages and no runtime dependency installation) for the
+   six Agent review status-gate operations; see the [GitHub review adapter](github-review-adapter.md).
+
+## Pull-request commit checks (`check: commit`)
+
+`yaga github pull-request check` applies commit policy to a GitHub event without calling the GitHub
+API. It checks the pull-request title as a single Conventional Commit header, then checks every
+commit in the exact event `base.sha..head.sha` range. Body and merge rules do not apply to the
+title; all configured header, type, scope, and description rules do. Text, versioned JSON, and
+escaped `--format github` annotations share exit codes `0`, `1`, and `2` with `commit check`.
+
+When `dependabot-pull-requests = "skip"`, the adapter recognizes only a strictly parsed PR author
+with login `dependabot[bot]` and account type `Bot`. It then narrows the exemption per commit using
+the [bounded metadata and signature checks](commit-policy.md): ordinary human additions and human
+rebases are checked, while compatible commits with a verified pinned GitHub signature retain the
+reason `Dependabot pull request`. Missing or failed verification runs normal checks. Mixed PRs
+also check their title and optional proposed message. The command exits `1` if any checked result
+fails. The strict boolean `dependabot-require-github-signature` defaults to `true`; setting it to
+`false` keeps only the forgeable metadata filter. The GitHub signing key is shared, so its signature
+alone is not exclusive proof of Dependabot authorship. Verification is offline, without a live
+badge or revocation lookup. A human PR, a near-match account, malformed event data, a checkout
+mismatch, missing history, or an over-limit range is never converted into a Dependabot skip.
+The separate explicit `skip-pull-request-authors` exemption still skips whole PRs independently
+of this option; it is not a per-commit signature policy for other bots.
+
+For local diagnosis, save a `pull_request` event and check out its exact head before running:
+
+```bash
+yaga github pull-request check --event-file event.json --repo .
+```
+
+Because `check` defaults to `commit`, the root Action runs this read-only check with no extra
+inputs:
+
+```yaml
+name: Commit Policy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yaga-commit-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  commit-policy:
+    name: Commit Messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
+```
+
+The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,
+shallow history, a missing object, an empty range, or a checkout that does not equal the event head.
+The `commit` runtime accepts no token input and has no write/API code path, and YAGA never fetches
+Git history or installs dependencies; the reference workflow grants only `contents: read`. It
+strictly binds the event name, repository ID/name, base/head refs, and open PR payload to the
+runner context, strictly parses the PR author record used by the optional Dependabot policy, and
+caps workflow annotations at 50. Its pinned `actions/setup-python` bootstrap receives an explicit
+empty token and may obtain the declared Python 3.12 runtime before YAGA starts.
+
+This remains an unprivileged PR check and therefore a quality signal, not a security authority. The
+policy file comes from the PR-head worktree and can be changed by the PR; review policy changes like
+any other code. Title validation is bound to the triggering event rather than the commit SHA. The
+`edited` wake and per-PR cancellation reduce stale ordering, but do not turn title metadata into
+immutable evidence. The copy-ready [commit-policy workflow](https://github.com/dariuszpanas/yaga/blob/main/examples/commit-policy.yml) pins an
+audited placeholder SHA; review and deliberately replace that immutable SHA when adopting YAGA.
+
 ## Opt-in trusted commit policy
 
-The commit-check Action's optional `trusted-config` input selects one literal repository-relative
+The `commit` mode's optional `trusted-config` input selects one literal repository-relative
 `.yaga.toml` or `pyproject.toml` path. This mode is for a read-only `pull_request_target` workflow
 defined on the default branch. Keep `contents: read`, disable checkout credential persistence,
 and execute only an audited pinned YAGA Action and trusted default-branch code. Never check out
@@ -43,12 +141,37 @@ normal checks. No token or API access is needed, and no keys are downloaded duri
 
 Without `trusted-config`, the existing `pull_request`/PR-head policy mode is unchanged.
 The `exit-code` output exposes 0 for success, 1 for policy findings, and 2 for invalid input.
-The runtime remains dependency-free and has no token input, write permissions, API calls, or
-review-publisher integration. Hosted synthetic positive/negative controls supplement the
+The `commit` runtime remains dependency-free and has no token input, write permissions, API calls,
+or review-publisher integration. Hosted synthetic positive/negative controls supplement the
 consumer's real-event qualification; they do not authorize a production cutover.
 
-Use ordinary unprivileged CI for repository checks. The write-capable review adapter has a
-separate [deployment guide](github-review-adapter.md); it is not required to use YAGA in CI.
+## Pull-request review verdicts (`check: pr-review`)
+
+Repositories using automated agent reviews (such as Codex, Copilot, or Claude) can evaluate
+head-bound review state and optionally submit a commit-bound `APPROVED` or `CHANGES_REQUESTED`
+verdict from a trusted default-branch `pull_request_target` workflow (see
+[`examples/pr-review.yml`](https://github.com/dariuszpanas/yaga/blob/main/examples/pr-review.yml)):
+
+```yaml
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+  with:
+    persist-credentials: false
+- name: Evaluate and submit pull-request review
+  uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
+  with:
+    check: pr-review
+    policy: .yaga/agent-review-policy.toml
+    pr: ${{ github.event.pull_request.number }}
+    repo: ${{ github.repository }}
+    wait-seconds: 480
+    submit-review: both
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Enable *Allow GitHub Actions to create and approve pull requests* in repository Actions settings
+when `submit-review` is `approve` or `both`. Draft pull requests skip review submission cleanly;
+see the [Agent review guide](agent-review-gate.md#pull-request-review-state) for policy options,
+polling bounds, and asynchronous re-review wake patterns.
 
 ## Proposed merge messages
 
@@ -83,95 +206,68 @@ in default mode. Text and GitHub summaries identify the additional proposed mess
 Author exemptions apply to it only after normal event, checkout, policy, and range validation.
 `merge-commits = "ignore"` does not skip it because no Git merge parents exist for proposed text.
 
-## Pull-request checks in GitHub Actions
+## Action interface
 
-`yaga github pull-request check` applies the same commit policy to a GitHub event without calling
-the GitHub API. It checks the pull-request title as a single Conventional Commit header, then checks
-every commit in the exact event `base.sha..head.sha` range. Body and merge rules do not apply to the
-title; all configured header, type, scope, and description rules do. Text, versioned JSON, and
-escaped `--format github` annotations share exit codes `0`, `1`, and `2` with `commit check`.
+Every input outside the selected `check` mode must remain empty; unused inputs fail closed with
+exit `2`.
 
-When `dependabot-pull-requests = "skip"`, the adapter recognizes only a strictly parsed PR author
-with login `dependabot[bot]` and account type `Bot`. It then narrows the exemption per commit using
-the [bounded metadata and signature checks](commit-policy.md): ordinary human additions and human
-rebases are checked, while compatible commits with a verified pinned GitHub signature retain the
-reason `Dependabot pull request`. Missing or failed verification runs normal checks. Mixed PRs
-also check their title and optional proposed message. The command exits `1` if any checked result
-fails. The strict boolean `dependabot-require-github-signature` defaults to `true`; setting it to
-`false` keeps only the forgeable metadata filter. The GitHub signing key is shared, so its signature
-alone is not exclusive proof of Dependabot authorship. Verification is offline, without a live
-badge or revocation lookup. A human PR, a near-match account, malformed event data, a checkout
-mismatch, missing history, or an over-limit range is never converted into a Dependabot skip.
-The separate explicit `skip-pull-request-authors` exemption still skips whole PRs independently
-of this option; it is not a per-commit signature policy for other bots.
+| Input | Contract |
+| --- | --- |
+| `check` | Mode selector; `commit` (default), `pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`, or `gate`. |
+| `trusted-config` | Optional literal repository-relative commit config path for `check=commit` on `pull_request_target`. |
+| `policy` | Explicit versioned TOML policy path for `pr-review`, `pr-description`, `branch`, `change`, `mode`, `path`, `size`, or `tree`. |
+| `template` | Optional explicit Markdown heading template path for `check=pr-description`. |
+| `file` | Offline review snapshot JSON path for `pr-review` or Markdown body file for `pr-description`. |
+| `pr` | Canonical HTTPS PR URL or positive PR number for live `pr-review` or `pr-description` via `gh`. |
+| `repo` | `[HOST/]OWNER/REPO` for numeric `pr` in `pr-review`/`pr-description`, or repository root directory for `change`, `workflow*`, `mode`, `path`, `size`, `tree`, or `repo`. |
+| `wait-seconds` | Bounded active-review poll budget (`0..600`) for live `check=pr-review`. |
+| `submit-review` | Commit-bound PR review mode (`none`, `approve`, `request-changes`, or `both`) for live `check=pr-review`. |
+| `branch` | Exact short branch name for `check=branch`. |
+| `range` | Exact `A..B` or `A...B` Git range for `check=change` or `check=repo`. |
+| `revision` | Exact Git commit-ish for `mode`, `path`, `size`, `tree`, or `repo`. |
+| `commit` | Commit-provider Git revision for `check=repo`. |
+| `config` | Explicit `.yaga.toml` or `pyproject.toml` path for `check=repo`. |
+| `plan` | Explicit versioned repository check plan TOML path for `check=repo`. |
+| `checks` | Comma- or newline-separated provider list for `check=repo` when `plan` is omitted. |
+| `workflow-paths` | Newline-separated workflow file or direct-child directory paths for `workflow*` or `repo`. |
+| `workflow-security-profile` | Versioned profile (`recommended-v1`, `recommended-v2`, or `recommended-v3`) for `workflow-security` or `repo`. |
+| `workflow-security-rules` | Comma- or newline-separated custom rules for `workflow-security` or `repo`. |
+| `mode-policy` | Explicit mode policy TOML path for `check=repo` without `plan`. |
+| `path-policy` | Explicit path policy TOML path for `check=repo` without `plan`. |
+| `size-policy` | Explicit size policy TOML path for `check=repo` without `plan`. |
+| `tree-policy` | Explicit tree policy TOML path for `check=repo` without `plan`. |
+| `github-token` | Token passed via environment only for `check=gate` or live `pr` in `pr-review`/`pr-description`; rejected by offline checks. |
+| `gate` | Closed gate selector for `check=gate`; defaults to `agent-review`. |
+| `operation` | One of `invalidate`, `prepare`, `authorize`, `observe`, `request`, or `finalize` for `check=gate`. |
+| `prerequisite-workflow` | Authenticated PR CI workflow path for `check=gate`; defaults to `.github/workflows/ci.yml`. |
+| `lifecycle-workflow` | Trusted invalidator workflow path for `check=gate`; defaults to `.github/workflows/review-policy.yml`. |
+| `owner-id` | Immutable GitHub user ID allowed to request directly in `check=gate`. |
+| `approval-marker` | Protected-environment capability marker used by `authorize` in `check=gate`. |
+| `request-timeout` | Bounded REST timeout (`1..30` seconds) for `check=gate`; defaults to `5`. |
+| `job-timeout-minutes` | Bounded polling/finalization window (`15..360` minutes) required for `check=gate`. |
+| `agent-review-policy-file` | Must remain empty in `check=gate`; nonempty values fail before API access. |
 
-For local diagnosis, save a `pull_request` event and check out its exact head before running:
+Outputs:
 
-```bash
-yaga github pull-request check --event-file event.json --repo .
-```
+- `exit-code`: Emitted on every path (`0` pass, `1` policy findings or gate failure, `2` input or operational error).
+- `route` and `pull_request_number`: Emitted only by `prepare` in `check=gate`; see the [GitHub review adapter](github-review-adapter.md).
 
-The separate read-only Action wraps that command for CI:
-
-```yaml
-name: Commit Policy
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
-
-permissions:
-  contents: read
-
-concurrency:
-  group: yaga-commit-policy-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
-jobs:
-  commit-policy:
-    name: Commit Messages
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: dariuszpanas/yaga/actions/commit-check@cd02385e3216ac544e7783c7dd6929340e230e95
-```
-
-The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,
-shallow history, a missing object, an empty range, or a checkout that does not equal the event head.
-The Action has no token input or write/API code path, and the YAGA runtime never fetches Git history
-or installs YAGA dependencies; the reference workflow grants only `contents: read`. It strictly
-binds the event name, repository ID/name, base/head refs, and open PR payload to the runner context,
-strictly parses the PR author record used by the optional Dependabot policy, and caps workflow
-annotations at 50. Its pinned `actions/setup-python` bootstrap receives an explicit empty token and
-may obtain the declared Python 3.12 runtime before YAGA starts.
-
-This remains an unprivileged PR check and therefore a quality signal, not a security authority. The
-policy file comes from the PR-head worktree and can be changed by the PR; review policy changes like
-any other code. Title validation is bound to the triggering event rather than the commit SHA. The
-`edited` wake and per-PR cancellation reduce stale ordering, but do not turn title metadata into
-immutable evidence. The copy-ready [commit-policy workflow](https://github.com/dariuszpanas/yaga/blob/main/examples/commit-policy.yml) pins an
-audited pre-release commit; review and deliberately replace that immutable SHA when adopting a
-newer YAGA revision.
-
-## Other workflow checks
+## Other workflow checks and optional tools
 
 See [workflow checks](workflow-checks.md) for immutable references, security profiles, and
 Docker-backed syntax checks. Use [repository plans](repository-plans.md) to combine providers.
 
-If your commit policy enables Typos, install the executable in the same job before invoking YAGA:
+If your commit or description policy enables Typos, install the executable in the same job before
+invoking YAGA:
 
 ```bash
 cargo install typos-cli --version 1.49.0 --locked
 ```
 
-The commit Action checks both PR titles and full messages when `typos = "check"`.
-Install Typos before the Action; it does not install optional tools automatically.
-Trusted mode uses an isolated built-in dictionary and requires the executable outside the checkout.
-See [commit policy](commit-policy.md#optional-typos-integration) for errors and configuration.
+YAGA checks both PR titles and full messages when `typos = "check"` and does not install optional
+tools automatically. Trusted mode uses an isolated built-in dictionary and requires the executable
+outside the checkout. See [commit policy](commit-policy.md#optional-typos-integration) for errors
+and configuration.
 
 For other dependency update bots or service accounts, configure an explicit
 [`skip-pull-request-authors` list](configuration.md#explicit-pr-author-exemptions).

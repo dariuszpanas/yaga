@@ -1,8 +1,8 @@
 # Usage modes
 
 YAGA is designed to be used at different points in a development lifecycle. The same provider
-rules and stable reports can run interactively, in local hooks, in ordinary CI, or through one of
-the supplied Actions.
+rules and stable reports can run interactively, in local hooks, in ordinary CI, or through the
+unified root GitHub Action.
 
 ## Choose the right execution surface
 

@@ -117,8 +117,12 @@ permissions and provider-side access controls remain necessary.
 
 ## Action interface
 
+Select `check: gate` on the unified root [GitHub Action](github-actions.md); any CLI or commit
+input fails closed before `python` starts.
+
 | Input | Contract |
 | --- | --- |
+| `check` | Must be `gate` to select the write-capable Agent review status adapter. |
 | `gate` | Closed selector; currently only `agent-review`. |
 | `operation` | One of `invalidate`, `prepare`, `authorize`, `observe`, `request`, or `finalize`. |
 | `github-token` | Token passed only through the environment. |

@@ -41,7 +41,7 @@ jobs:
       - name: Run the actual composite adapter
         id: control
         continue-on-error: true
-        uses: ./actions/commit-check
+        uses: ./
         with:
           trusted-config: .yaga.toml
       - name: Require the expected outcome

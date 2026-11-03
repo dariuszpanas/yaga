@@ -393,6 +393,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"mode",\n            "check"' in build_gate
     assert '"size",\n            "check"' in build_gate
     assert '"path",\n            "check"' in build_gate
+    assert '"yaga/cli_action.py"' in build_gate
     assert '"yaga/commands/repo.py"' in build_gate
     assert '"yaga/commands/change.py"' in build_gate
     assert '"yaga/commands/branch.py"' in build_gate
@@ -624,6 +625,7 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         source = path.read_text(encoding="utf-8")
         assert "import typer" not in source, path
         assert "from yaga.cli" not in source, path
+        assert "yaga.cli_action" not in source, path
         assert "from yaga.changes" not in source, path
         assert "from yaga.branches" not in source, path
         assert "from yaga.descriptions" not in source, path
@@ -643,26 +645,24 @@ def test_composite_action_import_graph_does_not_depend_on_installed_cli() -> Non
         assert "import yaga.test_planning" not in source, path
 
 
-def test_commit_action_publishes_a_sanitized_step_summary() -> None:
-    action = (ROOT / "actions" / "commit-check" / "action.yml").read_text(encoding="utf-8")
+def test_root_action_publishes_bounded_sanitized_step_summaries_in_every_mode() -> None:
+    parsed = yaml.safe_load((ROOT / "action.yml").read_text(encoding="utf-8"))
+    run_steps = {step["id"]: step["run"] for step in parsed["runs"]["steps"] if "run" in step}
 
-    assert "GITHUB_STEP_SUMMARY" in action
-    assert "YAGA_REPORT" in action
-    assert "YAGA_ERROR" in action
-    assert "<pre>" in action
-    assert "sed -e 's/&/\\&amp;/g'" in action
-
-
-def test_root_action_publishes_a_bounded_sanitized_step_summary() -> None:
-    action = (ROOT / "action.yml").read_text(encoding="utf-8")
-
-    assert "GITHUB_STEP_SUMMARY" in action
-    assert "YAGA_REPORT" in action
-    assert "YAGA_ERROR" in action
-    assert "head -c 65536" in action
-    assert "<pre>" in action
-    assert "sed -e 's/&/\\&amp;/g'" in action
-    assert 'exit "$YAGA_STATUS"' in action
+    assert set(run_steps) == {"invalid_check", "commit", "gate", "cli"}
+    assert "GITHUB_STEP_SUMMARY" in run_steps["invalid_check"]
+    assert "exit-code=2" in run_steps["invalid_check"]
+    for step_id in ("commit", "gate", "cli"):
+        script = run_steps[step_id]
+        assert "GITHUB_STEP_SUMMARY" in script
+        assert "YAGA_REPORT" in script
+        assert "YAGA_ERROR" in script
+        assert "head -c 65536" in script
+        assert "<pre>" in script
+        assert "sed -e 's/&/\\&amp;/g'" in script
+        assert 'exit "$YAGA_STATUS"' in script
+        assert r"exit-code=%s\n" in script
+        assert '>> "$GITHUB_OUTPUT"' in script
 
 
 def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
@@ -678,6 +678,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         source = path.read_text(encoding="utf-8")
         assert "import typer" not in source, path
         assert "from yaga.cli" not in source, path
+        assert "yaga.cli_action" not in source, path
         assert "from yaga.changes" not in source, path
         assert "from yaga.branches" not in source, path
         assert "from yaga.descriptions" not in source, path
@@ -772,12 +773,17 @@ def test_pr_review_publisher_workflow_preserves_default_branch_trust_boundary() 
     checkout = job["steps"][0]
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"] == {"persist-credentials": False}
-    setup_uv = job["steps"][1]
-    assert setup_uv["uses"].startswith("astral-sh/setup-uv@")
-    assert setup_uv["with"]["enable-cache"] is False
-    run_step = job["steps"][-1]
-    assert "--submit-review both" in run_step["run"]
-    assert '--wait-seconds "$YAGA_WAIT_SECONDS"' in run_step["run"]
+    action_step = job["steps"][1]
+    assert action_step["uses"] == "./"
+    assert action_step["with"] == {
+        "check": "pr-review",
+        "policy": ".yaga/agent-review-policy.toml",
+        "pr": "${{ needs.resolve.outputs.pull_request_number }}",
+        "repo": "${{ github.repository }}",
+        "wait-seconds": "${{ needs.resolve.outputs.wait_seconds }}",
+        "submit-review": "both",
+        "github-token": "${{ secrets.GITHUB_TOKEN }}",
+    }
 
     wake_workflow = yaml.safe_load(
         (ROOT / ".github" / "workflows" / "pr-review-wake.yml").read_text("utf-8")
