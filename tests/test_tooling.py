@@ -314,7 +314,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert ci.count('version: "0.13.0"') == 4
     assert "yaga pull-request review check" in ci
     assert "--policy .yaga/agent-review-policy.toml" in ci
-    assert "--wait-seconds 300" in ci
+    assert "--wait-seconds 480" in ci
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
     assert "yaga_message=\"$(printf '%s\\n\\n%s'" in ci
@@ -740,3 +740,52 @@ def test_supply_chain_pin_validation_rejects_unpinned_or_drifted_inputs(mutation
 
     with pytest.raises(ValueError):
         validate_exact_supply_chain_pins(project, lock)
+
+
+def test_pr_review_publisher_workflow_preserves_default_branch_trust_boundary() -> None:
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "pr-review.yml").read_text("utf-8"))
+    triggers = workflow.get("on", workflow.get(True))
+    assert isinstance(triggers, dict)
+    assert set(triggers) == {"pull_request_target", "workflow_run"}
+    assert triggers["pull_request_target"]["types"] == [
+        "opened",
+        "synchronize",
+        "reopened",
+        "ready_for_review",
+    ]
+    assert triggers["workflow_run"] == {
+        "workflows": ["CI", "Pull Request Review Wake"],
+        "types": ["completed"],
+    }
+    assert workflow["permissions"] == {"contents": "read"}
+    resolve_job = workflow["jobs"]["resolve"]
+    assert resolve_job["permissions"] == {}
+    job = workflow["jobs"]["publish-review"]
+    assert job["needs"] == ["resolve"]
+    assert job["concurrency"]["cancel-in-progress"] == (
+        "${{ github.event_name == 'pull_request_target' }}"
+    )
+    assert job["permissions"] == {
+        "contents": "read",
+        "pull-requests": "write",
+        "issues": "read",
+        "checks": "read",
+    }
+    checkout = job["steps"][0]
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"] == {"persist-credentials": False}
+    setup_uv = job["steps"][1]
+    assert setup_uv["uses"].startswith("astral-sh/setup-uv@")
+    assert setup_uv["with"]["enable-cache"] is False
+    run_step = job["steps"][-1]
+    assert "--submit-review both" in run_step["run"]
+    assert '--wait-seconds "$YAGA_WAIT_SECONDS"' in run_step["run"]
+
+    wake_workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "pr-review-wake.yml").read_text("utf-8")
+    )
+    wake_triggers = wake_workflow.get("on", wake_workflow.get(True))
+    assert isinstance(wake_triggers, dict)
+    assert set(wake_triggers) == {"issue_comment", "workflow_dispatch"}
+    assert wake_workflow["permissions"] == {}
+    assert wake_workflow["jobs"]["wake"]["permissions"] == {}

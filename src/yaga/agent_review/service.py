@@ -135,7 +135,11 @@ def check_pull_request_review_source(
             )
             evaluation = evaluate_pull_request_snapshot(policy, snapshot)
             elapsed_wait = max(0.0, monotonic_seconds() - poll_started_at) + simulated_sleep
-        desired_event = _desired_review_event(evaluation.aggregate.state, submit_review)
+        desired_event = (
+            None
+            if evaluation.snapshot.draft
+            else _desired_review_event(evaluation.aggregate.state, submit_review)
+        )
         if desired_event is not None:
             if evaluation.snapshot.state != "open":
                 raise InputError("cannot submit a pull-request review on a closed pull request")
@@ -224,7 +228,15 @@ def render_pull_request_review_report(
     evaluation = checked.evaluation
     snapshot = evaluation.snapshot
     if output_format is ReviewOutputFormat.GITHUB:
-        return render_evaluation(evaluation.results, evaluation.aggregate, "github")
+        github_lines = [render_evaluation(evaluation.results, evaluation.aggregate, "github")]
+        if checked.submitted_review is not None:
+            github_lines.append(
+                "::notice title=YAGA pull-request review::"
+                f"Submitted review {checked.submitted_review.state} "
+                f"({checked.submitted_review.action}, id {checked.submitted_review.review_id}) "
+                f"on head {snapshot.head_sha[:12]}."
+            )
+        return "\n".join(github_lines)
     rendered = render_evaluation(evaluation.results, evaluation.aggregate, "text")
     lines = [
         f"Source: {document['source']}",

@@ -196,7 +196,7 @@ jobs:
     name: Pull Request Review
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     permissions:
       contents: read
       pull-requests: read
@@ -222,7 +222,7 @@ jobs:
           --policy .yaga/agent-review-policy.toml
           --pr "$YAGA_PR_NUMBER"
           --repo "$YAGA_REPOSITORY"
-          --wait-seconds 300
+          --wait-seconds 480
           --format github
 
   gate:

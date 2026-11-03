@@ -226,8 +226,11 @@ with `success`, while `delay-seconds` (`0..300`) waits before fetching live `--p
 seconds while an agent review is actively running on `head_sha` (after a 30-second startup grace
 window), failing fast if no review is running so disabled automatic reviews do not hang until
 timeout. Optional `--submit-review approve|request-changes|both` (default `none`, live `--pr` only
-on an open PR) posts an idempotent commit-bound `APPROVE` or `REQUEST_CHANGES` review on `head_sha`
-from a trusted workflow or token with `pull-requests: write`. Reviews, check runs, and summary
+on an open non-draft PR) posts an idempotent commit-bound `APPROVE` or `REQUEST_CHANGES` review on
+`head_sha` from a trusted default-branch `pull_request_target` / `workflow_run` publisher workflow (never checking
+out PR code or cache) with `pull-requests: write` and the repository Actions setting
+`can_approve_pull_request_reviews` ("Allow GitHub Actions to create and approve pull requests")
+enabled. Reviews, check runs, and summary
 comments bound to an older commit SHA, or reactions predating the current head commit timestamp,
 report `pending` (stale) and exit `1` so stale approvals never pass a new head commit.
 

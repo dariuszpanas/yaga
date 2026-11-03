@@ -1197,3 +1197,69 @@ required = ["codex"]
         "commit_id": HEAD_SHA,
     }
     assert any("POST" in cmd for cmd, _ in calls)
+
+
+def test_submit_review_skips_draft_pr_and_emits_github_notice_on_open_pr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_path = tmp_path / "codex-policy.toml"
+    policy_path.write_text(
+        """
+[agent-review]
+version = 1
+required = ["codex"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    draft_endpoints = _default_gh_endpoints(
+        reviews=[],
+        reactions=[],
+        pr_overrides={"draft": True},
+    )
+    draft_calls = _mock_gh_api(monkeypatch, draft_endpoints)
+    draft_res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--submit-review",
+            "both",
+            "--format",
+            "json",
+        ],
+    )
+    assert draft_res.exit_code == 0, draft_res.stderr
+    assert "submitted_review" not in json.loads(draft_res.stdout)
+    assert all("POST" not in cmd for cmd, _ in draft_calls)
+
+    open_endpoints = _default_gh_endpoints(reviews=[], reactions=[])
+    open_endpoints["repos/example/project/pulls/23/reviews"] = {
+        "id": 777,
+        "state": "APPROVED",
+        "commit_id": HEAD_SHA,
+    }
+    _mock_gh_api(monkeypatch, open_endpoints)
+    gh_res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--submit-review",
+            "approve",
+            "--format",
+            "github",
+        ],
+    )
+    assert gh_res.exit_code == 0, gh_res.stderr
+    assert (
+        f"::notice title=YAGA pull-request review::Submitted review APPROVED (submitted, id 777) on head {HEAD_SHA[:12]}."
+        in gh_res.stdout
+    )
