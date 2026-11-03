@@ -15,12 +15,13 @@ formats, and execution surfaces. Keep each concern on the narrowest surface that
 | `commit check` | One message, commit, or range | Message text and, for Git sources, local history | Nothing; no network or fetch | Deterministic commit policy in a hook or ordinary CI |
 | `github pull-request check` | One event title plus its exact commit range | Event file, checked-out head, complete local history | Nothing; no GitHub API calls | Unprivileged pull-request validation |
 | `pull-request description check` / `github pull-request description check` | One description from a file, stdin, event, or explicit PR selector | Explicit policy, description, and optional template; `--pr` fetches the current body through `gh` | Nothing; local and event sources stay offline | Required PR sections, meaningful content, and optional spelling before or after publication |
+| `pull-request review check` | One offline review snapshot (`--file`) or live pull request (`--pr`) | Explicit `[agent-review]` policy plus head-bound reviews, comments, reactions, or check runs via `gh` | Read-only by default; opt-in `--submit-review` posts a commit-bound review on open non-draft PRs | Enforcing Codex, Copilot, Claude, or custom bot reviews and publishing PR verdicts |
 | `repo check` | An explicit provider list or versioned plan | Selected policies plus the explicit commit/revision inputs | Nothing; provider reports stay separate | One repeatable repository quality gate |
 | `workflow check` / `security` / `lint` | Explicit workflow files or documented defaults | Workflow YAML and local Action metadata | Nothing; lint runs in a hardened container | Actions supply-chain and syntax checks |
 | `commit quality` | One message, commit, or range | Complete selected message, sent to an optional provider | Nothing; model output is advisory | Finding vague or low-information prose |
 | `gate agent-review <operation>` | A trusted review lifecycle operation | Provider evidence, requests, and bounded GitHub state | Trusted workflows may post comments or publish commit statuses | Coordinating external review agents |
 
-The first six surfaces are read-only quality checks. The Agent review gate is different: its
+The deterministic and read-only default surfaces require no write permissions. The Agent review gate is different: its
 write-capable operations belong only in a trusted default-branch workflow and must not consume
 pull-request code, artifacts, or caches. A pull-request workflow can report findings, but it is not
 merge-security authority. Combine checks explicitly in CI or a repository plan rather than assuming
@@ -153,12 +154,13 @@ implicit `all`, automatic plan discovery, or provider-specific argument when tha
 selected. Exit `2` wins if any selected provider has an operational error, even when another has a
 policy finding.
 
-## Read-only commit Action
+## Unified GitHub Action (`YAGA Checks`)
 
-The read-only Action validates one GitHub pull-request event, the runner repository/ref identity,
-the checked-out head, configuration, and the exact commit range. It can apply the opt-in
-Dependabot skip only after all validation succeeds. It never accepts a caller-selected token or
-revision and never runs the Agent review gate.
+The root composite Action (`uses: dariuszpanas/yaga@...`, listed on GitHub Marketplace as
+**YAGA Checks**) defaults `check` to `commit` and dispatches into isolated runtimes for read-only
+pull-request commit checks, installed-CLI checks (`pr-review`, `pr-description`, `repo`,
+`branch`, `change`, `workflow*`, `mode`, `path`, `size`, `tree`), and the write-capable `gate`
+lifecycle adapter. See [GitHub Actions](github-actions.md) for per-mode inputs and token isolation.
 
 ## Write-capable review gate
 

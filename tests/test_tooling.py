@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tarfile
 import tomllib
@@ -18,6 +20,7 @@ from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 from scripts import check_build, check_dependency_audit
+from yaga.version_requirement import VERSION
 from yaga.workflows.lint import ACTIONLINT_IMAGE
 
 ROOT = Path(__file__).parents[1]
@@ -649,11 +652,14 @@ def test_root_action_publishes_bounded_sanitized_step_summaries_in_every_mode() 
     parsed = yaml.safe_load((ROOT / "action.yml").read_text(encoding="utf-8"))
     run_steps = {step["id"]: step["run"] for step in parsed["runs"]["steps"] if "run" in step}
 
-    assert set(run_steps) == {"invalid_check", "commit", "gate", "cli"}
+    assert set(run_steps) == {"banner", "invalid_check", "commit", "gate", "cli"}
+    assert f"version:  {VERSION}" in run_steps["banner"]
+    assert f"`{VERSION}`" in run_steps["invalid_check"]
     assert "GITHUB_STEP_SUMMARY" in run_steps["invalid_check"]
     assert "exit-code=2" in run_steps["invalid_check"]
     for step_id in ("commit", "gate", "cli"):
         script = run_steps[step_id]
+        assert f"`{VERSION}`" in script
         assert "GITHUB_STEP_SUMMARY" in script
         assert "YAGA_REPORT" in script
         assert "YAGA_ERROR" in script
@@ -663,6 +669,79 @@ def test_root_action_publishes_bounded_sanitized_step_summaries_in_every_mode() 
         assert 'exit "$YAGA_STATUS"' in script
         assert r"exit-code=%s\n" in script
         assert '>> "$GITHUB_OUTPUT"' in script
+
+
+def test_root_action_marketplace_metadata_and_banner_sanitization() -> None:
+    parsed = yaml.safe_load((ROOT / "action.yml").read_text(encoding="utf-8"))
+    assert parsed["name"] == "YAGA Checks"
+    assert 1 <= len(parsed["description"]) <= 125
+    assert parsed["branding"] == {"icon": "shield", "color": "green"}
+
+    banner_step = parsed["runs"]["steps"][0]
+    assert banner_step["id"] == "banner"
+    assert "GITHUB_TOKEN" not in banner_step.get("env", {})
+    assert "GH_TOKEN" not in banner_step.get("env", {})
+
+    bash = "C:/Program Files/Git/bin/bash.exe" if sys.platform == "win32" else shutil.which("bash")
+    if not bash or not Path(bash).is_file():
+        pytest.skip("Bash is unavailable")
+
+    plain = subprocess.run(
+        [bash, "-c", banner_step["run"]],
+        env={
+            **os.environ,
+            "NO_COLOR": "1",
+            "YAGA_BANNER_CHECK": "gate",
+            "YAGA_BANNER_OPERATION": "prepare",
+        },
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=15,
+    )
+    assert "Y A G A   C H E C K S" in plain.stdout
+    assert "Yet Another Gate Action" in plain.stdout
+    assert "Automate the next gate." in plain.stdout
+    assert "@@@@@@@%..%%=..=####=...=@@%++++++++%@@@@@@@" in plain.stdout
+    assert f"> version:  {VERSION}" in plain.stdout
+    assert "> check:    gate (prepare)" in plain.stdout
+    assert "\x1b[" not in plain.stdout
+
+    colored = subprocess.run(
+        [bash, "-c", banner_step["run"]],
+        env={k: v for k, v in os.environ.items() if k != "NO_COLOR"}
+        | {"YAGA_BANNER_CHECK": "pr-review", "YAGA_BANNER_OPERATION": ""},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=15,
+    )
+    assert "\x1b[38;2;131;188;140m" in colored.stdout
+    assert "pr-review" in colored.stdout
+    for line in colored.stdout.splitlines():
+        if line:
+            assert line.endswith("\x1b[0m")
+
+    untrusted = subprocess.run(
+        [bash, "-c", banner_step["run"]],
+        env={
+            **os.environ,
+            "NO_COLOR": "1",
+            "YAGA_BANNER_CHECK": "\x1b[31m$(whoami)",
+            "YAGA_BANNER_OPERATION": "bad-op",
+        },
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=15,
+    )
+    assert "> check:    unsupported" in untrusted.stdout
+    assert "whoami" not in untrusted.stdout
+    assert "bad-op" not in untrusted.stdout
+    assert "\x1b[" not in untrusted.stdout
 
 
 def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:

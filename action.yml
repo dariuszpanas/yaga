@@ -1,4 +1,4 @@
-name: YAGA
+name: YAGA Checks
 description: Run configurable commit, pull-request, workflow, and repository policy checks
 author: Dariusz Panas
 
@@ -195,6 +195,93 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Display YAGA banner
+      id: banner
+      shell: bash
+      env:
+        YAGA_BANNER_CHECK: ${{ inputs.check }}
+        YAGA_BANNER_OPERATION: ${{ inputs.operation }}
+      run: |
+        set -euo pipefail
+        unset GITHUB_TOKEN GH_TOKEN
+        case "${YAGA_BANNER_CHECK:-}" in
+          commit|pr-review|pr-description|repo|branch|change|workflow|workflow-security|workflow-lint|mode|path|size|tree)
+            YAGA_MODE="$YAGA_BANNER_CHECK"
+            ;;
+          gate)
+            case "${YAGA_BANNER_OPERATION:-}" in
+              invalidate|prepare|authorize|observe|request|finalize)
+                YAGA_MODE="gate ($YAGA_BANNER_OPERATION)"
+                ;;
+              *)
+                YAGA_MODE="gate"
+                ;;
+            esac
+            ;;
+          *)
+            YAGA_MODE="unsupported"
+            ;;
+        esac
+        if [[ -z "${NO_COLOR:-}" ]]; then
+          G=$'\033[38;2;131;188;140m'
+          B=$'\033[1;38;2;226;232;234m'
+          D=$'\033[38;2;120;144;151m'
+          L=$'\033[38;2;52;71;78m'
+          R=$'\033[0m'
+        else
+          G=""
+          B=""
+          D=""
+          L=""
+          R=""
+        fi
+        L01='    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@    '
+        L02='  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  '
+        L03='@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+        L04='@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+        L05='@@@@@@@@@@@@@@@@@@@@@@@%==@@#@@@@@@@@@@@@@@@'
+        L06='@@@@@@@@@@@@@@@@@#+-.....-@@+++*%@@@@@@@@@@@'
+        L07='@@@@@@@@@@@#*-...........-@%++++++*#@@@@@@@@'
+        L08='@@@@@@@@.........+@@@*...-@%++++#*++%@@@@@@@'
+        L09='@@@@@@@%..........:#@@%=.-@%++#@%*++%@@@@@@@'
+        L10='@@@@@@@%............-%@@#=@@#@@%*+++%@@@@@@@'
+        L11='@@@@@@@%..............+@@@@@@@#+++++%@@@@@@@'
+        L12='@@@@@@@%..%=............#@@@*+++++++%@@@@@@@'
+        L13='@@@@@@@%..-#@%=.........=@@%++++++++%@@@@@@@'
+        L14='@@@@@@@%...=%@#.........=@@%++++++++%@@@@@@@'
+        L15='@@@@@@@%..%%=..=####=...=@@%++++++++%@@@@@@@'
+        L16='@@@@@@@%................=@@%++++++++%@@@@@@@'
+        L17='@@@@@@@%:...............=@@%++++++++%@@@@@@@'
+        L18='@@@@@@@@@@@@%+=-:.......=@@%++++*#@@@@@@@@@@'
+        L19='@@@@@@@@@@@@@@@@@@@@@%=:+@@@*%@@@@@@@@@@@@@@'
+        L20='@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+        L21='@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+        L22='  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ '
+        L23='   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   '
+        printf '  %s\n' "${G}${L01}${R}"
+        printf '  %s\n' "${G}${L02}${R}"
+        printf '  %s\n' "${G}${L03}${R}"
+        printf '  %s\n' "${G}${L04}${R}"
+        printf '  %s\n' "${G}${L05}${R}"
+        printf '  %s\n' "${G}${L06}${R}"
+        printf '  %s\n' "${G}${L07}${R}    ${B}Y A G A   C H E C K S${R}"
+        printf '  %s\n' "${G}${L08}${R}    ${G}Yet Another Gate Action${R}"
+        printf '  %s\n' "${G}${L09}${R}"
+        printf '  %s\n' "${G}${L10}${R}    ${L}--------------------------------------${R}"
+        printf '  %s\n' "${G}${L11}${R}"
+        printf '  %s\n' "${G}${L12}${R}    ${G}>${R} ${D}check:   ${R} ${B}${YAGA_MODE}${R}"
+        printf '  %s\n' "${G}${L13}${R}    ${G}>${R} ${D}version:  0.4.1${R}"
+        printf '  %s\n' "${G}${L14}${R}    ${G}>${R} ${D}docs:     https://dariuszpanas.github.io/yaga/${R}"
+        printf '  %s\n' "${G}${L15}${R}"
+        printf '  %s\n' "${G}${L16}${R}    ${G}Automate the next gate.${R}"
+        printf '  %s\n' "${G}${L17}${R}"
+        printf '  %s\n' "${G}${L18}${R}"
+        printf '  %s\n' "${G}${L19}${R}"
+        printf '  %s\n' "${G}${L20}${R}"
+        printf '  %s\n' "${G}${L21}${R}"
+        printf '  %s\n' "${G}${L22}${R}"
+        printf '  %s\n\n' "${G}${L23}${R}"
+
     - name: Reject unsupported check selector
       id: invalid_check
       if: >-
@@ -221,7 +308,8 @@ runs:
         printf '%s\n' "$YAGA_MESSAGE" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
           {
-            printf '%s\n' '## YAGA action'
+            printf '%s\n\n' '## `>_` YAGA Checks · action'
+            printf '%s\n\n' '**Status:** Error (exit `2`) · **Version:** `0.4.1`'
             printf '%s\n' '<pre>'
             printf '%s\n' "$YAGA_MESSAGE" | \
               sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
@@ -273,8 +361,14 @@ runs:
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          case "$YAGA_STATUS" in
+            0) YAGA_SUMMARY_STATUS="Passed" ;;
+            1) YAGA_SUMMARY_STATUS="Findings reported" ;;
+            *) YAGA_SUMMARY_STATUS="Error" ;;
+          esac
           {
-            printf '%s\n' '## YAGA commit policy'
+            printf '%s\n\n' '## `>_` YAGA Checks · commit'
+            printf '**Status:** %s (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
             printf '%s\n' '<pre>'
             { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
               sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
@@ -321,8 +415,14 @@ runs:
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          case "$YAGA_STATUS" in
+            0) YAGA_SUMMARY_STATUS="Passed" ;;
+            1) YAGA_SUMMARY_STATUS="Failed" ;;
+            *) YAGA_SUMMARY_STATUS="Error" ;;
+          esac
           {
-            printf '%s\n' '## YAGA Agent review gate'
+            printf '%s\n\n' '## `>_` YAGA Checks · gate'
+            printf '**Status:** %s (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
             printf '%s\n' '<pre>'
             { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
               sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
@@ -431,8 +531,14 @@ runs:
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          case "$YAGA_STATUS" in
+            0) YAGA_SUMMARY_STATUS="Passed" ;;
+            1) YAGA_SUMMARY_STATUS="Findings reported" ;;
+            *) YAGA_SUMMARY_STATUS="Error" ;;
+          esac
           {
-            printf '## YAGA %s check\n' "$YAGA_INPUT_CHECK"
+            printf '## `>_` YAGA Checks · %s\n\n' "$YAGA_INPUT_CHECK"
+            printf '**Status:** %s (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
             printf '%s\n' '<pre>'
             { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
               sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'

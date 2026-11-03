@@ -1,8 +1,10 @@
 # GitHub Actions
 
-YAGA publishes a single unified composite GitHub Action at the repository root (`action.yml`),
-selected with `uses: dariuszpanas/yaga@<audited-40-character-sha>` and controlled by `check`
-(defaulting to `commit`).
+YAGA publishes a single unified composite GitHub Action at the repository root (`action.yml`,
+published on GitHub Marketplace as **YAGA Checks**), selected with
+`uses: dariuszpanas/yaga@<audited-40-character-sha>` and controlled by `check` (defaulting to
+`commit`). Each run prints a bounded `YAGA Checks` ASCII header (honoring `NO_COLOR`) and writes
+an HTML-escaped report summary to `$GITHUB_STEP_SUMMARY`.
 
 ## Execution runtimes and trust split
 

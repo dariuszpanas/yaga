@@ -8,6 +8,7 @@ want to catch, select the smallest useful check, and validate it locally before 
 | Need | Choose | Required input | Additional prerequisites |
 | --- | --- | --- | --- |
 | Consistent commit messages | [Commit policy](commit-policy.md) | A message, commit, or range; one discovered or explicit policy | Git and complete history for Git sources; Typos only if enabled |
+| Complete pull-request descriptions | [Pull-request descriptions](pull-request-descriptions.md) | A file, stdin, event, or `--pr` plus a policy file (and optional template) | Typos if enabled; authenticated `gh` only for `--pr` |
 | Consistent branch names | [Branch policy](branch-policy.md) | A short name and policy file | None beyond the installed CLI |
 | Companion files in a change | [Changed-path policy](change-policy.md) | An exact range and policy file | Git and complete history |
 | Allowed contents, names, modes, or sizes | [Repository checks](repository-checks.md) | An exact revision and provider policy files | Git with the selected committed objects available |
@@ -58,9 +59,13 @@ same selection; branch and change checks remain separate commands.
 5. Preserve the exit status: `0` passes, `1` reports findings, and `2` means the check could not
    complete. Do not convert an operational failure into a pass.
 
-For GitHub pull requests, choose between a range check and the
-[event-aware commit Action](github-actions.md), which also validates PR titles and event context.
-Use an unprivileged PR workflow with read-only permissions; no review publisher is needed.
+For GitHub pull requests, choose between running `yaga` directly and the unified
+[`YAGA Checks` GitHub Action](github-actions.md) (`uses: dariuszpanas/yaga@...`), which supports
+event-aware `commit` validation (including PR titles) as well as `pr-description`, `pr-review`,
+`repo`, `branch`, `change`, `workflow*`, `mode`, `path`, `size`, and `tree` checks.
+Use an unprivileged PR workflow with read-only permissions for ordinary quality checks; reserve
+`pull_request_target` / `workflow_run` only when opting into trusted commit policy or
+`check: pr-review` review submission.
 After validation, configure your repository's branch protection to require the intended job.
 
 ## Optional capabilities are separate decisions
