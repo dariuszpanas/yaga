@@ -54,12 +54,13 @@ root `YAGA Checks` Action (`uses: ./`) on pull requests while keeping internal P
 gates in separate named jobs:
 
 - **Marketplace Action dogfooding (`uses: ./`)**:
-  - `Commit Messages` (`commit-policy.yml`): `check: commit` against `[tool.yaga.commit]`.
-  - `YAGA Checks (branch, description, change, repo)` (`ci.yml`): `check: branch`
-    (`.yaga/branch-policy.toml`), `check: pr-description` (`.yaga/description-policy.toml`),
-    `check: change` (`.yaga/change-policy.toml`), and `check: repo` (`.yaga/checks/ci.toml`,
-    covering `mode`, `path`, `size`, `tree`, `workflow`, `workflow-security`, `workflow-lint`, and
-    `commit`).
+  - `Commit Messages` (`commit-policy.yml`): `check: commit` against `[tool.yaga.commit]` and
+    `check: pr-description` against `.yaga/description-policy.toml` (rechecked on PR title/body
+    `edited` events without rerunning the full test matrix).
+  - `YAGA Checks (branch, change, repo)` (`ci.yml`): `check: branch`
+    (`.yaga/branch-policy.toml`), `check: change` (`.yaga/change-policy.toml`), and `check: repo`
+    (`.yaga/checks/ci.toml`, covering `mode`, `path`, `size`, `tree`, `workflow`,
+    `workflow-security`, `workflow-lint`, and `commit`).
   - `Publish Pull Request Review` (`pr-review.yml`): trusted `check: pr-review` against
     `.yaga/agent-review-policy.toml`.
 - **Repository engineering & fixture suites**:

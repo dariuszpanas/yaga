@@ -308,12 +308,8 @@ runs:
         printf '%s\n' "$YAGA_MESSAGE" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
           {
-            printf '%s\n\n' '## `>_` YAGA Checks · action'
-            printf '%s\n\n' '**Status:** Error (exit `2`) · **Version:** `0.4.1`'
-            printf '%s\n' '<pre>'
-            printf '%s\n' "$YAGA_MESSAGE" | \
-              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
-            printf '%s\n' '</pre>'
+            printf '%s\n\n' '## `>_` YAGA Checks · `action`'
+            printf '%s\n' '**Status:** Error (exit `2`) · **Version:** `0.4.1` · **Summary:** YAGA input error: unsupported check mode'
           } >> "$GITHUB_STEP_SUMMARY"
         fi
         exit 2
@@ -361,19 +357,29 @@ runs:
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-          case "$YAGA_STATUS" in
-            0) YAGA_SUMMARY_STATUS="Passed" ;;
-            1) YAGA_SUMMARY_STATUS="Findings reported" ;;
-            *) YAGA_SUMMARY_STATUS="Error" ;;
-          esac
-          {
-            printf '%s\n\n' '## `>_` YAGA Checks · commit'
-            printf '**Status:** %s (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
-            printf '%s\n' '<pre>'
-            { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
-              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
-            printf '%s\n' '</pre>'
-          } >> "$GITHUB_STEP_SUMMARY"
+          if command -v python >/dev/null 2>&1; then
+            if command -v cygpath >/dev/null 2>&1; then
+              YAGA_SUMMARY_REPORT="$(cygpath -w "$YAGA_REPORT")"
+              YAGA_SUMMARY_ERROR="$(cygpath -w "$YAGA_ERROR")"
+            else
+              YAGA_SUMMARY_REPORT="$YAGA_REPORT"
+              YAGA_SUMMARY_ERROR="$YAGA_ERROR"
+            fi
+            python -P -S -m yaga.step_summary \
+              --mode commit \
+              --status "$YAGA_STATUS" \
+              --report "$YAGA_SUMMARY_REPORT" \
+              --error "$YAGA_SUMMARY_ERROR" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              printf '%s\n\n' '## `>_` YAGA Checks · `commit`'
+              printf '**Status:** Error (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_STATUS"
+              printf '%s\n' '<pre>'
+              { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
+                sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+              printf '%s\n' '</pre>'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
         fi
         exit "$YAGA_STATUS"
 
@@ -421,7 +427,7 @@ runs:
             *) YAGA_SUMMARY_STATUS="Error" ;;
           esac
           {
-            printf '%s\n\n' '## `>_` YAGA Checks · gate'
+            printf '%s\n\n' '## `>_` YAGA Checks · `gate`'
             printf '**Status:** %s (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
             printf '%s\n' '<pre>'
             { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
@@ -531,19 +537,29 @@ runs:
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-          case "$YAGA_STATUS" in
-            0) YAGA_SUMMARY_STATUS="Passed" ;;
-            1) YAGA_SUMMARY_STATUS="Findings reported" ;;
-            *) YAGA_SUMMARY_STATUS="Error" ;;
-          esac
-          {
-            printf '## `>_` YAGA Checks · %s\n\n' "$YAGA_INPUT_CHECK"
-            printf '**Status:** %s (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
-            printf '%s\n' '<pre>'
-            { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
-              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
-            printf '%s\n' '</pre>'
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -n "${YAGA_PYTHON:-}" && -x "$YAGA_PYTHON" ]]; then
+            if command -v cygpath >/dev/null 2>&1; then
+              YAGA_SUMMARY_REPORT="$(cygpath -w "$YAGA_REPORT")"
+              YAGA_SUMMARY_ERROR="$(cygpath -w "$YAGA_ERROR")"
+            else
+              YAGA_SUMMARY_REPORT="$YAGA_REPORT"
+              YAGA_SUMMARY_ERROR="$YAGA_ERROR"
+            fi
+            "$YAGA_PYTHON" -I -m yaga.step_summary \
+              --mode "$YAGA_INPUT_CHECK" \
+              --status "$YAGA_STATUS" \
+              --report "$YAGA_SUMMARY_REPORT" \
+              --error "$YAGA_SUMMARY_ERROR" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              printf '## `>_` YAGA Checks · `%s`\n\n' "$YAGA_INPUT_CHECK"
+              printf '**Status:** Error (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_STATUS"
+              printf '%s\n' '<pre>'
+              { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
+                sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+              printf '%s\n' '</pre>'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
         fi
         exit "$YAGA_STATUS"
 

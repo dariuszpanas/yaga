@@ -278,7 +278,7 @@ It exempts title and commit rules, including spelling, after normal event/head v
 ## Live dogfooding in this repository
 
 Alongside the copy-ready templates in `examples/`, YAGA dogfoods `YAGA Checks` (`uses: ./`) across
-its own pull-request workflows: `commit-policy.yml` (`check: commit`), the `YAGA Checks` job in
-`ci.yml` (`check: branch`, `pr-description`, `change`, and `repo` with `.yaga/checks/ci.toml`), and
+its own pull-request workflows: `commit-policy.yml` (`check: commit` and `pr-description`), the
+`YAGA Checks` job in `ci.yml` (`check: branch`, `change`, and `repo` with `.yaga/checks/ci.toml`), and
 `pr-review.yml` (`check: pr-review`). See [Contributing](contributing.md#pull-request-jobs-and-yaga-dogfooding)
 for how those jobs separate Action dogfooding from internal Python build and fixture jobs.

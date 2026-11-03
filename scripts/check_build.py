@@ -1615,6 +1615,7 @@ def main() -> int:
                 "yaga/action_cli.py",
                 "yaga/cli_action.py",
                 "yaga/commit_action_cli.py",
+                "yaga/step_summary.py",
                 "yaga/commit_action_runtime.py",
                 "yaga/cli.py",
                 "yaga/agent_review/runtime.py",
