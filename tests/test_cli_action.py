@@ -485,12 +485,14 @@ def test_action_manifest_shell_guards_reject_invalid_selector_and_unused_inputs(
     assert "unsupported check mode" in invalid_summary.read_text("utf-8")
 
     commit_out = tmp_path / "commit_out"
+    commit_summary = tmp_path / "commit_summary"
     commit_res = subprocess.run(
         [bash, "-c", steps_by_id["commit"]],
         env={
             **os.environ,
             "GITHUB_ACTION_PATH": ROOT.as_posix(),
             "GITHUB_OUTPUT": commit_out.as_posix(),
+            "GITHUB_STEP_SUMMARY": commit_summary.as_posix(),
             "YAGA_UNUSED_INPUTS": "1",
         },
         capture_output=True,
@@ -501,3 +503,15 @@ def test_action_manifest_shell_guards_reject_invalid_selector_and_unused_inputs(
     assert commit_res.returncode == 2
     assert "exit-code=2" in commit_out.read_text("utf-8")
     assert "accepts only 'check' and 'trusted-config'" in commit_res.stderr
+    assert "accepts only 'check' and 'trusted-config'" in commit_summary.read_text("utf-8")
+
+
+def test_pytest_isolates_live_github_runner_command_files() -> None:
+    for name in (
+        "GITHUB_ENV",
+        "GITHUB_OUTPUT",
+        "GITHUB_PATH",
+        "GITHUB_STATE",
+        "GITHUB_STEP_SUMMARY",
+    ):
+        assert name not in os.environ
