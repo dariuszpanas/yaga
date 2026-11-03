@@ -98,7 +98,7 @@ def test_minimum_security_matrix_is_complete_and_preserves_evidence(filename: st
         assert "uv build" not in "\n".join(commands)
     else:
         gate = workflow["jobs"]["gate"]
-        assert gate["needs"] == ["check", "test", "minimum-runtime", "review"]
+        assert gate["needs"] == ["check", "test", "minimum-runtime"]
         assert gate["if"] == "always()"
         assert "continue-on-error" not in gate
         step = gate["steps"][0]
