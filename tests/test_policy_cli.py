@@ -371,3 +371,80 @@ def test_cli_action_policy_mode_executes_end_to_end(tmp_path: Path) -> None:
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert "1 current, 0 deprecated, 0 invalid" in completed.stdout
+
+
+def test_policy_check_terminates_on_in_repo_directory_cycle_in_yaga_dir(tmp_path: Path) -> None:
+    yaga_dir = tmp_path / ".yaga"
+    empty_dir = yaga_dir / "empty"
+    empty_dir.mkdir(parents=True)
+    (yaga_dir / "branch-policy.toml").write_text(
+        'branch-policy-version = 1\nallowed-patterns = ["main"]\n',
+        encoding="utf-8",
+    )
+    loop_path = empty_dir / "loop"
+    try:
+        loop_path.symlink_to(yaga_dir, target_is_directory=True)
+    except OSError:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(loop_path), str(yaga_dir)],
+                check=True,
+                capture_output=True,
+            )
+        else:
+            raise
+
+    res = runner.invoke(
+        app,
+        ["policy", "check", "--repo", str(tmp_path), "--strict", "--format", "json"],
+    )
+    assert res.exit_code == 0, res.output
+    doc = json.loads(res.stdout)
+    assert doc["checked"] == 1
+    assert doc["current"] == 1
+    assert doc["invalid"] == 0
+
+
+def test_policy_check_reports_malformed_pyproject_instead_of_skipping_it(
+    tmp_path: Path,
+) -> None:
+    yaga_dir = tmp_path / ".yaga"
+    yaga_dir.mkdir()
+    (yaga_dir / "branch-policy.toml").write_text(
+        'branch-policy-version = 1\nallowed-patterns = ["main"]\n',
+        encoding="utf-8",
+    )
+    pyproject = tmp_path / "pyproject.toml"
+
+    # Valid pyproject.toml without [tool.yaga] is ignored during repository discovery.
+    pyproject.write_text('[project]\nname = "demo"\nversion = "0.1.0"\n', encoding="utf-8")
+    clean = runner.invoke(
+        app,
+        ["policy", "check", "--repo", str(tmp_path), "--strict", "--format", "json"],
+    )
+    assert clean.exit_code == 0, clean.output
+    assert json.loads(clean.stdout)["checked"] == 1
+
+    # Malformed pyproject.toml alongside valid .yaga policies must fail closed as invalid.
+    pyproject.write_text("[tool.yaga\nconfig-version = 1\n", encoding="utf-8")
+    broken = runner.invoke(
+        app,
+        ["policy", "check", "--repo", str(tmp_path), "--strict", "--format", "json"],
+    )
+    assert broken.exit_code == 2
+    broken_doc = json.loads(broken.stderr)
+    assert broken_doc["checked"] == 2
+    assert broken_doc["current"] == 1
+    assert broken_doc["invalid"] == 1
+    invalid_entries = [item for item in broken_doc["policies"] if item["status"] == "invalid"]
+    assert len(invalid_entries) == 1
+    assert invalid_entries[0]["kind"] == "commit"
+    assert "invalid UTF-8 TOML" in invalid_entries[0]["message"]
+
+    # Invalid UTF-8 pyproject.toml alone must also report invalid rather than "no policy files".
+    solo_repo = tmp_path / "solo"
+    solo_repo.mkdir()
+    (solo_repo / "pyproject.toml").write_bytes(b"\xff\xfe\x00invalid")
+    solo_res = runner.invoke(app, ["policy", "check", "--repo", str(solo_repo)])
+    assert solo_res.exit_code == 2
+    assert "invalid UTF-8 TOML" in solo_res.stderr

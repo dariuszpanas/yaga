@@ -24,6 +24,7 @@ from yaga.test_planning.policy import load_test_policy
 from yaga.trees.policy import load_tree_policy
 
 MAX_DISCOVERED_POLICIES = 128
+MAX_SCANNED_DIRECTORIES = 256
 MAX_AUDIT_FILE_BYTES = 1024 * 1024
 
 _DISTINCTIVE_VERSION_KEYS: tuple[tuple[str, PolicyKind], ...] = (
@@ -40,6 +41,7 @@ _DISTINCTIVE_VERSION_KEYS: tuple[tuple[str, PolicyKind], ...] = (
 
 _FILENAME_HINTS: dict[str, PolicyKind] = {
     ".yaga.toml": PolicyKind.COMMIT,
+    "pyproject.toml": PolicyKind.COMMIT,
     "branch-policy.toml": PolicyKind.BRANCH,
     "change-policy.toml": PolicyKind.CHANGE,
     "description-policy.toml": PolicyKind.DESCRIPTION,
@@ -134,24 +136,31 @@ def audit_policies(
 def discover_repository_policy_files(repository: Path) -> tuple[Path, ...]:
     """Discover .yaga.toml, pyproject.toml [tool.yaga], and .yaga/**/*.toml inside repository."""
     discovered: list[Path] = []
+    seen_files: set[Path] = set()
+
+    def _add_discovered(resolved_path: Path) -> None:
+        if resolved_path not in seen_files:
+            seen_files.add(resolved_path)
+            discovered.append(resolved_path)
 
     dot_yaga_toml = repository / ".yaga.toml"
     if dot_yaga_toml.exists() or dot_yaga_toml.is_symlink():
         _ensure_within_repository(dot_yaga_toml, repository)
-        discovered.append(dot_yaga_toml.resolve())
+        _add_discovered(dot_yaga_toml.resolve())
 
     pyproject = repository / "pyproject.toml"
-    if (pyproject.exists() or pyproject.is_symlink()) and _pyproject_has_yaga_table(
+    if (pyproject.exists() or pyproject.is_symlink()) and _should_audit_pyproject(
         pyproject, repository=repository
     ):
-        discovered.append(pyproject.resolve())
+        _add_discovered(pyproject.resolve())
 
     yaga_dir = repository / ".yaga"
     if yaga_dir.exists() or yaga_dir.is_symlink():
         _ensure_within_repository(yaga_dir, repository)
         resolved_yaga_dir = yaga_dir.resolve()
         if resolved_yaga_dir.is_dir():
-            discovered.extend(_collect_toml_tree(resolved_yaga_dir, repository=repository))
+            for item in _collect_toml_tree(resolved_yaga_dir, repository=repository):
+                _add_discovered(item)
 
     if len(discovered) > MAX_DISCOVERED_POLICIES:
         raise ConfigurationError(
@@ -163,6 +172,8 @@ def discover_repository_policy_files(repository: Path) -> tuple[Path, ...]:
 
 def _collect_toml_tree(directory: Path, *, repository: Path) -> list[Path]:
     collected: list[tuple[str, Path]] = []
+    seen_files: set[Path] = set()
+    visited_dirs: set[Path] = {directory}
     stack = [directory]
     while stack:
         current = stack.pop()
@@ -176,8 +187,17 @@ def _collect_toml_tree(directory: Path, *, repository: Path) -> list[Path]:
             _ensure_within_repository(child, repository)
             resolved_child = child.resolve()
             if resolved_child.is_dir():
+                if resolved_child in visited_dirs:
+                    continue
+                if len(visited_dirs) >= MAX_SCANNED_DIRECTORIES:
+                    raise ConfigurationError(
+                        f"discovered policy directory count exceeds {MAX_SCANNED_DIRECTORIES} "
+                        f"directories in {safe_error_text(repository, maximum=300)}"
+                    )
+                visited_dirs.add(resolved_child)
                 stack.append(resolved_child)
-            elif child.suffix.lower() == ".toml":
+            elif child.suffix.lower() == ".toml" and resolved_child not in seen_files:
+                seen_files.add(resolved_child)
                 rel = resolved_child.relative_to(repository).as_posix()
                 collected.append((rel, resolved_child))
                 if len(collected) > MAX_DISCOVERED_POLICIES:
@@ -437,18 +457,18 @@ def _hint_kind_name(path: Path) -> str:
     return hint.value if hint is not None else "unknown"
 
 
-def _pyproject_has_yaga_table(pyproject: Path, *, repository: Path) -> bool:
+def _should_audit_pyproject(pyproject: Path, *, repository: Path) -> bool:
     _ensure_within_repository(pyproject, repository)
     try:
         raw = read_file_prefix(pyproject.resolve(), maximum=MAX_AUDIT_FILE_BYTES)
     except OSError:
-        return False
+        return True
     if len(raw) > MAX_AUDIT_FILE_BYTES:
         return True
     try:
         doc = tomllib.loads(raw.decode("utf-8-sig"))
     except (UnicodeDecodeError, tomllib.TOMLDecodeError, RecursionError):
-        return False
+        return True
     tool = doc.get("tool")
     return isinstance(tool, dict) and "yaga" in tool
 
