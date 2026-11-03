@@ -27,6 +27,7 @@ first table needs GitHub credentials except explicit description or review `--pr
 | [`yaga github pull-request check`](github-actions.md) | Event snapshot, matching runner identity/checkout, complete commit history, and commit config. | Offline Git; no API/token. Typos if enabled; trusted `gpgv` for the opt-in signed Dependabot exemption, otherwise normal checks run. |
 | [`yaga github pull-request description check`](pull-request-descriptions.md#github-actions) | Explicit `--event-file`, `--policy`, optional `--template`. | Offline; no Git/checkout. Typos if enabled. |
 | [`yaga repo check`](repository-plans.md) | Explicit provider list or `--plan`; selected providers' runtime inputs. | Inherits each selected provider's tools and execution boundary. |
+| [`yaga policy check`](configuration.md#policy-initialization-and-schema-audits) | Explicit policy TOML files or discovered repository policies in `--repo`; optional `--strict`. | Offline; validates schema versions, `required-version` floors, and deprecated schema versions. |
 
 `tree`, `path`, `mode`, and `size` do not see staged, untracked, or working-file changes. A
 `repo check --revision SHA` sets only their committed source; it does not make workflow checks
@@ -57,6 +58,7 @@ structured operational errors use stderr. CLI usage errors may be plain text eve
 | --- | --- | --- | --- |
 | `commit check`; `workflow check`, `security`, `lint`; `tree`, `path`, `mode`, `size` checks | Text, JSON, GitHub; `0/1/2` | Exactly these eight providers; tree/path/mode/size require plan v2. | Root Action (`workflow`, `workflow-security`, `workflow-lint`, `tree`, `path`, `mode`, `size`); commit policy runs via default `check: commit` or `check: repo`. |
 | `repo check` | Text, JSON, GitHub; `0/1/2` with operational errors taking precedence | Runs a selected plan. | Root Action (`check: repo`). |
+| `policy check` | Text, JSON, GitHub; `0/1/2` (`1` on deprecated schemas with `--strict`) | No. | Root Action (`check: policy`). |
 | `branch check`, `change check`, both description checks, `pull-request review check` | Text, JSON, GitHub; `0/1/2` | No. | Root Action (`branch`, `change`, `pr-description`, `pr-review`). |
 | `commit quality` | Text, JSON, GitHub; `0/1/2` | No. | None (requires optional model extras). |
 | `github pull-request check` | Text, JSON, GitHub; `0/1/2` | No. | Root Action default (`check: commit`). |
@@ -68,7 +70,7 @@ structured operational errors use stderr. CLI usage errors may be plain text eve
 | `gate agent-review <operation>` | Lifecycle output; `GateError` returns `1`, not the policy-check error code | No. | Trusted write-capable root Action (`check: gate`). Nonempty `agent-review-policy-file` is rejected. |
 
 All installed commands can run in suitable ordinary CI with their stated prerequisites. The
-unified root Action isolates stdlib `commit` and `gate` modes from hash-locked CLI checks. Quality advice remains
+unified root Action isolates stdlib `gate` mode from the hash-locked `commit` and CLI check runtimes. Quality advice remains
 advisory; a plan is not evidence that tests or reviews ran. See [Usage modes](usage.md) and
 [Assess and adopt in CI](ci-adoption.md) before choosing required gates.
 
@@ -129,11 +131,14 @@ pull-request state; they do not check event-bound commit history or edit the pul
 
 [`yaga config show`](configuration.md) reads one discovered or explicit config;
 [`yaga config init`](configuration.md) creates a new standalone config with no-overwrite semantics
-and supports `--dry-run`. Both are offline, use text/JSON, and return `0/2`.
+and supports `--dry-run`. [`yaga policy init`](configuration.md#policy-initialization-and-schema-audits) creates starter TOML files stamped with the latest schema version across YAGA's 11 policy families (with an interactive checkbox selector in a terminal, plus `--all`, `--skip-existing`, and `--dry-run`). All are offline, use text/JSON, and return `0/2`.
 [`yaga commit template`](commit-policy.md#read-only-message-templates) prints an incomplete message
 from explicit conventional components or plain policy; it is offline, text-only, and returns
 `0/2`. None belongs to repository plans or the bundled Actions.
 
 For installation maintenance, use [`yaga self update`](getting-started.md#update-or-uninstall)
 or `yaga self update --dry-run` to verify a uv tool installation without updating it. Actual
-updates invoke uv and may access the package index; this is maintenance, not a policy check.
+updates invoke uv and may access the package index; this is maintenance, not a policy check. Use
+`yaga --install-completion` or `yaga --show-completion [bash|zsh|fish|powershell|pwsh]` to install
+or inspect idempotent shell tab-completion blocks that preserve existing profile BOM/encoding and
+never modify PowerShell execution policy.

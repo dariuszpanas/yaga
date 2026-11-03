@@ -606,7 +606,7 @@ def test_action_bootstrap_does_not_import_pull_request_review_cli_modules(
         [
             sys.executable,
             "-I",
-            "-S",
+            *(("-S",) if module_name == "yaga.action_cli" else ()),
             "-c",
             (
                 "import json, sys; "

@@ -8,6 +8,11 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from yaga.errors import ConfigurationError, InputError, safe_error_text
 from yaga.files import read_file_prefix
+from yaga.policies.schemas import (
+    REPO_PLAN_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 from yaga.repository.models import (
     REPOSITORY_PLAN_V1,
     REPOSITORY_PLAN_V1_PROVIDER_ORDER,
@@ -49,7 +54,7 @@ _POLICY_KEYS = {
     RepositoryProvider.SIZE: "size-policy",
     RepositoryProvider.TREE: "tree-policy",
 }
-_PLAN_KEYS_V2 = _PLAN_KEYS_V1 | frozenset(_POLICY_KEYS.values())
+_PLAN_KEYS_V2 = _PLAN_KEYS_V1 | frozenset(_POLICY_KEYS.values()) | frozenset({"required-version"})
 _WINDOWS_FORBIDDEN_PATH_CHARACTERS = frozenset('<>:"|?*')
 _WINDOWS_RESERVED_PATH_NAMES = frozenset(
     {
@@ -74,9 +79,13 @@ def load_repository_check_plan(path: Path) -> RepositoryCheckPlan:
     resolved = _resolve_plan_path(path)
     document = _read_plan_document(resolved)
     candidate_version = document.get("plan-version")
+    allow_required_version = not (
+        type(candidate_version) is int and candidate_version == REPOSITORY_PLAN_V1
+    )
+    check_optional_required_version(document, allow_required_version=allow_required_version)
     candidate_keys = (
         _PLAN_KEYS_V2
-        if type(candidate_version) is int and candidate_version == REPOSITORY_PLAN_V2
+        if type(candidate_version) is int and candidate_version >= REPOSITORY_PLAN_V2
         else _PLAN_KEYS_V1
     )
     unknown = sorted(set(document) - candidate_keys)
@@ -97,6 +106,14 @@ def load_repository_check_plan(path: Path) -> RepositoryCheckPlan:
         plan_version=plan_version,
         checks=checks,
         path=resolved,
+    )
+    validate_family_wire(
+        REPO_PLAN_FAMILY,
+        document,
+        version_key="plan-version",
+        version_error_message=f"plan-version must be the integer 1 or 2 in {resolved}",
+        missing_version_message=f"repository check plan is missing plan-version in {resolved}",
+        allow_required_version=allow_required_version,
     )
 
     selected = frozenset(checks)
@@ -153,6 +170,11 @@ def _plan_version(document: dict[str, object], *, path: Path) -> int:
     if "plan-version" not in document:
         raise ConfigurationError(f"repository check plan is missing plan-version in {path}")
     value = document["plan-version"]
+    if type(value) is int and value > int(REPO_PLAN_FAMILY.current_version):
+        raise ConfigurationError(
+            f"plan-version must be the integer 1 or 2 in {path} "
+            f"(found newer schema version {value}; update YAGA using its installation manager)"
+        )
     if type(value) is not int or value not in REPOSITORY_PLAN_VERSIONS:
         raise ConfigurationError(f"plan-version must be the integer 1 or 2 in {path}")
     return value

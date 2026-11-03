@@ -18,20 +18,33 @@
   presets, default `preset`, `outcome`, and `publication` on custom agent tables, and remove the
   unused `instruction` field.
 
+- Add `yaga policy init` (with an interactive terminal checkbox selector, explicit policy names,
+  `--all`, `--skip-existing`, and `--dry-run`) and `yaga policy check` (plus `check: policy` in
+  `action.yml`), backed by versioned `pydantic` and `pydantic-versions` schema families across all
+  11 YAGA policy types (`commit`, `repo`, `branch`, `change`, `description`, `mode`, `path`,
+  `size`, `tree`, `agent-review`, and `test`), optional `required-version` floors across current
+  policy schemas, deprecated-schema reporting (`--strict`), and actionable upgrade hints on newer
+  schema versions.
+
 ### Changed
 
 - Unify YAGA's GitHub Actions into the single Marketplace-ready root `action.yml` (**YAGA Checks**,
-  `uses: dariuszpanas/yaga@...`) with `check` defaulting to `commit` and supporting `pr-review`,
-  `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`,
-  `mode`, `path`, `size`, `tree`, and `gate`, a startup ASCII banner (`NO_COLOR`-aware), branded
-  `$GITHUB_STEP_SUMMARY` status output, and a copy-ready `examples/pr-review.yml` workflow. Retire
-  `actions/commit-check/action.yml` while keeping `commit` and `gate` on their isolated
-  standard-library runtimes.
+  `uses: dariuszpanas/yaga@...`) with `check` defaulting to `commit` and supporting `policy`,
+  `pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`,
+  `workflow-lint`, `mode`, `path`, `size`, `tree`, and `gate`, a startup ASCII banner
+  (`NO_COLOR`-aware), structured Markdown tables in `$GITHUB_STEP_SUMMARY`, and a copy-ready
+  `examples/pr-review.yml` workflow. Retire `actions/commit-check/action.yml`, keep `check: gate`
+  on its isolated `python -P -S` standard-library runtime, and run `commit` and CLI checks inside
+  a shared hash-locked `--no-dev` `uv` runtime outside the checkout.
 - Parallelize test suite execution with `pytest-xdist` (`-n auto --dist worksteal`) in local and
   hosted CI runs.
 
 ### Fixed
 
+- Fix `yaga --install-completion` and `yaga --show-completion` across PowerShell (`powershell` and
+  `pwsh`) and POSIX shells so existing UTF-16 LE/BE and UTF-8 BOM profile encodings are preserved
+  without mojibake, `Set-ExecutionPolicy Unrestricted` is never run, and native tab completion
+  cleans up completion environment variables safely.
 - Require lowest-supported base dependency smoke and security audits on Linux and Windows in CI.
   Release publication now waits for both platforms to audit the exact retained release wheel;
   advisories, incomplete results, and audit failures block publication.

@@ -56,6 +56,10 @@ jobs:
           check: change
           policy: .yaga/change-policy.toml
           range: ${{ github.event_name == 'pull_request' && format('{0}...{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+      - name: Audit YAGA policy schemas
+        uses: ./
+        with:
+          check: policy
       - name: Run aggregate repository checks
         uses: ./
         with:

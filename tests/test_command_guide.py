@@ -33,7 +33,7 @@ def test_command_guide_covers_every_installed_checker() -> None:
     document = (ROOT / "docs/commands.md").read_text(encoding="utf-8")
     documented = set(re.findall(r"^\| \[`yaga ([^`]+)`\]\(", document, flags=re.MULTILINE))
     commands = _leaf_commands(get_command(app))
-    helpers = {"commit template", "config init", "config show", "self update"}
+    helpers = {"commit template", "config init", "config show", "policy init", "self update"}
     expected = {
         "gate agent-review <operation>"
         if name.startswith("gate agent-review ") and " policy " not in name

@@ -8,10 +8,16 @@ from pathlib import Path
 from yaga.branches.models import MAX_BRANCH_PATTERNS, BranchPolicy, LoadedBranchPolicy
 from yaga.errors import ConfigurationError, safe_error_text
 from yaga.files import read_file_prefix
+from yaga.policies.schemas import (
+    BRANCH_POLICY_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 
 MAX_BRANCH_POLICY_BYTES = 64 * 1024
 
-_POLICY_KEYS = frozenset({"branch-policy-version", "allowed-patterns"})
+_REQUIRED_KEYS = frozenset({"branch-policy-version", "allowed-patterns"})
+_POLICY_KEYS = _REQUIRED_KEYS | frozenset({"required-version"})
 
 
 def load_branch_policy(path: Path) -> LoadedBranchPolicy:
@@ -20,21 +26,33 @@ def load_branch_policy(path: Path) -> LoadedBranchPolicy:
     document = _read_policy_document(resolved)
     display_path = safe_error_text(resolved, maximum=300)
 
+    check_optional_required_version(document)
     unknown = sorted(set(document) - _POLICY_KEYS)
     if unknown:
         raise ConfigurationError(
             f"unknown branch policy key(s) in {display_path}: {', '.join(unknown)}"
         )
-    missing = sorted(_POLICY_KEYS - set(document))
+    missing = sorted(_REQUIRED_KEYS - set(document))
     if missing:
         raise ConfigurationError(
             f"branch policy is missing required key(s) in {display_path}: {', '.join(missing)}"
         )
 
     version = document["branch-policy-version"]
+    if type(version) is int and version > int(BRANCH_POLICY_FAMILY.current_version):
+        raise ConfigurationError(
+            f"branch-policy-version must be the integer 1 in {display_path} "
+            f"(found newer schema version {version}; update YAGA using its installation manager)"
+        )
     if isinstance(version, bool) or not isinstance(version, int) or version != 1:
         raise ConfigurationError(f"branch-policy-version must be the integer 1 in {display_path}")
     patterns = _parse_allowed_patterns(document["allowed-patterns"], path=display_path)
+    validate_family_wire(
+        BRANCH_POLICY_FAMILY,
+        document,
+        version_key="branch-policy-version",
+        version_error_message=f"branch-policy-version must be the integer 1 in {display_path}",
+    )
     try:
         policy = BranchPolicy(branch_policy_version=version, allowed_patterns=patterns)
     except ValueError as error:

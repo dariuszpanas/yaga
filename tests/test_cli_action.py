@@ -248,6 +248,30 @@ def test_branch_change_workflow_and_repo_modes_build_exact_commands(tmp_path: Pa
     )
     assert wf_lint_args == ["workflow", "lint", "--format=github"]
 
+    policy_default_args, policy_env, _ = cli_action.build_cli_invocation(
+        _base_env(tmp_path, YAGA_INPUT_CHECK="policy")
+    )
+    assert policy_default_args == ["policy", "check", "--strict", "--format=github"]
+    assert "GH_TOKEN" not in policy_env
+
+    policy_explicit_args, _, _ = cli_action.build_cli_invocation(
+        _base_env(
+            tmp_path,
+            YAGA_INPUT_CHECK="policy",
+            YAGA_INPUT_REPO="subdir",
+            YAGA_INPUT_POLICY=".yaga/branch-policy.toml",
+        )
+    )
+    assert policy_explicit_args == [
+        "policy",
+        "check",
+        "--repo=subdir",
+        "--strict",
+        "--format=github",
+        "--",
+        ".yaga/branch-policy.toml",
+    ]
+
     repo_plan_args, _, _ = cli_action.build_cli_invocation(
         _base_env(
             tmp_path,

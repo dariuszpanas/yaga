@@ -15,10 +15,15 @@ from yaga.changes.models import (
 )
 from yaga.errors import ConfigurationError, safe_error_text
 from yaga.files import read_file_prefix
+from yaga.policies.schemas import (
+    CHANGE_POLICY_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 
 MAX_CHANGE_POLICY_BYTES = 64 * 1024
 
-_POLICY_KEYS = frozenset({"change-policy-version", "rules"})
+_POLICY_KEYS = frozenset({"change-policy-version", "required-version", "rules"})
 _RULE_KEYS = frozenset({"name", "when-any", "require-any"})
 
 
@@ -28,18 +33,30 @@ def load_change_policy(path: Path) -> LoadedChangePolicy:
     document = _read_policy_document(resolved)
     display_path = safe_error_text(resolved, maximum=300)
 
+    check_optional_required_version(document)
     _reject_unknown(document, _POLICY_KEYS, label="change policy", path=display_path)
     if "change-policy-version" not in document:
         raise ConfigurationError(
             f"change policy is missing change-policy-version in {display_path}"
         )
     version = document["change-policy-version"]
+    if type(version) is int and version > int(CHANGE_POLICY_FAMILY.current_version):
+        raise ConfigurationError(
+            f"change-policy-version must be the integer 1 in {display_path} "
+            f"(found newer schema version {version}; update YAGA using its installation manager)"
+        )
     if isinstance(version, bool) or not isinstance(version, int) or version != 1:
         raise ConfigurationError(f"change-policy-version must be the integer 1 in {display_path}")
     if "rules" not in document:
         raise ConfigurationError(f"change policy is missing rules in {display_path}")
 
     rules = _parse_rules(document["rules"], path=display_path)
+    validate_family_wire(
+        CHANGE_POLICY_FAMILY,
+        document,
+        version_key="change-policy-version",
+        version_error_message=f"change-policy-version must be the integer 1 in {display_path}",
+    )
     return LoadedChangePolicy(
         policy=ChangePolicy(change_policy_version=version, rules=rules),
         path=resolved,

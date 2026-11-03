@@ -20,6 +20,7 @@ CLI_ACTION_CHECKS = frozenset(
         "change",
         "mode",
         "path",
+        "policy",
         "pr-description",
         "pr-review",
         "repo",
@@ -73,6 +74,7 @@ _ALLOWED_INPUTS_BY_CHECK: Mapping[str, frozenset[str]] = {
     "change": frozenset({"policy", "range", "repo"}),
     "mode": frozenset({"policy", "revision", "repo"}),
     "path": frozenset({"policy", "revision", "repo"}),
+    "policy": frozenset({"policy", "repo"}),
     "pr-description": frozenset({"policy", "template", "file", "pr", "repo"}),
     "pr-review": frozenset({"policy", "file", "pr", "repo", "wait-seconds", "submit-review"}),
     "repo": frozenset(
@@ -326,6 +328,16 @@ def _build_arguments(
             f"--name={branch}",
             "--format=github",
         ]
+
+    if check == "policy":
+        command = ["policy", "check"]
+        if inputs["repo"]:
+            command.append(f"--repo={inputs['repo']}")
+        command.append("--strict")
+        command.append("--format=github")
+        if inputs["policy"]:
+            command.extend(("--", inputs["policy"]))
+        return command
 
     if check == "change":
         policy = _require_input(inputs, "policy", check=check)

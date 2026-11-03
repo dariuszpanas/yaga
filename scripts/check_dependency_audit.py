@@ -42,7 +42,17 @@ def dependency_pins(distributions: object, *, expected_yaga_version: str) -> dic
         pins[normalized_name] = normalized_version
     if pins.pop("yaga-cli", None) != str(Version(expected_yaga_version)):
         raise ValueError("installed YAGA version does not match the selected wheel")
-    if not {"pygments", "pyyaml", "rich", "typer"} <= pins.keys():
+    if (
+        not {
+            "pydantic",
+            "pydantic-versions",
+            "pygments",
+            "pyyaml",
+            "rich",
+            "typer",
+        }
+        <= pins.keys()
+    ):
         raise ValueError("installed base dependency inventory is incomplete")
     return dict(sorted(pins.items()))
 

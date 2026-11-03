@@ -10,6 +10,11 @@ from typing import Any
 
 from yaga.errors import ConfigurationError
 from yaga.files import read_file_prefix
+from yaga.policies.schemas import (
+    AGENT_REVIEW_POLICY_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 
 MAX_POLICY_BYTES = 1024 * 1024
 MAX_LENSES = 32
@@ -34,7 +39,7 @@ DEFAULT_PENDING_REACTIONS: tuple[str, ...] = ("eyes",)
 _NAME = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _PRESET = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _BOT_LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?$")
-_ROOT_KEYS = frozenset({"version", "required", "aggregation", "agents"})
+_ROOT_KEYS = frozenset({"version", "required-version", "required", "aggregation", "agents"})
 _LENS_KEYS = frozenset(
     {
         "preset",
@@ -214,12 +219,19 @@ def load_policy(path: Path) -> AgentReviewPolicy:
         root = tool["yaga"]
     if not isinstance(root, dict) or not isinstance(root.get("agent-review"), dict):
         raise ConfigurationError(f"{resolved} has no [agent-review] table")
+    check_optional_required_version(root)
     return _parse(root["agent-review"], resolved)
 
 
 def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
+    check_optional_required_version(root)
     _reject_unknown(root, _ROOT_KEYS, "agent-review", path)
     version = root.get("version")
+    if type(version) is int and version > int(AGENT_REVIEW_POLICY_FAMILY.current_version):
+        raise ConfigurationError(
+            f"agent-review.version must be integer 1 in {path} "
+            f"(found newer schema version {version}; update YAGA using its installation manager)"
+        )
     if type(version) is not int or version != 1:
         raise ConfigurationError(f"agent-review.version must be integer 1 in {path}")
     aggregation = root.get("aggregation", "all-required")
@@ -332,6 +344,12 @@ def _parse(root: dict[str, Any], path: Path) -> AgentReviewPolicy:
 
     if len(lenses) > MAX_LENSES:
         raise ConfigurationError(f"agent-review.agents exceeds {MAX_LENSES} entries in {path}")
+    validate_family_wire(
+        AGENT_REVIEW_POLICY_FAMILY,
+        root,
+        version_key="version",
+        version_error_message=f"agent-review.version must be integer 1 in {path}",
+    )
     return AgentReviewPolicy(version, required_names, aggregation, tuple(lenses))
 
 

@@ -14,10 +14,17 @@ from yaga.modes.models import (
     ModePathOverride,
     ModePolicy,
 )
+from yaga.policies.schemas import (
+    MODE_POLICY_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 
 MAX_MODE_POLICY_BYTES = 64 * 1024
 
-_POLICY_KEYS = frozenset({"mode-policy-version", "default-allowed-modes", "path-overrides"})
+_POLICY_KEYS = frozenset(
+    {"mode-policy-version", "required-version", "default-allowed-modes", "path-overrides"}
+)
 _REQUIRED_POLICY_KEYS = frozenset({"mode-policy-version", "default-allowed-modes"})
 _PATH_OVERRIDE_KEYS = frozenset({"pattern", "allowed-modes"})
 _MODE_BY_NAME = {kind.value: kind for kind in ModeKind}
@@ -29,6 +36,7 @@ def load_mode_policy(path: Path) -> LoadedModePolicy:
     document = _read_policy_document(resolved)
     display_path = safe_error_text(resolved, maximum=300)
 
+    check_optional_required_version(document)
     unknown = sorted(set(document) - _POLICY_KEYS)
     if unknown:
         raise ConfigurationError(
@@ -40,6 +48,11 @@ def load_mode_policy(path: Path) -> LoadedModePolicy:
             f"mode policy is missing required key(s) in {display_path}: {', '.join(missing)}"
         )
     version = document["mode-policy-version"]
+    if type(version) is int and version > int(MODE_POLICY_FAMILY.current_version):
+        raise ConfigurationError(
+            f"mode-policy-version must be the integer 1 in {display_path} "
+            f"(found newer schema version {version}; update YAGA using its installation manager)"
+        )
     if isinstance(version, bool) or not isinstance(version, int) or version != 1:
         raise ConfigurationError(f"mode-policy-version must be the integer 1 in {display_path}")
     default_allowed_modes = _parse_allowed_modes(
@@ -50,6 +63,12 @@ def load_mode_policy(path: Path) -> LoadedModePolicy:
     path_overrides = _parse_path_overrides(
         document.get("path-overrides", []),
         path=display_path,
+    )
+    validate_family_wire(
+        MODE_POLICY_FAMILY,
+        document,
+        version_key="mode-policy-version",
+        version_error_message=f"mode-policy-version must be the integer 1 in {display_path}",
     )
     try:
         policy = ModePolicy(

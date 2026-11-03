@@ -26,7 +26,13 @@ ROOT = Path(__file__).resolve().parents[1]
 MAX_SMOKE_OUTPUT_BYTES = 65_536
 MAX_DISTRIBUTION_METADATA_BYTES = 1024 * 1024
 SMOKE_MESSAGE = "feat(build): execute the built wheel"
-EXPECTED_REQUIRES_DIST = ["pygments<3,>=2.20.0", "pyyaml<7,>=6.0.3", "typer<1,>=0.27.2"]
+EXPECTED_REQUIRES_DIST = [
+    "pydantic-versions<2,>=1.0.4",
+    "pydantic<3,>=2.14.2",
+    "pygments<3,>=2.20.0",
+    "pyyaml<7,>=6.0.3",
+    "typer<1,>=0.27.2",
+]
 EXPECTED_OPTIONAL_REQUIRES_DIST = [
     "boto3<2,>=1.37; extra == 'quality-bedrock'",
     "certifi>=2026.10.19; extra == 'quality'",
@@ -1617,6 +1623,13 @@ def main() -> int:
                 "yaga/commit_action_cli.py",
                 "yaga/step_summary.py",
                 "yaga/commit_action_runtime.py",
+                "yaga/completion.py",
+                "yaga/policies/__init__.py",
+                "yaga/policies/audit.py",
+                "yaga/policies/init_templates.py",
+                "yaga/policies/reporting.py",
+                "yaga/policies/schemas.py",
+                "yaga/policies/selector.py",
                 "yaga/cli.py",
                 "yaga/agent_review/runtime.py",
                 "yaga/agent_review/github/runtime.py",
@@ -1631,6 +1644,7 @@ def main() -> int:
                 "yaga/commands/github.py",
                 "yaga/commands/pull_request.py",
                 "yaga/commands/mode.py",
+                "yaga/commands/policy.py",
                 "yaga/commands/repo.py",
                 "yaga/commands/path.py",
                 "yaga/commands/size.py",
