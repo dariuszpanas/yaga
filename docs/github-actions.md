@@ -11,13 +11,14 @@ an HTML-escaped report summary to `$GITHUB_STEP_SUMMARY`.
 To preserve YAGA's strict supply-chain and token boundaries while presenting one Marketplace-ready
 interface, the root Action dispatches into three isolated runtime branches:
 
-1. **`check: commit` (default, read-only stdlib fast path)**: Uses `actions/setup-python` with an
-   explicit empty `token: ""` and executes `YAGA_COMMIT_ACTION_RUNTIME=1` with `python -P -S` (no
-   site packages, no `uv` sync, and no `GITHUB_TOKEN` in the step environment).
-2. **Installed CLI checks (`pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`,
-   `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`)**: Syncs YAGA's
-   hash-locked `--no-dev` runtime closure into a temporary virtual environment outside the checkout
-   and runs `python -I -m yaga.cli_action`. Every mode rejects unused inputs and option-like values
+1. **`check: commit` (default, read-only tokenless fast path)**: Syncs YAGA's hash-locked
+   `--no-dev` runtime into a temporary virtual environment outside the checkout with tokens unset
+   and executes `YAGA_COMMIT_ACTION_RUNTIME=1` via `"$YAGA_RUNTIME_PYTHON" -I -m yaga` (isolated
+   from `PYTHONPATH`, working-tree imports, Typer/CLI command modules, and `GITHUB_TOKEN`/`GH_TOKEN`).
+2. **Installed CLI checks (`policy`, `pr-review`, `pr-description`, `repo`, `branch`, `change`,
+   `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`)**: Reuses the
+   same hash-locked `--no-dev` virtual environment outside the checkout and runs
+   `python -I -m yaga.cli_action`. Every mode rejects unused inputs and option-like values
    fail-closed with exit `2`. `github-token` is stripped before `uv sync` and passed as `GH_TOKEN`
    only when live `--pr` access is requested for `pr-review` or `pr-description`; offline checks
    reject `github-token`.
@@ -90,8 +91,8 @@ The `commit` runtime accepts no token input and has no write/API code path, and 
 Git history or installs dependencies; the reference workflow grants only `contents: read`. It
 strictly binds the event name, repository ID/name, base/head refs, and open PR payload to the
 runner context, strictly parses the PR author record used by the optional Dependabot policy, and
-caps workflow annotations at 50. Its pinned `actions/setup-python` bootstrap receives an explicit
-empty token and may obtain the declared Python 3.12 runtime before YAGA starts.
+caps workflow annotations at 50. Its pinned `uv` runtime bootstrap unsets `GITHUB_TOKEN` and
+`GH_TOKEN` and syncs only the hash-locked `--no-dev` environment outside the checkout before YAGA starts.
 
 This remains an unprivileged PR check and therefore a quality signal, not a security authority. The
 policy file comes from the PR-head worktree and can be changed by the PR; review policy changes like
@@ -143,7 +144,7 @@ normal checks. No token or API access is needed, and no keys are downloaded duri
 
 Without `trusted-config`, the existing `pull_request`/PR-head policy mode is unchanged.
 The `exit-code` output exposes 0 for success, 1 for policy findings, and 2 for invalid input.
-The `commit` runtime remains dependency-free and has no token input, write permissions, API calls,
+The `commit` runtime stays isolated from CLI/Typer modules and has no token input, write permissions, API calls,
 or review-publisher integration. Hosted synthetic positive/negative controls supplement the
 consumer's real-event qualification; they do not authorize a production cutover.
 
@@ -215,13 +216,13 @@ exit `2`.
 
 | Input | Contract |
 | --- | --- |
-| `check` | Mode selector; `commit` (default), `pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`, or `gate`. |
+| `check` | Mode selector; `commit` (default), `policy`, `pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`, or `gate`. |
 | `trusted-config` | Optional literal repository-relative commit config path for `check=commit` on `pull_request_target`. |
-| `policy` | Explicit versioned TOML policy path for `pr-review`, `pr-description`, `branch`, `change`, `mode`, `path`, `size`, or `tree`. |
+| `policy` | Explicit versioned TOML policy path for `policy`, `pr-review`, `pr-description`, `branch`, `change`, `mode`, `path`, `size`, or `tree`. |
 | `template` | Optional explicit Markdown heading template path for `check=pr-description`. |
 | `file` | Offline review snapshot JSON path for `pr-review` or Markdown body file for `pr-description`. |
 | `pr` | Canonical HTTPS PR URL or positive PR number for live `pr-review` or `pr-description` via `gh`. |
-| `repo` | `[HOST/]OWNER/REPO` for numeric `pr` in `pr-review`/`pr-description`, or repository root directory for `change`, `workflow*`, `mode`, `path`, `size`, `tree`, or `repo`. |
+| `repo` | `[HOST/]OWNER/REPO` for numeric `pr` in `pr-review`/`pr-description`, or repository root directory for `policy`, `change`, `workflow*`, `mode`, `path`, `size`, `tree`, or `repo`. |
 | `wait-seconds` | Bounded active-review poll budget (`0..600`) for live `check=pr-review`. |
 | `submit-review` | Commit-bound PR review mode (`none`, `approve`, `request-changes`, or `both`) for live `check=pr-review`. |
 | `branch` | Exact short branch name for `check=branch`. |
@@ -279,6 +280,6 @@ It exempts title and commit rules, including spelling, after normal event/head v
 
 Alongside the copy-ready templates in `examples/`, YAGA dogfoods `YAGA Checks` (`uses: ./`) across
 its own pull-request workflows: `commit-policy.yml` (`check: commit` and `pr-description`), the
-`YAGA Checks` job in `ci.yml` (`check: branch`, `change`, and `repo` with `.yaga/checks/ci.toml`), and
+`YAGA Checks` job in `ci.yml` (`check: branch`, `change`, `policy`, and `repo` with `.yaga/checks/ci.toml`), and
 `pr-review.yml` (`check: pr-review`). See [Contributing](contributing.md#pull-request-jobs-and-yaga-dogfooding)
 for how those jobs separate Action dogfooding from internal Python build and fixture jobs.

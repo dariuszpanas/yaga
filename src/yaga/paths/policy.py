@@ -15,10 +15,15 @@ from yaga.paths.models import (
     LoadedPathPolicy,
     PathPolicy,
 )
+from yaga.policies.schemas import (
+    PATH_POLICY_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 
 MAX_PATH_POLICY_BYTES = 64 * 1024
 
-_POLICY_KEYS = frozenset({"path-policy-version", "profile", "rules"})
+_POLICY_KEYS = frozenset({"path-policy-version", "required-version", "profile", "rules"})
 _SUPPORTED_PROFILES = frozenset({WINDOWS_COMPATIBLE_V1_PROFILE})
 
 
@@ -28,6 +33,7 @@ def load_path_policy(path: Path) -> LoadedPathPolicy:
     document = _read_policy_document(resolved)
     display_path = safe_error_text(resolved, maximum=300)
 
+    check_optional_required_version(document)
     unknown = sorted(set(document) - _POLICY_KEYS)
     if unknown:
         raise ConfigurationError(
@@ -38,6 +44,11 @@ def load_path_policy(path: Path) -> LoadedPathPolicy:
             f"path policy is missing required key path-policy-version in {display_path}"
         )
     version = document["path-policy-version"]
+    if type(version) is int and version > int(PATH_POLICY_FAMILY.current_version):
+        raise ConfigurationError(
+            f"path-policy-version must be the integer 1 in {display_path} "
+            f"(found newer schema version {version}; update YAGA using its installation manager)"
+        )
     if isinstance(version, bool) or not isinstance(version, int) or version != 1:
         raise ConfigurationError(f"path-policy-version must be the integer 1 in {display_path}")
 
@@ -58,6 +69,13 @@ def load_path_policy(path: Path) -> LoadedPathPolicy:
         rules = WINDOWS_COMPATIBLE_V1_RULES
     else:
         rules = _parse_rules(document["rules"], path=display_path)
+
+    validate_family_wire(
+        PATH_POLICY_FAMILY,
+        document,
+        version_key="path-policy-version",
+        version_error_message=f"path-policy-version must be the integer 1 in {display_path}",
+    )
 
     try:
         policy = PathPolicy(

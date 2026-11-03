@@ -469,16 +469,17 @@ command path through a fixed `YAGA_ACTION_RUNTIME=1` standard-library bootstrap.
 package and makes no network request for dependencies. Never accept `github-token` as argv,
 configuration, output, or logs.
 
-Default `check: commit` uses its own closed `YAGA_COMMIT_ACTION_RUNTIME=1` bootstrap and the
-public `github pull-request check` path. It accepts no token or caller-selected revisions,
-validates one bounded event against the GitHub runner repository/ref identity, requires `HEAD` to
-equal the event head, and never fetches Git history. Keep the pinned Python bootstrap token
-explicitly empty, and keep its `edited`-aware workflow separate from the authenticated `CI`
-workflow used by the Codex gate. Its PR-head configuration is contributor-controlled and is only a
-quality signal. Installed-CLI `check` modes (`pr-review`, `pr-description`, `repo`, `branch`,
-`change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, and `tree`)
-sync the hash-locked `--no-dev` runtime into a temporary virtual environment and execute through
-`cli_action.py`, passing `GH_TOKEN` only for live `pr` fetches in `pr-review` and
+Default `check: commit` uses its own closed `YAGA_COMMIT_ACTION_RUNTIME=1` entrypoint and the
+public `github pull-request check` path inside the shared hash-locked `--no-dev` `uv` virtual
+environment outside the checkout (`"$YAGA_RUNTIME_PYTHON" -I -m yaga`). It accepts no token or
+caller-selected revisions, unsets `GITHUB_TOKEN` and `GH_TOKEN` during both `uv sync` and check
+execution, validates one bounded event against the GitHub runner repository/ref identity, requires
+`HEAD` to equal the event head, and never fetches Git history. Keep its `edited`-aware workflow
+separate from the authenticated `CI` workflow used by the Codex gate. Its PR-head configuration is
+contributor-controlled and is only a quality signal. Installed-CLI `check` modes (`policy`,
+`pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`,
+`workflow-lint`, `mode`, `path`, `size`, and `tree`) reuse that hash-locked `--no-dev` runtime and
+execute through `cli_action.py`, passing `GH_TOKEN` only for live `pr` fetches in `pr-review` and
 `pr-description`.
 
 ## Action contract

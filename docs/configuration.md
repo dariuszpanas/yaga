@@ -96,7 +96,30 @@ contract. Use `yaga config show --config pyproject.toml` as an explicit version 
 those checks. Help, `--version`, and `self update` remain available to recover from a mismatch.
 
 See [installation and updates](getting-started.md#update-or-uninstall) for changing the installed
-version. Pin the installation separately when CI must always use one exact release.
+version. Pin the installation separately when CI must always use one exact release. All current explicit TOML policy schemas (except frozen `plan-version = 1`) also accept an optional `required-version` floor validated offline with the same comparator grammar.
+
+## Policy initialization and schema audits
+
+Use `yaga policy init` to scaffold starter TOML files stamped with YAGA's latest schema versions across all 11 policy families (`commit`, `repo`, `branch`, `change`, `description`, `mode`, `path`, `size`, `tree`, `agent-review`, and `test`):
+
+```bash
+# Open the interactive shell checkbox selector (Up/Down, Space, 'a' all, Enter)
+yaga policy init
+
+# Initialize specific policies or every policy non-interactively
+yaga policy init branch description repo
+yaga policy init --all --skip-existing
+```
+
+When `repo` is initialized alongside committed-tree policies (`mode`, `path`, `size`, `tree`), the generated `.yaga/checks/ci.toml` (`plan-version = 2`) automatically wires those policy paths into `checks`. Existing files are never overwritten; pass `--dry-run` to preview without writing files.
+
+Use `yaga policy check` locally or via `check: policy` in GitHub Actions to validate explicit TOML files or audit every discovered policy in `--repo` (`pyproject.toml` `[tool.yaga]`, `.yaga.toml`, and `.yaga/**/*.toml`):
+
+```bash
+yaga policy check --strict
+```
+
+`yaga policy check` validates every file through its versioned Pydantic schema family and domain loader, checks `required-version` floors, warns on deprecated schema versions (such as `plan-version = 1` when `2` is current; exiting `1` with `--strict`), and exits `2` with an upgrade hint when a policy declares a newer schema version than the installed YAGA release knows.
 
 ## Commit policy keys
 

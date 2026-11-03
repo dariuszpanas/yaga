@@ -7,6 +7,11 @@ from pathlib import Path
 
 from yaga.errors import ConfigurationError, safe_error_text
 from yaga.files import read_file_prefix
+from yaga.policies.schemas import (
+    SIZE_POLICY_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 from yaga.sizes.models import (
     MAX_SIZE_BYTES,
     MAX_SIZE_POLICY_ENTRIES,
@@ -20,6 +25,7 @@ MAX_SIZE_POLICY_BYTES = 64 * 1024
 _POLICY_KEYS = frozenset(
     {
         "size-policy-version",
+        "required-version",
         "default-max-blob-bytes",
         "max-total-blob-bytes",
         "path-limits",
@@ -35,6 +41,7 @@ def load_size_policy(path: Path) -> LoadedSizePolicy:
     document = _read_policy_document(resolved)
     display_path = safe_error_text(resolved, maximum=300)
 
+    check_optional_required_version(document)
     unknown = sorted(set(document) - _POLICY_KEYS)
     if unknown:
         raise ConfigurationError(
@@ -47,6 +54,11 @@ def load_size_policy(path: Path) -> LoadedSizePolicy:
         )
 
     version = document["size-policy-version"]
+    if type(version) is int and version > int(SIZE_POLICY_FAMILY.current_version):
+        raise ConfigurationError(
+            f"size-policy-version must be the integer 1 in {display_path} "
+            f"(found newer schema version {version}; update YAGA using its installation manager)"
+        )
     if isinstance(version, bool) or not isinstance(version, int) or version != 1:
         raise ConfigurationError(f"size-policy-version must be the integer 1 in {display_path}")
     default_limit = _parse_byte_integer(
@@ -62,6 +74,12 @@ def load_size_policy(path: Path) -> LoadedSizePolicy:
             path=display_path,
         )
     path_limits = _parse_path_limits(document.get("path-limits", []), path=display_path)
+    validate_family_wire(
+        SIZE_POLICY_FAMILY,
+        document,
+        version_key="size-policy-version",
+        version_error_message=f"size-policy-version must be the integer 1 in {display_path}",
+    )
 
     try:
         policy = SizePolicy(

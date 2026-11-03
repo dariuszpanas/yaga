@@ -8,6 +8,11 @@ from pathlib import Path
 
 from yaga.errors import ConfigurationError, safe_error_text
 from yaga.files import read_regular_file_prefix
+from yaga.policies.schemas import (
+    TEST_POLICY_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 from yaga.test_planning.limits import MAX_POLICY_BYTES
 from yaga.test_planning.models import (
     LoadedTestPolicy,
@@ -20,7 +25,13 @@ from yaga.test_planning.models import (
 )
 
 _POLICY_REQUIRED = frozenset({"test-policy-version", "suites", "profiles"})
-_POLICY_KEYS = _POLICY_REQUIRED | {"unknown-paths", "full-on", "no-impact", "rules"}
+_POLICY_KEYS = _POLICY_REQUIRED | {
+    "required-version",
+    "unknown-paths",
+    "full-on",
+    "no-impact",
+    "rules",
+}
 _SUITE_REQUIRED = frozenset({"id", "binding"})
 _SUITE_KEYS = _SUITE_REQUIRED | {"tags", "variants", "needs", "requires"}
 _PROFILE_REQUIRED = frozenset({"mode"})
@@ -71,8 +82,14 @@ def parse_test_policy(raw: bytes) -> QualificationPolicy:
 
 
 def _parse_document(document: dict[str, object]) -> QualificationPolicy:
+    check_optional_required_version(document)
     _validate_keys(document, _POLICY_KEYS, _POLICY_REQUIRED, label="policy")
     version = document["test-policy-version"]
+    if type(version) is int and version > int(TEST_POLICY_FAMILY.current_version):
+        raise ValueError(
+            "test-policy-version must be the integer 1 "
+            f"(found newer schema version {version}; update YAGA using its installation manager)"
+        )
     if type(version) is not int or version != 1:
         raise ValueError("test-policy-version must be the integer 1")
     unknown_paths = _string(document.get("unknown-paths", "full"), label="unknown-paths")
@@ -82,7 +99,7 @@ def _parse_document(document: dict[str, object]) -> QualificationPolicy:
     profiles_table = _table(document["profiles"], label="profiles")
     profiles = tuple(_parse_profile(name, value) for name, value in profiles_table.items())
     rules = tuple(_parse_rule(table) for table in _tables(document.get("rules", []), label="rules"))
-    return QualificationPolicy(
+    policy = QualificationPolicy(
         test_policy_version=version,
         suites=suites,
         profiles=profiles,
@@ -91,6 +108,13 @@ def _parse_document(document: dict[str, object]) -> QualificationPolicy:
         full_on=_strings(document.get("full-on", []), label="full-on"),
         no_impact=_strings(document.get("no-impact", []), label="no-impact"),
     )
+    validate_family_wire(
+        TEST_POLICY_FAMILY,
+        document,
+        version_key="test-policy-version",
+        version_error_message="invalid test policy: test-policy-version must be the integer 1",
+    )
+    return policy
 
 
 def _parse_suite(table: dict[str, object]) -> Suite:

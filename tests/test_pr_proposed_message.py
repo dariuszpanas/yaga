@@ -169,7 +169,7 @@ def test_installed_and_dependency_free_entrypoints(
         flags = []
         if action:
             environment["YAGA_COMMIT_ACTION_RUNTIME"] = "1"
-            flags = ["-P", "-S"]
+            flags = ["-I"]
         result = subprocess.run(
             [sys.executable, *flags, *command],
             env=environment,

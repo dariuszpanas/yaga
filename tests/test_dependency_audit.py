@@ -14,6 +14,8 @@ from yaga.git.runtime import ProcessResult
 def distributions() -> dict[str, str]:
     return {
         "yaga-cli": "0.4.1",
+        "pydantic": "2.14.2",
+        "pydantic-versions": "1.0.4",
         "Pygments": "2.20.0",
         "PyYAML": "6.0.3",
         "rich": "13.8.0",

@@ -5,9 +5,9 @@ author: Dariusz Panas
 inputs:
   check:
     description: >-
-      Check or adapter to run: commit (default), pr-review, pr-description,
-      repo, branch, change, workflow, workflow-security, workflow-lint, mode,
-      path, size, tree, or gate
+      Check or adapter to run: commit (default), policy, pr-review,
+      pr-description, repo, branch, change, workflow, workflow-security,
+      workflow-lint, mode, path, size, tree, or gate
     required: false
     default: commit
   trusted-config:
@@ -18,8 +18,8 @@ inputs:
     default: ""
   policy:
     description: >-
-      Explicit versioned TOML policy path for pr-review, pr-description,
-      branch, change, mode, path, size, or tree
+      Explicit versioned TOML policy path for policy, pr-review,
+      pr-description, branch, change, mode, path, size, or tree
     required: false
     default: ""
   template:
@@ -286,6 +286,7 @@ runs:
       id: invalid_check
       if: >-
         inputs.check != 'commit' &&
+        inputs.check != 'policy' &&
         inputs.check != 'pr-review' &&
         inputs.check != 'pr-description' &&
         inputs.check != 'repo' &&
@@ -314,12 +315,38 @@ runs:
         fi
         exit 2
 
-    - name: Set up the YAGA commit runtime
-      if: inputs.check == 'commit'
-      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+    - name: Set up pinned uv for YAGA runtime
+      if: inputs.check != 'gate'
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       with:
-        python-version: "3.12"
-        token: ""
+        enable-cache: false
+        version: "0.13.0"
+
+    - name: Prepare isolated YAGA runtime
+      id: uv_runtime
+      if: inputs.check != 'gate'
+      shell: bash
+      run: |
+        set -euo pipefail
+        unset PYTHONHOME GITHUB_TOKEN GH_TOKEN
+        YAGA_VENV="${RUNNER_TEMP}/yaga-action-venv"
+        mkdir -p "$YAGA_VENV"
+        if command -v cygpath >/dev/null 2>&1; then
+          YAGA_VENV_ENV="$(cygpath -w "$YAGA_VENV")"
+          YAGA_PROJECT_DIR="$(cygpath -w "$GITHUB_ACTION_PATH")"
+        else
+          YAGA_VENV_ENV="$YAGA_VENV"
+          YAGA_PROJECT_DIR="$GITHUB_ACTION_PATH"
+        fi
+        UV_PROJECT_ENVIRONMENT="$YAGA_VENV_ENV" \
+          uv sync --frozen --no-dev --no-editable \
+          --project "$YAGA_PROJECT_DIR" --python 3.12 --quiet
+        if [[ -x "$YAGA_VENV/bin/python" ]]; then
+          YAGA_PYTHON="$YAGA_VENV/bin/python"
+        else
+          YAGA_PYTHON="$YAGA_VENV/Scripts/python.exe"
+        fi
+        printf 'python=%s\n' "$YAGA_PYTHON" >> "$GITHUB_OUTPUT"
 
     - name: Check pull request commit policy
       id: commit
@@ -329,6 +356,7 @@ runs:
         PYTHONUTF8: "1"
         YAGA_COMMIT_ACTION_RUNTIME: "1"
         YAGA_COMMIT_TRUSTED_CONFIG: ${{ inputs.trusted-config }}
+        YAGA_RUNTIME_PYTHON: ${{ steps.uv_runtime.outputs.python }}
         YAGA_UNUSED_INPUTS: ${{ (inputs.github-token != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '' || inputs.gate != '' || inputs.operation != '' || inputs.prerequisite-workflow != '' || inputs.lifecycle-workflow != '' || inputs.owner-id != '' || inputs.approval-marker != '' || inputs.request-timeout != '' || inputs.job-timeout-minutes != '' || inputs.agent-review-policy-file != '') && '1' || '0' }}
       run: |
         # yaga-commit-action-shell
@@ -336,8 +364,6 @@ runs:
         unset PYTHONHOME GITHUB_TOKEN GH_TOKEN
         YAGA_SOURCE="$(cd -- "$GITHUB_ACTION_PATH/src" && pwd -P)"
         test -f "$YAGA_SOURCE/yaga/commit_action_cli.py"
-        export PYTHONPATH="$YAGA_SOURCE"
-        export PYTHONSAFEPATH=1
         YAGA_REPORT="$(mktemp)"
         YAGA_ERROR="$(mktemp)"
         trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
@@ -346,7 +372,7 @@ runs:
           YAGA_STATUS=2
         else
           set +e
-          python -P -S -m yaga github pull-request check \
+          "$YAGA_RUNTIME_PYTHON" -I -m yaga github pull-request check \
             --event-file "${GITHUB_EVENT_PATH:-}" \
             --repo "${GITHUB_WORKSPACE:-}" \
             --format github > "$YAGA_REPORT" 2> "$YAGA_ERROR"
@@ -357,7 +383,7 @@ runs:
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-          if command -v python >/dev/null 2>&1; then
+          if [[ -n "${YAGA_RUNTIME_PYTHON:-}" && -x "$YAGA_RUNTIME_PYTHON" ]]; then
             if command -v cygpath >/dev/null 2>&1; then
               YAGA_SUMMARY_REPORT="$(cygpath -w "$YAGA_REPORT")"
               YAGA_SUMMARY_ERROR="$(cygpath -w "$YAGA_ERROR")"
@@ -365,7 +391,7 @@ runs:
               YAGA_SUMMARY_REPORT="$YAGA_REPORT"
               YAGA_SUMMARY_ERROR="$YAGA_ERROR"
             fi
-            python -P -S -m yaga.step_summary \
+            "$YAGA_RUNTIME_PYTHON" -I -m yaga.step_summary \
               --mode commit \
               --status "$YAGA_STATUS" \
               --report "$YAGA_SUMMARY_REPORT" \
@@ -437,28 +463,10 @@ runs:
         fi
         exit "$YAGA_STATUS"
 
-    - name: Set up pinned uv for YAGA CLI check
-      if: >-
-        inputs.check == 'pr-review' ||
-        inputs.check == 'pr-description' ||
-        inputs.check == 'repo' ||
-        inputs.check == 'branch' ||
-        inputs.check == 'change' ||
-        inputs.check == 'workflow' ||
-        inputs.check == 'workflow-security' ||
-        inputs.check == 'workflow-lint' ||
-        inputs.check == 'mode' ||
-        inputs.check == 'path' ||
-        inputs.check == 'size' ||
-        inputs.check == 'tree'
-      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      with:
-        enable-cache: false
-        version: "0.13.0"
-
     - name: Run YAGA CLI check
       id: cli
       if: >-
+        inputs.check == 'policy' ||
         inputs.check == 'pr-review' ||
         inputs.check == 'pr-description' ||
         inputs.check == 'repo' ||
@@ -473,6 +481,7 @@ runs:
         inputs.check == 'tree'
       shell: bash
       env:
+        YAGA_RUNTIME_PYTHON: ${{ steps.uv_runtime.outputs.python }}
         YAGA_INPUT_CHECK: ${{ inputs.check }}
         YAGA_INPUT_POLICY: ${{ inputs.policy }}
         YAGA_INPUT_TEMPLATE: ${{ inputs.template }}
@@ -502,42 +511,19 @@ runs:
         set -euo pipefail
         YAGA_SAVED_GH_TOKEN="${YAGA_GH_TOKEN:-}"
         unset PYTHONHOME GITHUB_TOKEN GH_TOKEN YAGA_GH_TOKEN
-        YAGA_VENV="$(mktemp -d -t yaga-venv.XXXXXX)"
         YAGA_REPORT="$(mktemp)"
         YAGA_ERROR="$(mktemp)"
-        trap 'rm -rf "$YAGA_VENV" "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
-        if command -v cygpath >/dev/null 2>&1; then
-          YAGA_VENV_ENV="$(cygpath -w "$YAGA_VENV")"
-          YAGA_PROJECT_DIR="$(cygpath -w "$GITHUB_ACTION_PATH")"
-        else
-          YAGA_VENV_ENV="$YAGA_VENV"
-          YAGA_PROJECT_DIR="$GITHUB_ACTION_PATH"
-        fi
+        trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
         set +e
-        UV_PROJECT_ENVIRONMENT="$YAGA_VENV_ENV" \
-          uv sync --frozen --no-dev --no-editable \
-          --project "$YAGA_PROJECT_DIR" --python 3.12 --quiet 2> "$YAGA_ERROR"
-        YAGA_SYNC_STATUS=$?
+        YAGA_GH_TOKEN="$YAGA_SAVED_GH_TOKEN" \
+          "$YAGA_RUNTIME_PYTHON" -I -m yaga.cli_action > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+        YAGA_STATUS=$?
         set -e
-        if [[ "$YAGA_SYNC_STATUS" -ne 0 ]]; then
-          YAGA_STATUS=2
-        else
-          if [[ -x "$YAGA_VENV/bin/python" ]]; then
-            YAGA_PYTHON="$YAGA_VENV/bin/python"
-          else
-            YAGA_PYTHON="$YAGA_VENV/Scripts/python.exe"
-          fi
-          set +e
-          YAGA_GH_TOKEN="$YAGA_SAVED_GH_TOKEN" \
-            "$YAGA_PYTHON" -I -m yaga.cli_action > "$YAGA_REPORT" 2> "$YAGA_ERROR"
-          YAGA_STATUS=$?
-          set -e
-        fi
         printf 'exit-code=%s\n' "$YAGA_STATUS" >> "$GITHUB_OUTPUT"
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-          if [[ -n "${YAGA_PYTHON:-}" && -x "$YAGA_PYTHON" ]]; then
+          if [[ -n "${YAGA_RUNTIME_PYTHON:-}" && -x "$YAGA_RUNTIME_PYTHON" ]]; then
             if command -v cygpath >/dev/null 2>&1; then
               YAGA_SUMMARY_REPORT="$(cygpath -w "$YAGA_REPORT")"
               YAGA_SUMMARY_ERROR="$(cygpath -w "$YAGA_ERROR")"
@@ -545,7 +531,7 @@ runs:
               YAGA_SUMMARY_REPORT="$YAGA_REPORT"
               YAGA_SUMMARY_ERROR="$YAGA_ERROR"
             fi
-            "$YAGA_PYTHON" -I -m yaga.step_summary \
+            "$YAGA_RUNTIME_PYTHON" -I -m yaga.step_summary \
               --mode "$YAGA_INPUT_CHECK" \
               --status "$YAGA_STATUS" \
               --report "$YAGA_SUMMARY_REPORT" \

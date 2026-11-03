@@ -16,6 +16,7 @@ from yaga.commands.gate import app as gate_app
 from yaga.commands.github import app as github_app
 from yaga.commands.mode import app as mode_app
 from yaga.commands.path import app as path_app
+from yaga.commands.policy import app as policy_app
 from yaga.commands.pull_request import app as pull_request_app
 from yaga.commands.repo import app as repo_app
 from yaga.commands.self_manage import app as self_app
@@ -23,6 +24,13 @@ from yaga.commands.size import app as size_app
 from yaga.commands.test import app as test_app
 from yaga.commands.tree import app as tree_app
 from yaga.commands.workflow import app as workflow_app
+from yaga.completion import (
+    ensure_completion_registered,
+    install_completion_callback,
+    show_completion_callback,
+)
+
+ensure_completion_registered()
 
 app = typer.Typer(
     name="yaga",
@@ -32,6 +40,7 @@ app = typer.Typer(
         "https://dariuszpanas.github.io/yaga/commands.html. "
         "There is no implicit all-checks mode; run yaga <group> --help for options."
     ),
+    add_completion=False,
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
@@ -43,6 +52,7 @@ app.add_typer(gate_app, name="gate")
 app.add_typer(github_app, name="github")
 app.add_typer(mode_app, name="mode")
 app.add_typer(path_app, name="path")
+app.add_typer(policy_app, name="policy")
 app.add_typer(pull_request_app, name="pull-request")
 app.add_typer(repo_app, name="repo")
 app.add_typer(self_app, name="self")
@@ -85,6 +95,26 @@ def root(
             callback=_version_callback,
             is_eager=True,
             help="Show the installed YAGA version and exit.",
+        ),
+    ] = False,
+    install_completion_requested: Annotated[
+        bool,
+        typer.Option(
+            "--install-completion",
+            callback=install_completion_callback,
+            expose_value=False,
+            is_eager=True,
+            help="Install completion for the current shell.",
+        ),
+    ] = False,
+    show_completion_requested: Annotated[
+        bool,
+        typer.Option(
+            "--show-completion",
+            callback=show_completion_callback,
+            expose_value=False,
+            is_eager=True,
+            help="Show completion for the current shell, to copy it or customize the installation.",
         ),
     ] = False,
 ) -> None:

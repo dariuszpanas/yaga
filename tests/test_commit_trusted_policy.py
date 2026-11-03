@@ -132,8 +132,7 @@ def test_trusted_action_boundaries(tmp_path: Path, scenario: str, code: int) -> 
     result = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",

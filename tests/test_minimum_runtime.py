@@ -44,7 +44,13 @@ def inventory(environment: Path) -> dict[str, object]:
             name: str(environment / "site-packages" / name / "__init__.py")
             for name in check_minimum_runtime.IMPORTED_MODULES
         },
-        "distributions": {"yaga-cli": "0.0.0", "typer": "0.27.2", "rich": "13.8.0"},
+        "distributions": {
+            "yaga-cli": "0.0.0",
+            "pydantic": "2.14.2",
+            "pydantic-versions": "1.0.4",
+            "typer": "0.27.2",
+            "rich": "13.8.0",
+        },
     }
 
 
@@ -126,6 +132,8 @@ def test_retained_wheel_is_not_rebuilt_and_requires_every_qualification(
         document = inventory(output / "runtime")
         document["distributions"] = {
             "yaga-cli": "0.4.0" if failure == "wrong-version" else "0.4.1",
+            "pydantic": "2.14.2",
+            "pydantic-versions": "1.0.4",
             "typer": "0.27.2",
             "rich": "13.8.0",
             "Pygments": "2.20.0",

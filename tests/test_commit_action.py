@@ -182,8 +182,7 @@ def test_commit_action_runs_without_site_packages_or_installed_cli(
     completed = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",
@@ -252,8 +251,7 @@ def test_isolated_commit_action_requires_signature_unless_explicitly_disabled(
     completed = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",
@@ -310,8 +308,7 @@ def test_isolated_commit_action_verifies_real_github_signature(
     completed = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",
@@ -354,8 +351,7 @@ def test_isolated_commit_action_reports_body_word_policy(tmp_path: Path) -> None
     completed = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",
@@ -406,8 +402,7 @@ def test_isolated_commit_action_enforces_paired_breaking_markers_only_for_commit
     completed = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",
@@ -478,8 +473,7 @@ def test_isolated_commit_action_enforces_footer_policy_only_for_commits(
     completed = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",
@@ -530,8 +524,7 @@ def test_isolated_commit_action_applies_per_type_scope_policy_to_pr_title(
     completed = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",

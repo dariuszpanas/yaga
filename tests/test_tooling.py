@@ -156,6 +156,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert project["project"]["name"] == "yaga-cli"
     assert project["project"]["scripts"] == {"yaga": "yaga.cli:main"}
     assert project["project"]["dependencies"] == [
+        "pydantic>=2.14.2,<3",
+        "pydantic-versions>=1.0.4,<2",
         "pygments>=2.20.0,<3",
         "pyyaml>=6.0.3,<7",
         "typer>=0.27.2,<1",
@@ -396,6 +398,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         assert f'"{locked_argument}"' in build_gate
     assert '"--no-hashes"' not in build_gate
     assert check_build.EXPECTED_REQUIRES_DIST == [
+        "pydantic-versions<2,>=1.0.4",
+        "pydantic<3,>=2.14.2",
         "pygments<3,>=2.20.0",
         "pyyaml<7,>=6.0.3",
         "typer<1,>=0.27.2",
@@ -421,6 +425,12 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert '"size",\n            "check"' in build_gate
     assert '"path",\n            "check"' in build_gate
     assert '"yaga/cli_action.py"' in build_gate
+    assert '"yaga/completion.py"' in build_gate
+    assert '"yaga/commands/policy.py"' in build_gate
+    assert '"yaga/policies/schemas.py"' in build_gate
+    assert '"yaga/policies/audit.py"' in build_gate
+    assert '"yaga/policies/init_templates.py"' in build_gate
+    assert '"yaga/policies/selector.py"' in build_gate
     assert '"yaga/commands/repo.py"' in build_gate
     assert '"yaga/commands/change.py"' in build_gate
     assert '"yaga/commands/branch.py"' in build_gate
@@ -527,6 +537,8 @@ def runtime_metadata() -> bytes:
         b"Metadata-Version: 2.4\n"
         b"Requires-Python: >=3.12\n"
         b"Description-Content-Type: text/markdown\n"
+        b"Requires-Dist: pydantic-versions<2,>=1.0.4\n"
+        b"Requires-Dist: pydantic<3,>=2.14.2\n"
         b"Requires-Dist: pygments<3,>=2.20.0\n"
         b"Requires-Dist: pyyaml<7,>=6.0.3\n"
         b"Requires-Dist: typer<1,>=0.27.2\n"
@@ -545,6 +557,10 @@ def test_wheel_metadata_must_advertise_the_locked_runtime(runtime_metadata: byte
     check_build.validate_wheel_metadata(valid)
 
     for malformed in (
+        valid.replace(b"Requires-Dist: pydantic<3,>=2.14.2\n", b""),
+        valid.replace(b"Requires-Dist: pydantic-versions<2,>=1.0.4\n", b""),
+        valid.replace(b"pydantic<3,>=2.14.2", b"pydantic>=2.14.2"),
+        valid.replace(b"pydantic-versions<2,>=1.0.4", b"pydantic-versions>=1.0.4"),
         valid.replace(b"Requires-Dist: pygments<3,>=2.20.0\n", b""),
         valid.replace(b"pygments<3,>=2.20.0", b"pygments<3,>=2.13.0"),
         valid.replace(b"pygments<3,>=2.20.0", b"pygments>=2.20.0"),
@@ -676,7 +692,7 @@ def test_root_action_publishes_bounded_sanitized_step_summaries_in_every_mode() 
     parsed = yaml.safe_load((ROOT / "action.yml").read_text(encoding="utf-8"))
     run_steps = {step["id"]: step["run"] for step in parsed["runs"]["steps"] if "run" in step}
 
-    assert set(run_steps) == {"banner", "invalid_check", "commit", "gate", "cli"}
+    assert set(run_steps) == {"banner", "invalid_check", "uv_runtime", "commit", "gate", "cli"}
     assert f"version:  {VERSION}" in run_steps["banner"]
     assert f"`{VERSION}`" in run_steps["invalid_check"]
     assert "GITHUB_STEP_SUMMARY" in run_steps["invalid_check"]
@@ -776,6 +792,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
         ROOT / "src" / "yaga" / "commit_action_runtime.py",
         ROOT / "src" / "yaga" / "step_summary.py",
         ROOT / "src" / "yaga" / "files.py",
+        ROOT / "src" / "yaga" / "policies" / "schemas.py",
         *(ROOT / "src" / "yaga" / "git").glob("*.py"),
         *(ROOT / "src" / "yaga" / "commits").glob("*.py"),
     ]

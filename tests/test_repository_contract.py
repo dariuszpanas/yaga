@@ -139,15 +139,13 @@ def test_commit_action_is_an_isolated_read_only_branch_in_root_action() -> None:
     workflow = read(".github/workflows/commit-policy.yml")
 
     assert parsed["inputs"]["check"]["default"] == "commit"
-    setup_python = next(
-        step
-        for step in parsed["runs"]["steps"]
-        if step.get("uses", "").startswith("actions/setup-python@")
+    assert not any(
+        entry.get("uses", "").startswith("actions/setup-python@")
+        for entry in parsed["runs"]["steps"]
     )
-    assert setup_python["if"] == "inputs.check == 'commit'"
-    assert re.fullmatch(r"actions/setup-python@[0-9a-f]{40}", setup_python["uses"])
-    assert setup_python["with"]["token"] == ""
-
+    uv_runtime = next(step for step in parsed["runs"]["steps"] if step.get("id") == "uv_runtime")
+    assert uv_runtime["if"] == "inputs.check != 'gate'"
+    assert "unset PYTHONHOME GITHUB_TOKEN GH_TOKEN" in uv_runtime["run"]
     commit_step = next(step for step in parsed["runs"]["steps"] if step.get("id") == "commit")
     assert commit_step["if"] == "inputs.check == 'commit'"
     assert commit_step["env"]["YAGA_COMMIT_ACTION_RUNTIME"] == "1"
@@ -156,7 +154,8 @@ def test_commit_action_is_an_isolated_read_only_branch_in_root_action() -> None:
     assert "GH_TOKEN" not in commit_step["env"]
     assert "unset PYTHONHOME GITHUB_TOKEN GH_TOKEN" in commit_step["run"]
     assert "uv " not in commit_step["run"]
-    assert "python -P -S -m yaga github pull-request check" in commit_step["run"]
+    assert commit_step["env"]["YAGA_RUNTIME_PYTHON"] == "${{ steps.uv_runtime.outputs.python }}"
+    assert '"$YAGA_RUNTIME_PYTHON" -I -m yaga github pull-request check' in commit_step["run"]
 
     assert "types: [opened, synchronize, reopened, edited, ready_for_review]" in workflow
     assert "permissions:\n  contents: read" in workflow
@@ -248,6 +247,8 @@ def test_ci_branch_and_description_policies_dogfood_root_action() -> None:
     assert yaga_checks.count("policy: .yaga/branch-policy.toml") == 2
     assert "branch: ${{ github.head_ref }}" in yaga_checks
     assert "branch: ${{ github.ref_name }}" in yaga_checks
+    assert "name: Audit YAGA policy schemas" in yaga_checks
+    assert "check: policy" in yaga_checks
     assert "types: [opened, synchronize, reopened, edited, ready_for_review]" in commit_policy
     assert "name: Check pull-request description" in commit_policy
     assert "check: pr-description" in commit_policy

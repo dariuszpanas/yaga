@@ -7,6 +7,11 @@ from pathlib import Path
 
 from yaga.errors import ConfigurationError, safe_error_text
 from yaga.files import read_file_prefix
+from yaga.policies.schemas import (
+    TREE_POLICY_FAMILY,
+    check_optional_required_version,
+    validate_family_wire,
+)
 from yaga.trees.models import (
     MAX_TREE_POLICY_ENTRIES,
     LoadedTreePolicy,
@@ -15,7 +20,8 @@ from yaga.trees.models import (
 
 MAX_TREE_POLICY_BYTES = 64 * 1024
 
-_POLICY_KEYS = frozenset({"tree-policy-version", "required-paths", "forbidden-patterns"})
+_REQUIRED_KEYS = frozenset({"tree-policy-version", "required-paths", "forbidden-patterns"})
+_POLICY_KEYS = _REQUIRED_KEYS | frozenset({"required-version"})
 
 
 def load_tree_policy(path: Path) -> LoadedTreePolicy:
@@ -24,18 +30,31 @@ def load_tree_policy(path: Path) -> LoadedTreePolicy:
     document = _read_policy_document(resolved)
     display_path = safe_error_text(resolved, maximum=300)
 
+    check_optional_required_version(document)
+    raw_version = document.get("tree-policy-version")
+    if type(raw_version) is int and raw_version > int(TREE_POLICY_FAMILY.current_version):
+        raise ConfigurationError(
+            f"tree-policy-version must be the integer 1 in {display_path} "
+            f"(found newer schema version {raw_version}; "
+            "update YAGA using its installation manager)"
+        )
     unknown = sorted(set(document) - _POLICY_KEYS)
     if unknown:
         raise ConfigurationError(
             f"unknown tree policy key(s) in {display_path}: {', '.join(unknown)}"
         )
-    missing = sorted(_POLICY_KEYS - set(document))
+    missing = sorted(_REQUIRED_KEYS - set(document))
     if missing:
         raise ConfigurationError(
             f"tree policy is missing required key(s) in {display_path}: {', '.join(missing)}"
         )
 
     version = document["tree-policy-version"]
+    if type(version) is int and version > int(TREE_POLICY_FAMILY.current_version):
+        raise ConfigurationError(
+            f"tree-policy-version must be the integer 1 in {display_path} "
+            f"(found newer schema version {version}; update YAGA using its installation manager)"
+        )
     if isinstance(version, bool) or not isinstance(version, int) or version != 1:
         raise ConfigurationError(f"tree-policy-version must be the integer 1 in {display_path}")
     required_paths = _parse_string_array(
@@ -47,6 +66,12 @@ def load_tree_policy(path: Path) -> LoadedTreePolicy:
         document["forbidden-patterns"],
         key="forbidden-patterns",
         path=display_path,
+    )
+    validate_family_wire(
+        TREE_POLICY_FAMILY,
+        document,
+        version_key="tree-policy-version",
+        version_error_message=f"tree-policy-version must be the integer 1 in {display_path}",
     )
     total = len(required_paths) + len(forbidden_patterns)
     if not 1 <= total <= MAX_TREE_POLICY_ENTRIES:

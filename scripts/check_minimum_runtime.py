@@ -28,7 +28,16 @@ else:
     from check_dependency_audit import DependencyAuditError, audit_dependencies, dependency_pins
 
 ROOT = Path(__file__).resolve().parents[1]
-IMPORTED_MODULES = ("yaga", "yaga.cli", "yaml", "typer", "rich", "pygments")
+IMPORTED_MODULES = (
+    "yaga",
+    "yaga.cli",
+    "pydantic",
+    "pydantic_versions",
+    "yaml",
+    "typer",
+    "rich",
+    "pygments",
+)
 MAX_WHEEL_BYTES = 16 * 1024 * 1024
 MAX_METADATA_BYTES = 1024 * 1024
 INVENTORY_SCRIPT = """\
@@ -39,7 +48,16 @@ import platform
 import sys
 from pathlib import Path
 
-modules = ("yaga", "yaga.cli", "yaml", "typer", "rich", "pygments")
+modules = (
+    "yaga",
+    "yaga.cli",
+    "pydantic",
+    "pydantic_versions",
+    "yaml",
+    "typer",
+    "rich",
+    "pygments",
+)
 distributions = {}
 for dist in importlib.metadata.distributions():
     name = dist.metadata["Name"]
@@ -97,9 +115,13 @@ def validate_inventory(inventory: dict[str, object], environment: Path) -> None:
                 "minimum runtime smoke imported from outside its installed environment"
             )
     distributions = inventory.get("distributions")
-    if not isinstance(distributions, dict) or not {"yaga-cli", "typer", "rich"} <= set(
-        distributions
-    ):
+    if not isinstance(distributions, dict) or not {
+        "yaga-cli",
+        "pydantic",
+        "pydantic-versions",
+        "typer",
+        "rich",
+    } <= set(distributions):
         raise SystemExit("minimum runtime inventory is missing installed distributions")
 
 

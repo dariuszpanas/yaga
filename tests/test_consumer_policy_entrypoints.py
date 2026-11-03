@@ -77,8 +77,7 @@ def _assert_entrypoint_agreement(
     action = subprocess.run(
         [
             sys.executable,
-            "-P",
-            "-S",
+            "-I",
             "-m",
             "yaga",
             "github",

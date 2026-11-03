@@ -72,6 +72,7 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
         GITHUB_ACTION_PATH=workspace.as_posix(),
         YAGA_COMMIT_TRUSTED_CONFIG=".yaga.toml",
         YAGA_COMMIT_ACTION_RUNTIME="1",
+        YAGA_RUNTIME_PYTHON=Path(sys.executable).as_posix(),
         YAGA_UNUSED_INPUTS="0",
         PYTHONUTF8="1",
     )

@@ -34,6 +34,8 @@ classifiers = [
 ]
 # Keep the transitive renderer dependency above the known lexer advisory floors.
 dependencies = [
+    "pydantic>=2.14.2,<3",
+    "pydantic-versions>=1.0.4,<2",
     "pygments>=2.20.0,<3",
     "pyyaml>=6.0.3,<7",
     "typer>=0.27.2,<1",

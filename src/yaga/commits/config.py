@@ -37,6 +37,7 @@ from yaga.commits.severity import WARNING_RULES
 from yaga.config_scope import global_config_path
 from yaga.errors import ConfigurationError
 from yaga.files import read_file_prefix
+from yaga.policies.schemas import COMMIT_CONFIG_FAMILY, validate_family_wire
 from yaga.version_requirement import check_requirement
 
 MAX_CONFIG_BYTES = 1024 * 1024
@@ -48,7 +49,7 @@ _TYPE_TOKEN = re.compile(r"^[^\s()!:]+$")
 _SCOPE_TOKEN = re.compile(r"^[^\s()]+$")
 _FOOTER_TOKEN = re.compile(r"^[A-Za-z0-9-]+$")
 _RESERVED_FOOTER_TOKENS = frozenset({"breaking change", "breaking-change"})
-_ROOT_KEYS = frozenset({"config-version", "required-version", "commit"})
+_ROOT_KEYS = frozenset({"config-version", "required-version", "commit", "agent-review"})
 _COMMIT_KEYS = frozenset(
     {
         "allowed-types",
@@ -198,11 +199,19 @@ def _configuration_root(
 
 
 def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
-    _reject_unknown(root, _ROOT_KEYS, label="YAGA", path=path)
-    config_version = _integer(root.get("config-version", 1), "config-version", 1, 1, path)
     required_version = (
         check_requirement(root["required-version"]) if "required-version" in root else None
     )
+    _reject_unknown(root, _ROOT_KEYS, label="YAGA", path=path)
+    if "agent-review" in root and not isinstance(root["agent-review"], dict):
+        raise ConfigurationError(f"agent-review must be a table in {path}")
+    raw_version = root.get("config-version", 1)
+    if type(raw_version) is int and raw_version > int(COMMIT_CONFIG_FAMILY.current_version):
+        raise ConfigurationError(
+            f"config-version must be an integer from 1 through 1 in {path} "
+            f"(found newer schema version {raw_version}; update YAGA using its installation manager)"
+        )
+    config_version = _integer(raw_version, "config-version", 1, 1, path)
     raw_commit = root.get("commit", {})
     if not isinstance(raw_commit, dict):
         raise ConfigurationError(f"commit must be a table in {path}")
@@ -397,7 +406,7 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
         raise ConfigurationError(
             f"plain message-format cannot warn on conventional-only rules in {path}"
         )
-    return CommitPolicy(
+    policy = CommitPolicy(
         message_format=message_format,
         warning_rules=warning_rules,
         required_issue_prefixes=issue_prefixes,
@@ -529,6 +538,13 @@ def _parse_policy(root: Mapping[str, Any], path: Path) -> CommitPolicy:
             path,
         ),
     )
+    validate_family_wire(
+        COMMIT_CONFIG_FAMILY,
+        root,
+        version_key="config-version",
+        version_error_message=f"config-version must be an integer from 1 through 1 in {path}",
+    )
+    return policy
 
 
 def _quality_policy(value: object, path: Path) -> QualityPolicy:
