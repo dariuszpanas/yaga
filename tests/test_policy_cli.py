@@ -448,3 +448,80 @@ def test_policy_check_reports_malformed_pyproject_instead_of_skipping_it(
     solo_res = runner.invoke(app, ["policy", "check", "--repo", str(solo_repo)])
     assert solo_res.exit_code == 2
     assert "invalid UTF-8 TOML" in solo_res.stderr
+
+
+def test_policy_init_preserves_pyproject_when_commit_policy_fails_validation(
+    tmp_path: Path,
+) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[tool.yaga]\nrequired-version = ">=99.0.0"\n\n[tool.yaga.commit]\nbody-policy = "required"\n',
+        encoding="utf-8",
+    )
+
+    existing = existing_policy_status(tmp_path)
+    assert existing[PolicyKind.COMMIT] == pyproject
+
+    buffer = io.StringIO()
+    chosen = select_policies_interactively(existing, read_key=lambda: KEY_CANCEL, output=buffer)
+    assert chosen is None
+    assert "already exists: pyproject.toml" in buffer.getvalue()
+
+    conflict = runner.invoke(
+        app,
+        ["policy", "init", "commit", "--repo", str(tmp_path), "--format", "json"],
+    )
+    assert conflict.exit_code == 2
+    err_doc = json.loads(conflict.stderr)
+    assert err_doc["kind"] == "policy_init"
+    assert "commit configuration already applies" in err_doc["error"]["message"]
+    assert not (tmp_path / ".yaga.toml").exists()
+
+    skipped = runner.invoke(
+        app,
+        [
+            "policy",
+            "init",
+            "commit",
+            "branch",
+            "--skip-existing",
+            "--repo",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert skipped.exit_code == 0, skipped.output
+    skipped_doc = json.loads(skipped.stdout)
+    assert skipped_doc["skipped"] == 1
+    assert skipped_doc["created"] == 1
+    assert not (tmp_path / ".yaga.toml").exists()
+    assert (tmp_path / ".yaga/branch-policy.toml").is_file()
+
+    # Subsequent policy check still sees the original pyproject.toml failure unshadowed.
+    audit_res = runner.invoke(app, ["policy", "check", "--repo", str(tmp_path)])
+    assert audit_res.exit_code == 2
+    assert "does not satisfy required-version" in audit_res.stderr
+
+
+def test_policy_init_fails_closed_on_malformed_pyproject_when_initializing_commit(
+    tmp_path: Path,
+) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text("[tool.yaga\nconfig-version = 1\n", encoding="utf-8")
+
+    # Initializing a non-commit policy does not touch or shadow pyproject.toml.
+    branch_ok = runner.invoke(app, ["policy", "init", "branch", "--repo", str(tmp_path)])
+    assert branch_ok.exit_code == 0, branch_ok.output
+    assert (tmp_path / ".yaga/branch-policy.toml").is_file()
+    assert not (tmp_path / ".yaga.toml").exists()
+
+    # Initializing commit (even with --skip-existing) fails closed instead of shadowing pyproject.toml.
+    for extra_flags in ([], ["--skip-existing"]):
+        commit_res = runner.invoke(
+            app,
+            ["policy", "init", "commit", *extra_flags, "--repo", str(tmp_path)],
+        )
+        assert commit_res.exit_code == 2
+        assert "invalid TOML" in commit_res.stderr
+        assert not (tmp_path / ".yaga.toml").exists()

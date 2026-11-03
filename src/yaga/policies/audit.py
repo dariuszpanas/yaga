@@ -296,7 +296,7 @@ def _classify_document(path: Path, document: Mapping[str, Any]) -> tuple[PolicyK
         tool = document.get("tool")
         yaga_table = tool.get("yaga") if isinstance(tool, dict) else None
         if isinstance(yaga_table, dict) and "agent-review" in yaga_table:
-            if any(k in yaga_table for k in ("config-version", "commit", "required-version")):
+            if any(k not in {"agent-review", "required-version"} for k in yaga_table):
                 return (PolicyKind.COMMIT, PolicyKind.AGENT_REVIEW)
             return (PolicyKind.AGENT_REVIEW,)
         return (PolicyKind.COMMIT,)
@@ -470,6 +470,8 @@ def _should_audit_pyproject(pyproject: Path, *, repository: Path) -> bool:
     except (UnicodeDecodeError, tomllib.TOMLDecodeError, RecursionError):
         return True
     tool = doc.get("tool")
+    if tool is not None and not isinstance(tool, dict):
+        return True
     return isinstance(tool, dict) and "yaga" in tool
 
 

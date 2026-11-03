@@ -145,10 +145,13 @@ def render_policy_error(
     """Render an operational error in the selected format."""
     message = safe_error_text(error, maximum=500)
     if output_format in (PolicyOutputFormat.JSON, PolicyInitOutputFormat.JSON):
+        report_kind = (
+            "policy_init" if isinstance(output_format, PolicyInitOutputFormat) else "policy_check"
+        )
         return json.dumps(
             {
                 "schema_version": 1,
-                "kind": "policy_check",
+                "kind": report_kind,
                 "status": "error",
                 "valid": False,
                 "error": {

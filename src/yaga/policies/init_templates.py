@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import Sequence
+import tomllib
+from collections.abc import Collection, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
 from yaga.agent_review.policy import load_policy as load_agent_review_policy
 from yaga.branches.policy import load_branch_policy
 from yaga.changes.policy import load_change_policy
-from yaga.commits.config import load_config
+from yaga.commits.config import MAX_CONFIG_BYTES, load_config
 from yaga.descriptions.policy import load_description_policy
 from yaga.errors import ConfigurationError, InputError, safe_error_text
+from yaga.files import read_file_prefix
 from yaga.modes.policy import load_mode_policy
 from yaga.paths.policy import load_path_policy
 from yaga.policies.schemas import POLICY_SPECS, PolicyKind
@@ -49,26 +52,85 @@ class PolicyInitReport:
     items: tuple[InitializedPolicyItem, ...]
 
 
-def existing_policy_status(repository: Path) -> dict[PolicyKind, Path | None]:
+def existing_policy_status(
+    repository: Path,
+    *,
+    kinds: Collection[PolicyKind] | None = None,
+) -> dict[PolicyKind, Path | None]:
     """Inspect which policy targets already exist in repository without mutating state."""
     resolved_repo = _resolve_repository_directory(repository)
+    target_kinds = tuple(POLICY_SPECS.keys()) if kinds is None else tuple(kinds)
     result: dict[PolicyKind, Path | None] = {}
-    for kind, spec in POLICY_SPECS.items():
+    for kind in target_kinds:
+        spec = POLICY_SPECS[kind]
         if kind is PolicyKind.COMMIT:
-            try:
-                loaded = load_config(start=resolved_repo, use_global=False)
-                if loaded.path is not None and _is_within(loaded.path.resolve(), resolved_repo):
-                    result[kind] = loaded.path
-                    continue
-            except ConfigurationError:
-                pass
+            result[kind] = _existing_commit_policy_path(resolved_repo)
+            continue
         target = resolved_repo / spec.default_relpath
-        try:
-            exists = target.exists() or target.is_symlink()
-        except OSError:
-            exists = False
-        result[kind] = target if exists else None
+        result[kind] = target if _target_exists(target) else None
     return result
+
+
+def _existing_commit_policy_path(resolved_repo: Path) -> Path | None:
+    dot_yaga = resolved_repo / POLICY_SPECS[PolicyKind.COMMIT].default_relpath
+    if _target_exists(dot_yaga):
+        return dot_yaga
+
+    pyproject = resolved_repo / "pyproject.toml"
+    if not _target_exists(pyproject):
+        return None
+
+    display_pyproject = safe_error_text(pyproject, maximum=300)
+    try:
+        resolved_pyproject = pyproject.resolve()
+    except (OSError, RuntimeError, ValueError) as error:
+        raise ConfigurationError(f"cannot resolve configuration {display_pyproject}") from error
+    if not _is_within(resolved_pyproject, resolved_repo):
+        raise ConfigurationError(
+            f"configuration escapes repository {safe_error_text(resolved_repo, maximum=300)}: "
+            f"{display_pyproject}"
+        )
+    if not resolved_pyproject.is_file():
+        raise ConfigurationError(f"cannot read configuration {display_pyproject}")
+
+    try:
+        raw = read_file_prefix(resolved_pyproject, maximum=MAX_CONFIG_BYTES)
+    except OSError as error:
+        raise ConfigurationError(
+            f"cannot read configuration {display_pyproject}: {safe_error_text(error, maximum=300)}"
+        ) from error
+    if len(raw) > MAX_CONFIG_BYTES:
+        raise ConfigurationError(
+            f"configuration exceeds {MAX_CONFIG_BYTES} bytes: {display_pyproject}"
+        )
+    try:
+        document = tomllib.loads(raw.decode("utf-8-sig"))
+    except UnicodeDecodeError as error:
+        raise ConfigurationError(
+            f"configuration is not valid UTF-8: {display_pyproject}"
+        ) from error
+    except (tomllib.TOMLDecodeError, RecursionError) as error:
+        raise ConfigurationError(
+            f"invalid TOML in {display_pyproject}: {safe_error_text(error, maximum=300)}"
+        ) from error
+
+    tool = document.get("tool")
+    if tool is None:
+        return None
+    if not isinstance(tool, dict):
+        raise ConfigurationError(f"[tool] must be a table in {display_pyproject}")
+    if "yaga" in tool:
+        return pyproject
+    return None
+
+
+def _target_exists(path: Path) -> bool:
+    try:
+        return path.is_symlink() or path.exists()
+    except OSError as error:
+        raise ConfigurationError(
+            f"cannot inspect policy target {safe_error_text(path, maximum=300)}"
+        ) from error
 
 
 def render_starter_toml(
@@ -274,7 +336,10 @@ def initialize_policies(
         seen.append(kind)
 
     resolved_repo = _resolve_repository_directory(repository)
-    existing = existing_policy_status(resolved_repo)
+    kinds_to_inspect = frozenset(seen) | (
+        frozenset(_COMMITTED_TREE_POLICIES) if PolicyKind.REPO in seen else frozenset()
+    )
+    existing = existing_policy_status(resolved_repo, kinds=kinds_to_inspect)
 
     to_create: list[PolicyKind] = []
     items_by_kind: dict[PolicyKind, InitializedPolicyItem] = {}
@@ -301,46 +366,63 @@ def initialize_policies(
     active_tree_policies = frozenset(
         tree_kind
         for tree_kind in _COMMITTED_TREE_POLICIES
-        if tree_kind in to_create or existing[tree_kind] is not None
+        if tree_kind in to_create or existing.get(tree_kind) is not None
     )
 
     staged: list[tuple[PolicyKind, Path, Path, int]] = []
-    try:
-        for kind in to_create:
-            spec = POLICY_SPECS[kind]
-            target = _safe_repo_target(
-                resolved_repo, spec.default_relpath, create_parents=not dry_run
-            )
-            rendered = render_starter_toml(kind, active_tree_policies=active_tree_policies)
-            content_bytes = rendered.encode("utf-8")
-            staging_dir = target.parent if target.parent.is_dir() else resolved_repo
-            temporary = _write_temp_file(
-                staging_dir, prefix=f".{target.name}.", content=content_bytes
-            )
-            staged.append((kind, temporary, target, spec.current_version_int))
-            _validate_generated_policy(kind, temporary, repository=resolved_repo)
+    published: list[Path] = []
+    with ExitStack() as stack:
+        dry_run_dir = (
+            Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="yaga-policy-init-")))
+            if dry_run
+            else None
+        )
+        try:
+            for kind in to_create:
+                spec = POLICY_SPECS[kind]
+                target = _safe_repo_target(
+                    resolved_repo, spec.default_relpath, create_parents=not dry_run
+                )
+                rendered = render_starter_toml(kind, active_tree_policies=active_tree_policies)
+                content_bytes = rendered.encode("utf-8")
+                staging_dir = (
+                    dry_run_dir
+                    if dry_run_dir is not None
+                    else (target.parent if target.parent.is_dir() else resolved_repo)
+                )
+                temporary = _write_temp_file(
+                    staging_dir, prefix=f".{target.name}.", content=content_bytes
+                )
+                staged.append((kind, temporary, target, spec.current_version_int))
+                _validate_generated_policy(kind, temporary, repository=resolved_repo)
 
-        if dry_run:
-            for kind, _temporary, target, schema_version in staged:
-                items_by_kind[kind] = InitializedPolicyItem(
-                    kind=kind,
-                    path=target,
-                    schema_version=schema_version,
-                    status="dry-run",
-                )
-        else:
-            for kind, temporary, target, schema_version in staged:
-                _publish_without_replacement(temporary, target)
-                _validate_generated_policy(kind, target, repository=resolved_repo)
-                items_by_kind[kind] = InitializedPolicyItem(
-                    kind=kind,
-                    path=target,
-                    schema_version=schema_version,
-                    status="created",
-                )
-    finally:
-        for _kind, temporary, _target, _ver in staged:
-            _remove_temp_file(temporary)
+            if dry_run:
+                for kind, _temporary, target, schema_version in staged:
+                    items_by_kind[kind] = InitializedPolicyItem(
+                        kind=kind,
+                        path=target,
+                        schema_version=schema_version,
+                        status="dry-run",
+                    )
+            else:
+                try:
+                    for kind, temporary, target, schema_version in staged:
+                        _publish_without_replacement(temporary, target)
+                        published.append(target)
+                        _validate_generated_policy(kind, target, repository=resolved_repo)
+                        items_by_kind[kind] = InitializedPolicyItem(
+                            kind=kind,
+                            path=target,
+                            schema_version=schema_version,
+                            status="created",
+                        )
+                except BaseException:
+                    for created_path in published:
+                        _remove_temp_file(created_path)
+                    raise
+        finally:
+            for _kind, temporary, _target, _ver in staged:
+                _remove_temp_file(temporary)
 
     ordered_items = tuple(items_by_kind[kind] for kind in seen)
     return PolicyInitReport(repository=resolved_repo, dry_run=dry_run, items=ordered_items)

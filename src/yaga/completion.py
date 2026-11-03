@@ -307,9 +307,11 @@ def _upsert_marked_block(
     default_bom: bytes,
 ) -> None:
     display_path = safe_error_text(path, maximum=300)
+    if path.is_symlink() and not path.exists():
+        raise InputError(f"shell profile path is a broken symlink: {display_path}")
     if path.exists():
-        if path.is_dir():
-            raise InputError(f"shell profile path is a directory: {display_path}")
+        if not path.is_file():
+            raise InputError(f"shell profile path is not a regular file: {display_path}")
         try:
             raw = read_file_prefix(path, maximum=MAX_PROFILE_BYTES)
         except OSError as error:
