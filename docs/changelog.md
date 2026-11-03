@@ -8,8 +8,10 @@
   pull requests (`--pr`, or a positive number with `--repo`) fetched through the installed
   authenticated `gh` CLI, including bounded active-review polling (`wait-seconds` /
   `--wait-seconds` `0..600`) and opt-in commit-bound PR review submission (`--submit-review
-  none|approve|request-changes|both`). Reports support text, schema-v1 JSON, and GitHub annotations
-  with exit codes `0`, `1`, and `2`.
+  none|approve|request-changes|both`, skipping draft pull requests). Reports support text,
+  schema-v1 JSON, and GitHub annotations (including a `::notice` summary when a review is
+  submitted) with exit codes `0`, `1`, and `2`, and YAGA now dogfoods automated verdict
+  publication via trusted default-branch `pr-review.yml` / `pr-review-wake.yml` workflows.
 - Add built-in `codex`, `copilot`, and `claude` bot presets plus custom bot identity, reaction,
   head-commit `check-runs`, `delay-seconds` (`0..300`), and `wait-seconds` (`0..600`) settings to
   `[agent-review]`. Allow omitting `[agent-review.agents]` when `required` only names built-in
