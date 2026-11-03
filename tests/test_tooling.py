@@ -333,7 +333,10 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "name: YAGA Checks (branch, description, change, repo)" in ci
+    commit_policy_wf = (ROOT / ".github" / "workflows" / "commit-policy.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "name: YAGA Checks (branch, change, repo)" in ci
     assert "name: Lint, Package Build & Docs" in ci
     assert ci.count('version: "0.13.0"') == 3
     assert "yaga pull-request review check" not in ci
@@ -347,9 +350,9 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert ci.count("policy: .yaga/branch-policy.toml") == 2
     assert "branch: ${{ github.head_ref }}" in ci
     assert "branch: ${{ github.ref_name }}" in ci
-    assert "Check pull-request description" in ci
-    assert "check: pr-description" in ci
-    assert "policy: .yaga/description-policy.toml" in ci
+    assert "Check pull-request description" in commit_policy_wf
+    assert "check: pr-description" in commit_policy_wf
+    assert "policy: .yaga/description-policy.toml" in commit_policy_wf
     for command in ("tree check", "path check", "mode check", "size check"):
         assert f"yaga {command}" not in ci
     assert "pre-commit try-repo . yaga-commit-check" in ci
@@ -678,6 +681,8 @@ def test_root_action_publishes_bounded_sanitized_step_summaries_in_every_mode() 
     assert f"`{VERSION}`" in run_steps["invalid_check"]
     assert "GITHUB_STEP_SUMMARY" in run_steps["invalid_check"]
     assert "exit-code=2" in run_steps["invalid_check"]
+    assert "yaga.step_summary" in run_steps["commit"]
+    assert "yaga.step_summary" in run_steps["cli"]
     for step_id in ("commit", "gate", "cli"):
         script = run_steps[step_id]
         assert f"`{VERSION}`" in script
@@ -769,6 +774,7 @@ def test_commit_action_import_graph_is_dependency_free_and_read_only() -> None:
     paths = [
         ROOT / "src" / "yaga" / "commit_action_cli.py",
         ROOT / "src" / "yaga" / "commit_action_runtime.py",
+        ROOT / "src" / "yaga" / "step_summary.py",
         ROOT / "src" / "yaga" / "files.py",
         *(ROOT / "src" / "yaga" / "git").glob("*.py"),
         *(ROOT / "src" / "yaga" / "commits").glob("*.py"),

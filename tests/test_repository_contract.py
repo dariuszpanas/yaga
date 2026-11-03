@@ -232,6 +232,7 @@ def test_ci_changed_path_policy_uses_explicit_unprivileged_event_boundaries() ->
 
 def test_ci_branch_and_description_policies_dogfood_root_action() -> None:
     workflow = read(".github/workflows/ci.yml")
+    commit_policy = read(".github/workflows/commit-policy.yml")
     yaga_checks = workflow_job(workflow, "yaga-checks")
 
     assert section_keys(workflow, "permissions") == {"contents"}
@@ -247,9 +248,10 @@ def test_ci_branch_and_description_policies_dogfood_root_action() -> None:
     assert yaga_checks.count("policy: .yaga/branch-policy.toml") == 2
     assert "branch: ${{ github.head_ref }}" in yaga_checks
     assert "branch: ${{ github.ref_name }}" in yaga_checks
-    assert "name: Check pull-request description" in yaga_checks
-    assert "check: pr-description" in yaga_checks
-    assert "policy: .yaga/description-policy.toml" in yaga_checks
+    assert "types: [opened, synchronize, reopened, edited, ready_for_review]" in commit_policy
+    assert "name: Check pull-request description" in commit_policy
+    assert "check: pr-description" in commit_policy
+    assert "policy: .yaga/description-policy.toml" in commit_policy
 
 
 def test_branch_policy_contract_is_documented_and_dogfooded() -> None:

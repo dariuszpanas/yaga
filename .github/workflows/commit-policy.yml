@@ -32,4 +32,13 @@ jobs:
           restore-keys: yaga-typos-${{ runner.os }}-
       - name: Install Typos CLI
         run: cargo install typos-cli --version 1.49.0 --locked
-      - uses: ./
+      - name: Check pull-request commit policy
+        uses: ./
+      - name: Check pull-request description
+        if: >-
+          github.event.pull_request.user.login != 'dependabot[bot]' ||
+          github.event.pull_request.user.type != 'Bot'
+        uses: ./
+        with:
+          check: pr-description
+          policy: .yaga/description-policy.toml

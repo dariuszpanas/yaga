@@ -81,8 +81,8 @@ engineering and test-fixture jobs so status checks are immediately self-explanat
 
 | Pull-request check job | Workflow | Role | Policies / scope exercised |
 | --- | --- | --- | --- |
-| `Commit Messages` | `.github/workflows/commit-policy.yml` | **Marketplace Action dogfooding** (`check: commit`) | `[tool.yaga.commit]` in `pyproject.toml` across PR title and branch commits |
-| `YAGA Checks (branch, description, change, repo)` | `.github/workflows/ci.yml` | **Marketplace Action dogfooding** (`check: branch`, `pr-description`, `change`, `repo`) | `.yaga/branch-policy.toml`, `.yaga/description-policy.toml`, `.yaga/change-policy.toml`, and `.yaga/checks/ci.toml` (`commit`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) |
+| `Commit Messages` | `.github/workflows/commit-policy.yml` | **Marketplace Action dogfooding** (`check: commit`, `pr-description`) | `[tool.yaga.commit]` in `pyproject.toml` (PR title + branch commits) and `.yaga/description-policy.toml` (PR body, rechecked on `edited`) |
+| `YAGA Checks (branch, change, repo)` | `.github/workflows/ci.yml` | **Marketplace Action dogfooding** (`check: branch`, `change`, `repo`) | `.yaga/branch-policy.toml`, `.yaga/change-policy.toml`, and `.yaga/checks/ci.toml` (`commit`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) |
 | `Publish Pull Request Review` | `.github/workflows/pr-review.yml` | **Marketplace Action dogfooding** (`check: pr-review`, trusted `pull_request_target` / `workflow_run`) | `.yaga/agent-review-policy.toml` (waits for head-bound Codex review and submits `APPROVE` / `REQUEST_CHANGES`) |
 | `Lint, Package Build & Docs` | `.github/workflows/ci.yml` | **Repository engineering gate** | `ruff`, `ty`, `pre-commit` hook smoke, `actionlint` integration tests, strict wheel/sdist build (`scripts/check_build.py`), Zensical docs (`scripts/check_docs.py`, `scripts/check_description.py`), and `check: gate` stdlib wiring smoke |
 | `Python 3.12..3.15 on ubuntu/windows` | `.github/workflows/ci.yml` | **Repository test matrix** | Full `pytest` suite against non-editable installs |

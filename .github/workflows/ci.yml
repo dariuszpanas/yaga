@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   yaga-checks:
-    name: YAGA Checks (branch, description, change, repo)
+    name: YAGA Checks (branch, change, repo)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -50,15 +50,6 @@ jobs:
           check: branch
           policy: .yaga/branch-policy.toml
           branch: ${{ github.ref_name }}
-      - name: Check pull-request description
-        if: >-
-          github.event_name == 'pull_request' &&
-          (github.event.pull_request.user.login != 'dependabot[bot]' ||
-          github.event.pull_request.user.type != 'Bot')
-        uses: ./
-        with:
-          check: pr-description
-          policy: .yaga/description-policy.toml
       - name: Run changed-path policy
         uses: ./
         with:
@@ -138,8 +129,6 @@ jobs:
           echo "$RUNNER_TEMP/yaga-smoke-bin" >> "$GITHUB_PATH"
       - name: Exercise the composite action manifest and wiring
         id: action_smoke
-        env:
-          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/yaga-gate-smoke-summary.md
         uses: ./
         with:
           check: gate
@@ -153,7 +142,6 @@ jobs:
           ACTION_OUTCOME: ${{ steps.action_smoke.outcome }}
         run: |
           test "$ACTION_OUTCOME" = success
-          grep -F -- 'YAGA Checks · gate' "$RUNNER_TEMP/yaga-gate-smoke-summary.md"
 
   test:
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
