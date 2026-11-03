@@ -75,7 +75,7 @@ empty `allowed-scopes` list permits only unscoped messages; `allowed-types` must
 `yaga config show` prints every effective value and the source file, with `--format json` for tools.
 
 `dependabot-pull-requests` defaults to `"check"`. Setting it to `"skip"` skips Conventional Commit
-policy evaluation only in `yaga github pull-request check` and the read-only commit-check Action,
+policy evaluation only in `yaga github pull-request check` and the root Action's read-only `commit` mode,
 and only when the event's pull-request author is exactly the GitHub `dependabot[bot]` Bot account,
 following [GitHub's event-author guidance for Dependabot
 automation](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions?learn=dependency_version_updates).

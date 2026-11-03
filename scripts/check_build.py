@@ -1613,6 +1613,7 @@ def main() -> int:
             required = {
                 "yaga/__init__.py",
                 "yaga/action_cli.py",
+                "yaga/cli_action.py",
                 "yaga/commit_action_cli.py",
                 "yaga/commit_action_runtime.py",
                 "yaga/cli.py",
@@ -1752,11 +1753,11 @@ def main() -> int:
             names = source_distribution.getnames()
             required_suffixes = {
                 "/action.yml": "the composite Action",
-                "/actions/commit-check/action.yml": "the commit-check Action",
                 "/.github/workflows/commit-policy.yml": "the commit-policy dogfood workflow",
                 "/.pre-commit-hooks.yaml": "the pre-commit provider manifest",
                 "/examples/agent-review.yml": "the Agent review workflow example",
                 "/examples/commit-policy.yml": "the commit-policy workflow example",
+                "/examples/pr-review.yml": "the pull-request review workflow example",
                 "/examples/review-policy.yml": "the review policy workflow example",
                 "/src/yaga/__init__.py": "the yaga package",
             }

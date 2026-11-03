@@ -44,14 +44,18 @@ pending message file does not reveal commit parents, so it cannot enforce merge 
 check a proposed merge message as an ordinary message even when actual merge commits are ignored.
 Repositories must retain CI range checks for authoritative commit and merge policy.
 
-The installed CLI depends on locked Typer packages. The write-capable root Action does not: its fixed
-`YAGA_ACTION_RUNTIME=1` path runs with Python site packages disabled and enters only the
-standard-library Action/gate import graph. Both frontends call the same gate dispatcher. The GitHub
-token stays in `GITHUB_TOKEN`; no gate command accepts it as an argument or configuration value.
+The installed CLI depends on locked Typer packages. In the unified root Action (`action.yml`),
+write-capable `check: gate` does not: its fixed `YAGA_ACTION_RUNTIME=1` path runs with Python site
+packages disabled and enters only the standard-library Action/gate import graph. Both frontends
+call the same gate dispatcher. The GitHub token stays in `GITHUB_TOKEN`; no gate command accepts it
+as an argument or configuration value.
 
-The separate commit Action uses a pinned Python bootstrap with an explicit empty token; that
-bootstrap may obtain Python before YAGA starts. Its dependency-free YAGA runtime uses a different
+Default `check: commit` uses a pinned Python bootstrap with an explicit empty token; that
+bootstrap may obtain Python before YAGA starts. Its dependency-free YAGA runtime uses a separate
 `YAGA_COMMIT_ACTION_RUNTIME=1` selector and may enter only bounded commit/event/reporting modules.
+Installed-CLI `check` modes sync YAGA's hash-locked `--no-dev` runtime into a temporary virtual
+environment outside the checkout, reject unused inputs fail-closed, and pass `GH_TOKEN` only when
+live `pr` fetches are requested in `pr-review` or `pr-description`.
 The runtime has no token input, GitHub API client, Git fetch behavior, or write code path; the
 reference workflow grants only `contents: read`. It binds a strict `pull_request` event to the
 runner repository ID/name and refs, requires the worktree at the exact event head, rejects shallow

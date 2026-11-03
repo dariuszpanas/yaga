@@ -1,7 +1,8 @@
 # Security model
 
-YAGA has two surfaces: an installed CLI for repository policy and a dependency-free composite
-Action runtime for the Agent review gate. The trust boundary is intentionally narrow.
+YAGA exposes an installed CLI for repository policy and a unified root composite Action
+(`action.yml`) with isolated runtimes for read-only commit checks, installed CLI checks, and the
+Agent review gate. The trust boundary is intentionally narrow.
 
 ## Explicit and bounded inputs
 
@@ -16,9 +17,9 @@ an explicit provider selection or a named plan and keeps provider failures disti
 ## Actions trust split
 
 Pull-request CI runs without trusted write credentials and can only save quota or report quality
-findings. Write-capable gate operations run from trusted default-branch workflows. The root Action
-uses a standard-library-only bootstrap and never accepts a GitHub token as an argument, output, or
-log value.
+findings. Write-capable gate operations run from trusted default-branch workflows. In the root Action, both `check: commit` and `check: gate` use standard-library-only bootstraps,
+installed-CLI modes isolate their hash-locked `--no-dev` virtual environment outside the checkout,
+and no mode accepts a GitHub token as an argument, output, or log value.
 
 Consumers must pin the Action to an audited full commit SHA. Review the example workflows and
 [SECURITY.md](https://github.com/dariuszpanas/yaga/blob/main/SECURITY.md) before deployment.

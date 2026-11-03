@@ -1,80 +1,305 @@
 name: YAGA
-description: Publish conservative, exact-candidate GitHub status gates
+description: Run configurable commit, pull-request, workflow, and repository policy checks
 author: Dariusz Panas
 
 inputs:
-  gate:
-    description: Gate implementation to run; currently only agent-review
-    required: true
-    default: agent-review
+  check:
+    description: >-
+      Check or adapter to run: commit (default), pr-review, pr-description,
+      repo, branch, change, workflow, workflow-security, workflow-lint, mode,
+      path, size, tree, or gate
+    required: false
+    default: commit
+  trusted-config:
+    description: >-
+      Literal committed policy path for check=commit; opts into default-branch
+      pull_request_target validation
+    required: false
+    default: ""
+  policy:
+    description: >-
+      Explicit versioned TOML policy path for pr-review, pr-description,
+      branch, change, mode, path, size, or tree
+    required: false
+    default: ""
+  template:
+    description: Optional explicit Markdown template path for check=pr-description
+    required: false
+    default: ""
+  file:
+    description: >-
+      Offline snapshot JSON path for check=pr-review or Markdown body file for
+      check=pr-description
+    required: false
+    default: ""
+  pr:
+    description: >-
+      Canonical HTTPS pull-request URL or positive pull-request number for live
+      check=pr-review or check=pr-description via gh
+    required: false
+    default: ""
+  repo:
+    description: >-
+      [HOST/]OWNER/REPO for numeric pr in pr-review or pr-description, or local
+      repository root for change, workflow*, mode, path, size, tree, or repo
+    required: false
+    default: ""
+  wait-seconds:
+    description: >-
+      Bounded active-review poll budget in seconds (0..600) for live
+      check=pr-review
+    required: false
+    default: ""
+  submit-review:
+    description: >-
+      Commit-bound pull-request review submission mode for live check=pr-review:
+      none, approve, request-changes, or both
+    required: false
+    default: ""
+  branch:
+    description: Exact short branch name for check=branch
+    required: false
+    default: ""
+  range:
+    description: Exact A..B or A...B Git revision range for check=change or check=repo
+    required: false
+    default: ""
+  revision:
+    description: >-
+      Exact Git commit-ish for committed-tree checks (mode, path, size, tree,
+      or repo)
+    required: false
+    default: ""
+  commit:
+    description: Commit-provider Git revision for check=repo
+    required: false
+    default: ""
+  config:
+    description: Explicit .yaga.toml or pyproject.toml path for check=repo
+    required: false
+    default: ""
+  plan:
+    description: Explicit versioned repository check plan TOML path for check=repo
+    required: false
+    default: ""
+  checks:
+    description: >-
+      Comma- or newline-separated provider list for check=repo when plan is not
+      set
+    required: false
+    default: ""
+  workflow-paths:
+    description: >-
+      Newline-separated workflow file or direct-child directory paths for
+      workflow, workflow-security, workflow-lint, or repo
+    required: false
+    default: ""
+  workflow-security-profile:
+    description: >-
+      Versioned workflow-security profile (recommended-v1, recommended-v2, or
+      recommended-v3) for workflow-security or repo
+    required: false
+    default: ""
+  workflow-security-rules:
+    description: >-
+      Comma- or newline-separated custom workflow-security rules for
+      workflow-security or repo
+    required: false
+    default: ""
+  mode-policy:
+    description: Explicit mode policy TOML path for check=repo without plan
+    required: false
+    default: ""
+  path-policy:
+    description: Explicit path policy TOML path for check=repo without plan
+    required: false
+    default: ""
+  size-policy:
+    description: Explicit size policy TOML path for check=repo without plan
+    required: false
+    default: ""
+  tree-policy:
+    description: Explicit tree policy TOML path for check=repo without plan
+    required: false
+    default: ""
   github-token:
     description: >-
-      GitHub token with the documented per-operation Actions, contents,
-      issues, pull-request, and commit-status permissions
-    required: true
+      GitHub token for check=gate or live pr fetches in pr-review and
+      pr-description; rejected by offline checks
+    required: false
+    default: ""
+  gate:
+    description: Gate implementation for check=gate; defaults to agent-review
+    required: false
+    default: ""
   operation:
-    description: One of invalidate, prepare, authorize, observe, request, or finalize
-    required: true
+    description: >-
+      Gate operation for check=gate: invalidate, prepare, authorize, observe,
+      request, or finalize
+    required: false
+    default: ""
   prerequisite-workflow:
-    description: Authenticated unprivileged pull-request CI workflow path
+    description: >-
+      Authenticated unprivileged pull-request CI workflow path for check=gate;
+      defaults to .github/workflows/ci.yml
     required: false
-    default: .github/workflows/ci.yml
+    default: ""
   lifecycle-workflow:
-    description: Trusted pull_request_target lifecycle workflow path
+    description: >-
+      Trusted pull_request_target lifecycle workflow path for check=gate;
+      defaults to .github/workflows/review-policy.yml
     required: false
-    default: .github/workflows/review-policy.yml
+    default: ""
   owner-id:
-    description: Immutable GitHub user ID allowed to request without environment approval
-    required: true
+    description: >-
+      Immutable GitHub user ID allowed to request without environment approval
+      in check=gate
+    required: false
+    default: ""
   approval-marker:
     description: >-
-      Environment-only marker required by authorize; set it to
+      Environment-only marker required by authorize in check=gate; set it to
       agent-review-approval:v1 in the protected approval environment
     required: false
     default: ""
   request-timeout:
-    description: Per-request GitHub REST timeout in seconds, from 1 through 30
+    description: >-
+      Per-request GitHub REST timeout in seconds (1..30) for check=gate;
+      defaults to 5
     required: false
-    default: "5"
+    default: ""
   job-timeout-minutes:
     description: >-
-      Usable YAGA polling and finalization window, from 15 through 360;
-      set it equal to the action-only job's timeout-minutes
-    required: true
+      Usable YAGA polling and finalization window (15..360) for check=gate; set
+      it equal to the action-only job's timeout-minutes
+    required: false
+    default: ""
   agent-review-policy-file:
     description: >-
-      Unsupported by the fixed GitHub Codex completion adapter; any nonempty
-      value fails before GitHub API access. Use an external adapter with the
-      installed policy plan/evaluate commands for configured lenses
+      Unsupported by the fixed GitHub Codex completion adapter in check=gate;
+      any nonempty value fails before GitHub API access
     required: false
     default: ""
 
 outputs:
+  exit-code:
+    description: Check or gate exit code (0 pass, 1 findings or gate failure, 2 input or operational error)
+    value: ${{ steps.invalid_check.outputs.exit-code }}${{ steps.commit.outputs.exit-code }}${{ steps.gate.outputs.exit-code }}${{ steps.cli.outputs.exit-code }}
   route:
-    description: Closed prepare route; skip, done, observe, owner, external, or approved
-    value: ${{ steps.yaga.outputs.route }}
+    description: Closed prepare route for check=gate; skip, done, observe, owner, external, or approved
+    value: ${{ steps.gate.outputs.route }}
   pull_request_number:
-    description: Exact pull request number emitted by prepare for job concurrency
-    value: ${{ steps.yaga.outputs.pull_request_number }}
+    description: Exact pull request number emitted by prepare in check=gate for job concurrency
+    value: ${{ steps.gate.outputs.pull_request_number }}
 
 runs:
   using: composite
   steps:
-    - name: Run YAGA
-      id: yaga
+    - name: Reject unsupported check selector
+      id: invalid_check
+      if: >-
+        inputs.check != 'commit' &&
+        inputs.check != 'pr-review' &&
+        inputs.check != 'pr-description' &&
+        inputs.check != 'repo' &&
+        inputs.check != 'branch' &&
+        inputs.check != 'change' &&
+        inputs.check != 'workflow' &&
+        inputs.check != 'workflow-security' &&
+        inputs.check != 'workflow-lint' &&
+        inputs.check != 'mode' &&
+        inputs.check != 'path' &&
+        inputs.check != 'size' &&
+        inputs.check != 'tree' &&
+        inputs.check != 'gate'
+      shell: bash
+      run: |
+        set -euo pipefail
+        unset GITHUB_TOKEN GH_TOKEN
+        printf 'exit-code=2\n' >> "$GITHUB_OUTPUT"
+        YAGA_MESSAGE="::error title=YAGA action::YAGA input error: unsupported check mode"
+        printf '%s\n' "$YAGA_MESSAGE" >&2
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          {
+            printf '%s\n' '## YAGA action'
+            printf '%s\n' '<pre>'
+            printf '%s\n' "$YAGA_MESSAGE" | \
+              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+            printf '%s\n' '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit 2
+
+    - name: Set up the YAGA commit runtime
+      if: inputs.check == 'commit'
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: "3.12"
+        token: ""
+
+    - name: Check pull request commit policy
+      id: commit
+      if: inputs.check == 'commit'
+      shell: bash
+      env:
+        PYTHONUTF8: "1"
+        YAGA_COMMIT_ACTION_RUNTIME: "1"
+        YAGA_COMMIT_TRUSTED_CONFIG: ${{ inputs.trusted-config }}
+        YAGA_UNUSED_INPUTS: ${{ (inputs.github-token != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '' || inputs.gate != '' || inputs.operation != '' || inputs.prerequisite-workflow != '' || inputs.lifecycle-workflow != '' || inputs.owner-id != '' || inputs.approval-marker != '' || inputs.request-timeout != '' || inputs.job-timeout-minutes != '' || inputs.agent-review-policy-file != '') && '1' || '0' }}
+      run: |
+        # yaga-commit-action-shell
+        set -euo pipefail
+        unset PYTHONHOME GITHUB_TOKEN GH_TOKEN
+        YAGA_SOURCE="$(cd -- "$GITHUB_ACTION_PATH/src" && pwd -P)"
+        test -f "$YAGA_SOURCE/yaga/commit_action_cli.py"
+        export PYTHONPATH="$YAGA_SOURCE"
+        export PYTHONSAFEPATH=1
+        YAGA_REPORT="$(mktemp)"
+        YAGA_ERROR="$(mktemp)"
+        trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
+        if [[ "${YAGA_UNUSED_INPUTS:-0}" != "0" ]]; then
+          printf '%s\n' "::error title=YAGA action::YAGA input error: check 'commit' accepts only 'check' and 'trusted-config'" > "$YAGA_ERROR"
+          YAGA_STATUS=2
+        else
+          set +e
+          python -P -S -m yaga github pull-request check \
+            --event-file "${GITHUB_EVENT_PATH:-}" \
+            --repo "${GITHUB_WORKSPACE:-}" \
+            --format github > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+          YAGA_STATUS=$?
+          set -e
+        fi
+        printf 'exit-code=%s\n' "$YAGA_STATUS" >> "$GITHUB_OUTPUT"
+        cat "$YAGA_REPORT"
+        cat "$YAGA_ERROR" >&2
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          {
+            printf '%s\n' '## YAGA commit policy'
+            printf '%s\n' '<pre>'
+            { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
+              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+            printf '%s\n' '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$YAGA_STATUS"
+
+    - name: Run YAGA review gate
+      id: gate
+      if: inputs.check == 'gate'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         YAGA_ACTION_RUNTIME: "1"
-        YAGA_GATE: ${{ inputs.gate }}
+        YAGA_GATE: ${{ inputs.gate != '' && inputs.gate || 'agent-review' }}
         YAGA_APPROVAL_MARKER: ${{ inputs.approval-marker }}
         YAGA_AGENT_REVIEW_POLICY_FILE: ${{ inputs.agent-review-policy-file }}
-        YAGA_LIFECYCLE_WORKFLOW: ${{ inputs.lifecycle-workflow }}
+        YAGA_LIFECYCLE_WORKFLOW: ${{ inputs.lifecycle-workflow != '' && inputs.lifecycle-workflow || '.github/workflows/review-policy.yml' }}
         YAGA_JOB_TIMEOUT_MINUTES: ${{ inputs.job-timeout-minutes }}
         YAGA_OPERATION: ${{ inputs.operation }}
         YAGA_OWNER_ID: ${{ inputs.owner-id }}
-        YAGA_PREREQUISITE_WORKFLOW: ${{ inputs.prerequisite-workflow }}
-        YAGA_REQUEST_TIMEOUT: ${{ inputs.request-timeout }}
+        YAGA_PREREQUISITE_WORKFLOW: ${{ inputs.prerequisite-workflow != '' && inputs.prerequisite-workflow || '.github/workflows/ci.yml' }}
+        YAGA_REQUEST_TIMEOUT: ${{ inputs.request-timeout != '' && inputs.request-timeout || '5' }}
+        YAGA_UNUSED_INPUTS: ${{ (inputs.trusted-config != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '') && '1' || '0' }}
       run: |
         set -euo pipefail
         unset PYTHONHOME
@@ -83,17 +308,133 @@ runs:
         YAGA_REPORT="$(mktemp)"
         YAGA_ERROR="$(mktemp)"
         trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
-        set +e
-        python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION" > "$YAGA_REPORT" 2> "$YAGA_ERROR"
-        YAGA_STATUS=$?
-        set -e
+        if [[ "${YAGA_UNUSED_INPUTS:-0}" != "0" ]]; then
+          printf '%s\n' "YAGA failed: check 'gate' does not accept CLI or commit inputs" > "$YAGA_ERROR"
+          YAGA_STATUS=2
+        else
+          set +e
+          python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION" > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+          YAGA_STATUS=$?
+          set -e
+        fi
+        printf 'exit-code=%s\n' "$YAGA_STATUS" >> "$GITHUB_OUTPUT"
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
           {
             printf '%s\n' '## YAGA Agent review gate'
             printf '%s\n' '<pre>'
-            head -c 65536 "$YAGA_REPORT" "$YAGA_ERROR" | \
+            { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
+              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+            printf '%s\n' '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$YAGA_STATUS"
+
+    - name: Set up pinned uv for YAGA CLI check
+      if: >-
+        inputs.check == 'pr-review' ||
+        inputs.check == 'pr-description' ||
+        inputs.check == 'repo' ||
+        inputs.check == 'branch' ||
+        inputs.check == 'change' ||
+        inputs.check == 'workflow' ||
+        inputs.check == 'workflow-security' ||
+        inputs.check == 'workflow-lint' ||
+        inputs.check == 'mode' ||
+        inputs.check == 'path' ||
+        inputs.check == 'size' ||
+        inputs.check == 'tree'
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        enable-cache: false
+        version: "0.13.0"
+
+    - name: Run YAGA CLI check
+      id: cli
+      if: >-
+        inputs.check == 'pr-review' ||
+        inputs.check == 'pr-description' ||
+        inputs.check == 'repo' ||
+        inputs.check == 'branch' ||
+        inputs.check == 'change' ||
+        inputs.check == 'workflow' ||
+        inputs.check == 'workflow-security' ||
+        inputs.check == 'workflow-lint' ||
+        inputs.check == 'mode' ||
+        inputs.check == 'path' ||
+        inputs.check == 'size' ||
+        inputs.check == 'tree'
+      shell: bash
+      env:
+        YAGA_INPUT_CHECK: ${{ inputs.check }}
+        YAGA_INPUT_POLICY: ${{ inputs.policy }}
+        YAGA_INPUT_TEMPLATE: ${{ inputs.template }}
+        YAGA_INPUT_FILE: ${{ inputs.file }}
+        YAGA_INPUT_PR: ${{ inputs.pr }}
+        YAGA_INPUT_REPO: ${{ inputs.repo }}
+        YAGA_INPUT_WAIT_SECONDS: ${{ inputs.wait-seconds }}
+        YAGA_INPUT_SUBMIT_REVIEW: ${{ inputs.submit-review }}
+        YAGA_INPUT_BRANCH: ${{ inputs.branch }}
+        YAGA_INPUT_RANGE: ${{ inputs.range }}
+        YAGA_INPUT_REVISION: ${{ inputs.revision }}
+        YAGA_INPUT_COMMIT: ${{ inputs.commit }}
+        YAGA_INPUT_CONFIG: ${{ inputs.config }}
+        YAGA_INPUT_PLAN: ${{ inputs.plan }}
+        YAGA_INPUT_CHECKS: ${{ inputs.checks }}
+        YAGA_INPUT_WORKFLOW_PATHS: ${{ inputs.workflow-paths }}
+        YAGA_INPUT_WORKFLOW_SECURITY_PROFILE: ${{ inputs.workflow-security-profile }}
+        YAGA_INPUT_WORKFLOW_SECURITY_RULES: ${{ inputs.workflow-security-rules }}
+        YAGA_INPUT_MODE_POLICY: ${{ inputs.mode-policy }}
+        YAGA_INPUT_PATH_POLICY: ${{ inputs.path-policy }}
+        YAGA_INPUT_SIZE_POLICY: ${{ inputs.size-policy }}
+        YAGA_INPUT_TREE_POLICY: ${{ inputs.tree-policy }}
+        YAGA_NON_CLI_INPUTS: ${{ (inputs.trusted-config != '' || inputs.gate != '' || inputs.operation != '' || inputs.prerequisite-workflow != '' || inputs.lifecycle-workflow != '' || inputs.owner-id != '' || inputs.approval-marker != '' || inputs.request-timeout != '' || inputs.job-timeout-minutes != '' || inputs.agent-review-policy-file != '') && '1' || '0' }}
+        YAGA_HAS_GITHUB_TOKEN: ${{ inputs.github-token != '' && '1' || '0' }}
+        YAGA_GH_TOKEN: ${{ ((inputs.check == 'pr-review' || inputs.check == 'pr-description') && inputs.pr != '') && inputs.github-token || '' }}
+      run: |
+        set -euo pipefail
+        YAGA_SAVED_GH_TOKEN="${YAGA_GH_TOKEN:-}"
+        unset PYTHONHOME GITHUB_TOKEN GH_TOKEN YAGA_GH_TOKEN
+        YAGA_VENV="$(mktemp -d -t yaga-venv.XXXXXX)"
+        YAGA_REPORT="$(mktemp)"
+        YAGA_ERROR="$(mktemp)"
+        trap 'rm -rf "$YAGA_VENV" "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
+        if command -v cygpath >/dev/null 2>&1; then
+          YAGA_VENV_ENV="$(cygpath -w "$YAGA_VENV")"
+          YAGA_PROJECT_DIR="$(cygpath -w "$GITHUB_ACTION_PATH")"
+        else
+          YAGA_VENV_ENV="$YAGA_VENV"
+          YAGA_PROJECT_DIR="$GITHUB_ACTION_PATH"
+        fi
+        set +e
+        UV_PROJECT_ENVIRONMENT="$YAGA_VENV_ENV" \
+          uv sync --frozen --no-dev --no-editable \
+          --project "$YAGA_PROJECT_DIR" --python 3.12 --quiet 2> "$YAGA_ERROR"
+        YAGA_SYNC_STATUS=$?
+        set -e
+        if [[ "$YAGA_SYNC_STATUS" -ne 0 ]]; then
+          YAGA_STATUS=2
+        else
+          if [[ -x "$YAGA_VENV/bin/python" ]]; then
+            YAGA_PYTHON="$YAGA_VENV/bin/python"
+          else
+            YAGA_PYTHON="$YAGA_VENV/Scripts/python.exe"
+          fi
+          set +e
+          YAGA_GH_TOKEN="$YAGA_SAVED_GH_TOKEN" \
+            "$YAGA_PYTHON" -I -m yaga.cli_action > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+          YAGA_STATUS=$?
+          set -e
+        fi
+        printf 'exit-code=%s\n' "$YAGA_STATUS" >> "$GITHUB_OUTPUT"
+        cat "$YAGA_REPORT"
+        cat "$YAGA_ERROR" >&2
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          {
+            printf '## YAGA %s check\n' "$YAGA_INPUT_CHECK"
+            printf '%s\n' '<pre>'
+            { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
               sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
             printf '%s\n' '</pre>'
           } >> "$GITHUB_STEP_SUMMARY"

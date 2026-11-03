@@ -20,6 +20,12 @@
 
 ### Changed
 
+- Unify YAGA's GitHub Actions into the single root `action.yml` (`uses: dariuszpanas/yaga@...`)
+  with `check` defaulting to `commit` and supporting `pr-review`, `pr-description`, `repo`,
+  `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`,
+  `tree`, and `gate`, plus a copy-ready `examples/pr-review.yml` workflow. Retire
+  `actions/commit-check/action.yml` while keeping `commit` and `gate` on their isolated
+  standard-library runtimes.
 - Parallelize test suite execution with `pytest-xdist` (`-n auto --dist worksteal`) in local and
   hosted CI runs.
 

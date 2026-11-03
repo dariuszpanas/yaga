@@ -27,12 +27,13 @@ The full gate invokes
 `yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD`; that explicit
 versioned plan selects the same providers, workflow paths, and committed-tree policies locally and
 in CI, including the Docker-backed `workflow-lint` provider. The installed CLI uses the locked
-Typer dependency. The write-capable root Action import graph—`__main__` in gate mode, `action_cli`,
-`action`, `codex`, and
-the generic GitHub primitives—must remain Python-standard-library-only and must not import the
-installed CLI, command, commit-policy, or presentation modules. The separate read-only commit
-Action may import dependency-light commit modules, but never Typer, command modules, Codex policy,
-GitHub REST transport, site packages, or token handling.
+Typer dependency. In the unified root `action.yml`, the write-capable `check: gate` import
+graph—`__main__` in gate mode, `action_cli`, `action`, `codex`, and the generic GitHub
+primitives—must remain Python-standard-library-only and must not import the installed CLI,
+command, commit-policy, or presentation modules. The read-only `check: commit` mode may import
+dependency-light commit modules, but never Typer, command modules, Codex policy, GitHub REST
+transport, site packages, or token handling. Installed-CLI `check` modes dispatch through
+`cli_action.py` inside a temporary hash-locked `--no-dev` `uv` virtual environment.
 
 The package build gate must execute the fresh wheel outside the checkout. Export the publishable
 runtime closure from `uv.lock`, require its hashes without building dependencies, install the wheel
@@ -445,22 +446,31 @@ real `pre-commit try-repo` installation when changing the hook or package metada
 bypassable and cannot determine merge parent count, so they complement rather than replace CI range
 checks.
 
-The write-capable root Action uses the same `gate agent-review <operation>` command path through a fixed
-`YAGA_ACTION_RUNTIME=1` standard-library bootstrap. It installs no package and makes no network
-request for dependencies. Never accept `github-token` as argv, configuration, output, or logs.
+In the unified root `action.yml`, `check: gate` uses the same `gate agent-review <operation>`
+command path through a fixed `YAGA_ACTION_RUNTIME=1` standard-library bootstrap. It installs no
+package and makes no network request for dependencies. Never accept `github-token` as argv,
+configuration, output, or logs.
 
-The read-only Action uses its own closed `YAGA_COMMIT_ACTION_RUNTIME=1` bootstrap and the public
-`github pull-request check` path. It accepts no token or caller-selected revisions, validates one
-bounded event against the GitHub runner repository/ref identity, requires `HEAD` to equal the event
-head, and never fetches Git history. Keep the pinned Python bootstrap token explicitly empty, and
-keep its `edited`-aware workflow separate from the authenticated `CI` workflow used by the Codex
-gate. Its PR-head configuration is contributor-controlled and is only a quality signal.
+Default `check: commit` uses its own closed `YAGA_COMMIT_ACTION_RUNTIME=1` bootstrap and the
+public `github pull-request check` path. It accepts no token or caller-selected revisions,
+validates one bounded event against the GitHub runner repository/ref identity, requires `HEAD` to
+equal the event head, and never fetches Git history. Keep the pinned Python bootstrap token
+explicitly empty, and keep its `edited`-aware workflow separate from the authenticated `CI`
+workflow used by the Codex gate. Its PR-head configuration is contributor-controlled and is only a
+quality signal. Installed-CLI `check` modes (`pr-review`, `pr-description`, `repo`, `branch`,
+`change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, and `tree`)
+sync the hash-locked `--no-dev` runtime into a temporary virtual environment and execute through
+`cli_action.py`, passing `GH_TOKEN` only for live `pr` fetches in `pr-review` and
+`pr-description`.
 
 ## Action contract
 
-The public inputs are exactly `gate`, `operation`, `github-token`, `prerequisite-workflow`,
-`lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`, `job-timeout-minutes`, and
-`agent-review-policy-file`. The last input defaults to empty; nonempty values are deliberately
+The public inputs are exactly `check`, `trusted-config`, `policy`, `template`, `file`, `pr`,
+`repo`, `wait-seconds`, `submit-review`, `branch`, `range`, `revision`, `commit`, `config`,
+`plan`, `checks`, `workflow-paths`, `workflow-security-profile`, `workflow-security-rules`,
+`mode-policy`, `path-policy`, `size-policy`, `tree-policy`, `github-token`, `gate`, `operation`,
+`prerequisite-workflow`, `lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`,
+`job-timeout-minutes`, and `agent-review-policy-file`. The last input defaults to empty; nonempty values are deliberately
 rejected before API access because this fixed GitHub adapter cannot execute named lenses or bind
 their outcomes to a policy digest. Provider-neutral `gate agent-review policy` commands remain
 available to external adapters.

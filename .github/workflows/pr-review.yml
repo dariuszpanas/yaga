@@ -138,22 +138,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          enable-cache: false
-          version: "0.13.0"
-      - run: uv sync --frozen --group dev --python 3.12
       - name: Evaluate and submit pull-request review
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          YAGA_PR_NUMBER: ${{ needs.resolve.outputs.pull_request_number }}
-          YAGA_REPOSITORY: ${{ github.repository }}
-          YAGA_WAIT_SECONDS: ${{ needs.resolve.outputs.wait_seconds }}
-        run: >-
-          uv run --frozen --python 3.12 yaga pull-request review check
-          --policy .yaga/agent-review-policy.toml
-          --pr "$YAGA_PR_NUMBER"
-          --repo "$YAGA_REPOSITORY"
-          --wait-seconds "$YAGA_WAIT_SECONDS"
-          --submit-review both
-          --format github
+        uses: ./
+        with:
+          check: pr-review
+          policy: .yaga/agent-review-policy.toml
+          pr: ${{ needs.resolve.outputs.pull_request_number }}
+          repo: ${{ github.repository }}
+          wait-seconds: ${{ needs.resolve.outputs.wait_seconds }}
+          submit-review: both
+          github-token: ${{ secrets.GITHUB_TOKEN }}

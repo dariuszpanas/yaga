@@ -1,0 +1,41 @@
+name: Pull Request Review Verdict
+run-name: PR review verdict for #${{ github.event.pull_request.number }}
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: yaga-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  publish-review:
+    name: Publish Pull Request Review
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.login != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Evaluate and submit pull-request review
+        uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
+        with:
+          check: pr-review
+          policy: .yaga/agent-review-policy.toml
+          pr: ${{ github.event.pull_request.number }}
+          repo: ${{ github.repository }}
+          wait-seconds: 480
+          submit-review: both
+          github-token: ${{ secrets.GITHUB_TOKEN }}

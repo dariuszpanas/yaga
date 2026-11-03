@@ -111,6 +111,20 @@ jobs:
         run: |
           uv run --frozen --python 3.12 zensical build --strict --clean
           uv run --frozen --python 3.12 python scripts/check_docs.py
+      - name: Exercise the unified CLI composite action
+        id: cli_action_smoke
+        uses: ./
+        with:
+          check: branch
+          policy: .yaga/branch-policy.toml
+          branch: feat/action-smoke
+      - name: Require the CLI composite smoke outcome
+        env:
+          CLI_ACTION_OUTCOME: ${{ steps.cli_action_smoke.outcome }}
+          CLI_ACTION_EXIT_CODE: ${{ steps.cli_action_smoke.outputs.exit-code }}
+        run: |
+          test "$CLI_ACTION_OUTCOME" = success
+          test "$CLI_ACTION_EXIT_CODE" = 0
       - name: Install the composite smoke interpreter
         run: |
           install -D --mode=0755 \
@@ -121,6 +135,7 @@ jobs:
         id: action_smoke
         uses: ./
         with:
+          check: gate
           gate: agent-review
           operation: invalidate
           github-token: not-used

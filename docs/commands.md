@@ -55,19 +55,20 @@ structured operational errors use stderr. CLI usage errors may be plain text eve
 
 | Commands | Formats; exits | Repository plan | Bundled Action |
 | --- | --- | --- | --- |
-| `commit check`; `workflow check`, `security`, `lint`; `tree`, `path`, `mode`, `size` checks | Text, JSON, GitHub; `0/1/2` | Exactly these eight providers; tree/path/mode/size require plan v2. | None directly; commit policy is reused by the event-aware commit Action. |
-| `repo check` | Text, JSON, GitHub; `0/1/2` with operational errors taking precedence | Runs a selected plan. | None. |
-| `branch check`, `change check`, both description checks, `pull-request review check`, `commit quality` | Text, JSON, GitHub; `0/1/2` | No. | None. |
-| `github pull-request check` | Text, JSON, GitHub; `0/1/2` | No. | Read-only `actions/commit-check`. |
+| `commit check`; `workflow check`, `security`, `lint`; `tree`, `path`, `mode`, `size` checks | Text, JSON, GitHub; `0/1/2` | Exactly these eight providers; tree/path/mode/size require plan v2. | Root Action (`workflow`, `workflow-security`, `workflow-lint`, `tree`, `path`, `mode`, `size`); commit policy runs via default `check: commit` or `check: repo`. |
+| `repo check` | Text, JSON, GitHub; `0/1/2` with operational errors taking precedence | Runs a selected plan. | Root Action (`check: repo`). |
+| `branch check`, `change check`, both description checks, `pull-request review check` | Text, JSON, GitHub; `0/1/2` | No. | Root Action (`branch`, `change`, `pr-description`, `pr-review`). |
+| `commit quality` | Text, JSON, GitHub; `0/1/2` | No. | None (requires optional model extras). |
+| `github pull-request check` | Text, JSON, GitHub; `0/1/2` | No. | Root Action default (`check: commit`). |
 | `test policy check`, `test plan` | Text, JSON; `0/2` | No. | None. |
 | `test evaluate` | Text, JSON; `0/1/2` | No. | None. |
 | `gate agent-review policy check`, `plan` | Text, JSON; `0/2` | No. | None. |
 | `gate agent-review policy template` | JSON scaffold; `0/2` | No. | None. |
 | `gate agent-review policy evaluate` | Text, JSON, GitHub; `0/1/2` | No. | None. |
-| `gate agent-review <operation>` | Lifecycle output; `GateError` returns `1`, not the policy-check error code | No. | Trusted write-capable root Action. Nonempty `agent-review-policy-file` is rejected. |
+| `gate agent-review <operation>` | Lifecycle output; `GateError` returns `1`, not the policy-check error code | No. | Trusted write-capable root Action (`check: gate`). Nonempty `agent-review-policy-file` is rejected. |
 
-All installed commands can run in suitable ordinary CI with their stated prerequisites. The two
-bundled Actions are narrow adapters, not wrappers for every checker. Quality advice remains
+All installed commands can run in suitable ordinary CI with their stated prerequisites. The
+unified root Action isolates stdlib `commit` and `gate` modes from hash-locked CLI checks. Quality advice remains
 advisory; a plan is not evidence that tests or reviews ran. See [Usage modes](usage.md) and
 [Assess and adopt in CI](ci-adoption.md) before choosing required gates.
 

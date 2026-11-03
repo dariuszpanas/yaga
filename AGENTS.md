@@ -239,19 +239,26 @@ Agent review gate is the public review contract. Its current provider adapter re
   mode does not validate shebangs, ACLs, ownership, symlink targets, `.gitmodules`, submodule
   provenance, or object availability. Keep the provider out of both Action graphs and
   repository-plan v1.
-- The installed CLI may use the locked Typer dependency. The write-capable root Action may not
-  import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages. Preserve
-  the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate dispatcher. Keep the
-  read-only commit Action on its separate `YAGA_COMMIT_ACTION_RUNTIME=1` bootstrap; it may import
-  commit modules but not Typer, commands, Codex policy, GitHub REST/token code, or site packages.
+- The installed CLI may use the locked Typer dependency. The unified root `action.yml` exposes
+  `check` (defaulting to `commit`) across three isolated execution branches: `check: gate` may not
+  import Typer, CLI command modules, commit-policy modules, Rich, Click, or site packages and
+  preserves the fixed dependency-free `YAGA_ACTION_RUNTIME=1` bootstrap and shared gate
+  dispatcher; `check: commit` stays on its separate dependency-free `YAGA_COMMIT_ACTION_RUNTIME=1`
+  bootstrap (importing commit modules but never Typer, commands, Codex policy, GitHub REST/token
+  code, or site packages); and installed-CLI `check` modes (`pr-review`, `pr-description`, `repo`,
+  `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`,
+  `tree`) run through `src/yaga/cli_action.py` inside a hash-locked `--no-dev` `uv` virtual
+  environment outside the checkout, rejecting unused inputs fail-closed and passing `GH_TOKEN`
+  only when live `--pr` access is requested.
 
 ## Preserve the trust boundary
 
 - Treat events, inputs, API responses, comments, reviews, reactions, statuses, and run metadata as
   untrusted until strictly parsed and bounded.
-- Keep both composite-Action import graphs dependency-free and never expose `github-token` in
-  arguments, output, status, logs, or exceptions. Keep the commit Action's pinned Python bootstrap
-  token explicitly empty.
+- Keep both stdlib Action import graphs (`YAGA_ACTION_RUNTIME=1` and
+  `YAGA_COMMIT_ACTION_RUNTIME=1`) dependency-free and never expose `github-token` in arguments,
+  output, status, logs, or exceptions. Keep the `commit` mode's pinned Python bootstrap token
+  explicitly empty.
 - Keep PR CI unprivileged. Write-capable YAGA operations run only from trusted default-branch
   `pull_request_target` or `workflow_run` workflows and never consume PR code, artifacts, or cache.
 - Treat PR CI as a quota-saving heuristic, not a security authority. Merge security also relies on

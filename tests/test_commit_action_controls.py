@@ -58,10 +58,10 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
     bash = "C:/Program Files/Git/bin/bash.exe" if sys.platform == "win32" else shutil.which("bash")
     if not bash or not Path(bash).is_file():
         pytest.skip("Bash is unavailable")
+    assert not (ROOT / "actions/commit-check/action.yml").exists()
     workspace = tmp_path / "workspace"
-    action_dir = workspace / "actions/commit-check"
-    action_dir.mkdir(parents=True)
-    shutil.copyfile(ROOT / "actions/commit-check/action.yml", action_dir / "action.yml")
+    workspace.mkdir(parents=True)
+    shutil.copyfile(ROOT / "action.yml", workspace / "action.yml")
     shutil.copytree(ROOT / "src", workspace / "src", ignore=shutil.ignore_patterns("__pycache__"))
     output = tmp_path / "output"
     environment = dict(
@@ -69,9 +69,10 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
         RUNNER_TEMP=str(tmp_path),
         GITHUB_WORKSPACE=str(workspace),
         GITHUB_OUTPUT=output.as_posix(),
-        GITHUB_ACTION_PATH=action_dir.as_posix(),
+        GITHUB_ACTION_PATH=workspace.as_posix(),
         YAGA_COMMIT_TRUSTED_CONFIG=".yaga.toml",
         YAGA_COMMIT_ACTION_RUNTIME="1",
+        YAGA_UNUSED_INPUTS="0",
         PYTHONUTF8="1",
     )
     environment.pop("YAGA_ACTION_RUNTIME", None)
@@ -84,8 +85,8 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
         text=True,
         timeout=30,
     )
-    manifest = yaml.safe_load((action_dir / "action.yml").read_text("utf-8"))
-    script = manifest["runs"]["steps"][-1]["run"]
+    manifest = yaml.safe_load((workspace / "action.yml").read_text("utf-8"))
+    script = next(step["run"] for step in manifest["runs"]["steps"] if step.get("id") == "commit")
     result = subprocess.run(
         [bash, "-c", script],
         env=environment,
