@@ -204,8 +204,10 @@ workflow annotations.
 
 ## Add checks to your workflow
 
-Once a local check works, follow the [adoption recipes](recipes.md) for hooks and CI.
-See [commit policy](commit-policy.md) for the full message and hook reference.
+Once a local check works, follow the [adoption recipes](recipes.md) for hooks and CI, or wire
+the unified [GitHub Action (`YAGA Checks`)](github-actions.md) (`uses: dariuszpanas/yaga@...`)
+into your pull-request workflows. See [commit policy](commit-policy.md) for the full message and
+hook reference.
 
 ## Install from a checkout
 

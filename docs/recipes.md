@@ -170,6 +170,32 @@ If the result is exit `2`, check the explicit source, revision availability, rep
 policy path, and output format. YAGA deliberately does not fetch, infer a branch or revision,
 merge configuration files, or treat the current working tree as a committed snapshot.
 
+## Check pull-request agent reviews and publish verdicts
+
+Use `pull-request review check` when Codex, Copilot, or Claude reviews pull requests and you want a
+head-bound check (plus optional `APPROVE` / `REQUEST_CHANGES` review submission):
+
+```toml
+# .yaga/agent-review-policy.toml
+[agent-review]
+version = 1
+required = ["codex"]
+```
+
+```bash
+yaga pull-request review check \
+  --policy .yaga/agent-review-policy.toml \
+  --pr 123 \
+  --repo OWNER/REPO \
+  --wait-seconds 480
+```
+
+Built-in `codex`, `copilot`, and `claude` presets supply default bot identities, reaction rules,
+and summary parsers without needing `[agent-review.agents]` tables unless you customize settings
+such as `check-runs` or `delay-seconds`. In GitHub Actions, run `check: pr-review` with
+`submit-review: both` from a trusted default-branch `pull_request_target` workflow (see
+[`examples/pr-review.yml`](https://github.com/dariuszpanas/yaga/blob/main/examples/pr-review.yml)).
+
 ## Integrate multiple review agents
 
 Use the Agent review policy when one pull request needs several independent lenses, such as

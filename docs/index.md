@@ -7,9 +7,9 @@ hide:
 
 ![YAGA terminal Y logo](assets/branding/isometric_terminal_y_logo_transparent.png){ width="128" height="128" }
 
-YAGA checks repository conventions locally and in CI: commit messages, pull-request descriptions,
-branch names, changes, committed files, and GitHub Actions workflows. You choose the checks and
-supply their inputs.
+YAGA checks repository conventions locally and in CI: commit messages, pull-request descriptions
+and agent reviews, branch names, changes, committed files, and GitHub Actions workflows. You
+choose the checks and supply their inputs.
 
 [Install and run your first check](getting-started.md){ .md-button .md-button--primary }
 [Find a command](commands.md){ .md-button }
@@ -31,7 +31,7 @@ to capabilities, prerequisites, and integration steps.
 | Policy discovery and configuration keys | [Configuration](configuration.md) |
 | Branch names, changes, or committed files | [Repository checks](repository-checks.md) |
 | Workflow references, permissions, or syntax | [Workflow checks](workflow-checks.md) |
-| Pull-request validation | [GitHub Actions](github-actions.md) |
+| Unified GitHub Action (`YAGA Checks`) | [GitHub Actions](github-actions.md) |
 | Description content, spelling, and template sections | [Pull-request descriptions](pull-request-descriptions.md) |
 | Pull-request review state, bot presets, and receipts | [Agent review gate](agent-review-gate.md) |
 | Selecting test suites and qualification work | [Test planning](test-planning.md) |

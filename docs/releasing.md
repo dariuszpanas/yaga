@@ -66,7 +66,9 @@ package users. Twine's metadata check does not prove remote images or links are 
    seven days, including failure evidence when available. Manual rehearsals require the same audit.
 6. Verify the PyPI project files and install `yaga-cli==0.1.0` from PyPI in a clean tool environment.
    Confirm `yaga --help` and the automatically created GitHub Release. Its wheel and source
-   archive must be the same artifacts published to PyPI. Repeat the lowest-resolved installed
+   archive must be the same artifacts published to PyPI. To publish or update the **YAGA Checks**
+   GitHub Marketplace Action listing, edit that GitHub Release in the web UI and confirm
+   **Publish this Action to the GitHub Marketplace**. Repeat the lowest-resolved installed
    smoke and audit its actual dependency pins from the public package; retain both reports.
 
 This workflow accepts final `vMAJOR.MINOR.PATCH` tags and does not publish TestPyPI packages.
