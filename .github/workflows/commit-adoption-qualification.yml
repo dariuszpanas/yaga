@@ -1,4 +1,4 @@
-name: Commit adoption qualification
+name: Action E2E Fixtures
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   controls:
-    name: Commit Action ${{ matrix.scenario }} control
+    name: Action E2E Fixture (${{ matrix.scenario }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:

@@ -47,6 +47,29 @@ make docs-serve
 Zensical's strict clean build catches broken navigation and source links without relying on stale
 build cache.
 
+## Pull-request jobs and `.yaga/` dogfooding
+
+YAGA dogfoods every policy in `.yaga/` (and `[tool.yaga.commit]` in `pyproject.toml`) through the
+root `YAGA Checks` Action (`uses: ./`) on pull requests while keeping internal Python build/test
+gates in separate named jobs:
+
+- **Marketplace Action dogfooding (`uses: ./`)**:
+  - `Commit Messages` (`commit-policy.yml`): `check: commit` against `[tool.yaga.commit]`.
+  - `YAGA Checks (branch, description, change, repo)` (`ci.yml`): `check: branch`
+    (`.yaga/branch-policy.toml`), `check: pr-description` (`.yaga/description-policy.toml`),
+    `check: change` (`.yaga/change-policy.toml`), and `check: repo` (`.yaga/checks/ci.toml`,
+    covering `mode`, `path`, `size`, `tree`, `workflow`, `workflow-security`, `workflow-lint`, and
+    `commit`).
+  - `Publish Pull Request Review` (`pr-review.yml`): trusted `check: pr-review` against
+    `.yaga/agent-review-policy.toml`.
+- **Repository engineering & fixture suites**:
+  - `Lint, Package Build & Docs`, `Python 3.12–3.15`, and `Minimum dependency security` in
+    `ci.yml`, aggregated into the single branch-ruleset gate `CI Prerequisites`.
+  - `Action E2E Fixture (<scenario>)` (`commit-adoption-qualification.yml`): synthetic pass/fail
+    fixture repositories testing `check: commit`.
+  - `Hugging Face commit quality` (`commit-quality.yml`): online and offline `commit quality`
+    cache verification.
+
 ## Change and review rules
 
 ### Keep documentation responsibilities clear

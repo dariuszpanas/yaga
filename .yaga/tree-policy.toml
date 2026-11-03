@@ -1,5 +1,10 @@
 tree-policy-version = 1
 required-paths = [
+  ".yaga/agent-review-policy.toml",
+  ".yaga/branch-policy.toml",
+  ".yaga/change-policy.toml",
+  ".yaga/checks/ci.toml",
+  ".yaga/description-policy.toml",
   ".yaga/mode-policy.toml",
   ".yaga/path-policy.toml",
   ".yaga/size-policy.toml",
@@ -7,6 +12,7 @@ required-paths = [
   "LICENSE",
   "README.md",
   "SECURITY.md",
+  "action.yml",
   "pyproject.toml",
   "uv.lock",
 ]

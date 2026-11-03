@@ -279,10 +279,28 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
             {"pattern": "docs/assets/branding/*.png", "max-blob-bytes": 2097152},
         ],
     }
+    description_policy = tomllib.loads(
+        (ROOT / ".yaga" / "description-policy.toml").read_text(encoding="utf-8")
+    )
+    assert description_policy == {
+        "description-policy-version": 1,
+        "min-words": 8,
+        "max-length": 65536,
+        "placeholders": ["TODO", "TBD", "FIXME"],
+        "require-checked-tasks": True,
+        "typos": "check",
+        "heading-min-level": 2,
+        "heading-max-length": 120,
+    }
     tree_policy = tomllib.loads((ROOT / ".yaga" / "tree-policy.toml").read_text(encoding="utf-8"))
     assert tree_policy == {
         "tree-policy-version": 1,
         "required-paths": [
+            ".yaga/agent-review-policy.toml",
+            ".yaga/branch-policy.toml",
+            ".yaga/change-policy.toml",
+            ".yaga/checks/ci.toml",
+            ".yaga/description-policy.toml",
             ".yaga/mode-policy.toml",
             ".yaga/path-policy.toml",
             ".yaga/size-policy.toml",
@@ -290,6 +308,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
             "LICENSE",
             "README.md",
             "SECURITY.md",
+            "action.yml",
             "pyproject.toml",
             "uv.lock",
         ],
@@ -314,6 +333,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
         assert actionlint_image in (ROOT / documentation).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "name: YAGA Checks (branch, description, change, repo)" in ci
+    assert "name: Lint, Package Build & Docs" in ci
     assert ci.count('version: "0.13.0"') == 3
     assert "yaga pull-request review check" not in ci
     assert "yaga --help" in ci
@@ -322,33 +343,33 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "feat(ci): exercise the installed CLI" in ci
     assert "Check pull-request branch name" in ci
     assert "Check pushed branch name" in ci
-    assert ci.count("yaga branch check") == 2
-    assert ci.count("--policy .yaga/branch-policy.toml") == 2
-    assert "YAGA_BRANCH_NAME: ${{ github.head_ref }}" in ci
-    assert "YAGA_BRANCH_NAME: ${{ github.ref_name }}" in ci
-    assert ci.count('--name "$YAGA_BRANCH_NAME"') == 2
+    assert ci.count("check: branch") == 2
+    assert ci.count("policy: .yaga/branch-policy.toml") == 2
+    assert "branch: ${{ github.head_ref }}" in ci
+    assert "branch: ${{ github.ref_name }}" in ci
+    assert "Check pull-request description" in ci
+    assert "check: pr-description" in ci
+    assert "policy: .yaga/description-policy.toml" in ci
     for command in ("tree check", "path check", "mode check", "size check"):
         assert f"yaga {command}" not in ci
     assert "pre-commit try-repo . yaga-commit-check" in ci
     assert 'test "$YAGA_PRE_COMMIT_STATUS" -eq 1' in ci
     assert "grep -F -- '[syntax.header]'" in ci
     assert "Run aggregate repository checks" in ci
-    assert "yaga repo check" in ci
-    assert "--plan .yaga/checks/ci.toml" in ci
+    assert "check: repo" in ci
+    assert "plan: .yaga/checks/ci.toml" in ci
     assert (
-        "YAGA_REPOSITORY_REVISION: ${{ github.event_name == 'pull_request' && "
+        "commit: ${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}" in ci
     )
-    assert '--commit "$YAGA_REPOSITORY_REVISION"' in ci
-    assert '--revision "$YAGA_REPOSITORY_REVISION"' in ci
-    assert '--revision "${{ github.' not in ci
+    assert (
+        "revision: ${{ github.event_name == 'pull_request' && "
+        "github.event.pull_request.head.sha || github.sha }}" in ci
+    )
     assert "Run changed-path policy" in ci
-    assert "yaga change check" in ci
-    assert "--policy .yaga/change-policy.toml" in ci
+    assert "check: change" in ci
+    assert "policy: .yaga/change-policy.toml" in ci
     assert "fetch-depth: 0" in ci
-    assert "YAGA_CHANGE_BASE" in ci
-    assert "YAGA_CHANGE_HEAD" in ci
-    assert "YAGA_CHANGE_SEPARATOR" in ci
     assert (
         "--check commit --check workflow --check workflow-security --check workflow-lint" not in ci
     )

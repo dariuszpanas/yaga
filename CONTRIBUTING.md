@@ -73,6 +73,24 @@ both platforms against the retained release wheel before allowing publication. S
 [minimum runtime qualification](docs/minimum-runtime.md) for scope and retained evidence; this
 complements the frozen-lock `make ci` and strict package build gates.
 
+## Repository policies and GitHub Actions map
+
+Every policy under `.yaga/` (plus `[tool.yaga.commit]` in `pyproject.toml`) runs on pull requests
+through the root **YAGA Checks** composite Action (`uses: ./`), separated from internal Python
+engineering and test-fixture jobs so status checks are immediately self-explanatory:
+
+| Pull-request check job | Workflow | Role | Policies / scope exercised |
+| --- | --- | --- | --- |
+| `Commit Messages` | `.github/workflows/commit-policy.yml` | **Marketplace Action dogfooding** (`check: commit`) | `[tool.yaga.commit]` in `pyproject.toml` across PR title and branch commits |
+| `YAGA Checks (branch, description, change, repo)` | `.github/workflows/ci.yml` | **Marketplace Action dogfooding** (`check: branch`, `pr-description`, `change`, `repo`) | `.yaga/branch-policy.toml`, `.yaga/description-policy.toml`, `.yaga/change-policy.toml`, and `.yaga/checks/ci.toml` (`commit`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) |
+| `Publish Pull Request Review` | `.github/workflows/pr-review.yml` | **Marketplace Action dogfooding** (`check: pr-review`, trusted `pull_request_target` / `workflow_run`) | `.yaga/agent-review-policy.toml` (waits for head-bound Codex review and submits `APPROVE` / `REQUEST_CHANGES`) |
+| `Lint, Package Build & Docs` | `.github/workflows/ci.yml` | **Repository engineering gate** | `ruff`, `ty`, `pre-commit` hook smoke, `actionlint` integration tests, strict wheel/sdist build (`scripts/check_build.py`), Zensical docs (`scripts/check_docs.py`, `scripts/check_description.py`), and `check: gate` stdlib wiring smoke |
+| `Python 3.12..3.15 on ubuntu/windows` | `.github/workflows/ci.yml` | **Repository test matrix** | Full `pytest` suite against non-editable installs |
+| `Minimum dependency security on ubuntu/windows` | `.github/workflows/ci.yml` | **Supply-chain & floor qualification** | Lowest-resolved runtime dependency smoke and `pip-audit` (`scripts/check_minimum_runtime.py`) |
+| `CI Prerequisites` | `.github/workflows/ci.yml` | **Required branch-ruleset aggregator** | Requires `yaga-checks`, `lint-and-build`, `test`, and `minimum-runtime` to all succeed so branch protection only needs `CI Prerequisites` + `Commit Messages` |
+| `Action E2E Fixture (<scenario>)` | `.github/workflows/commit-adoption-qualification.yml` | **Synthetic Action fixture matrix** | Exercises `uses: ./` (`check: commit`) against disposable pass/fail/Dependabot test repositories |
+| `Hugging Face commit quality` | `.github/workflows/commit-quality.yml` | **Optional ML feature smoke** | Online + offline cache replay for `yaga commit quality` |
+
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `mode`,
