@@ -132,10 +132,13 @@ def _render_frame(
     for index, kind in enumerate(kinds):
         spec = POLICY_SPECS[kind]
         pointer = f"{cyan}>{reset}" if index == cursor else " "
-        already_exists = existing.get(kind) is not None
-        if already_exists:
+        existing_path = existing.get(kind)
+        if existing_path is not None:
+            existing_label = (
+                "pyproject.toml" if existing_path.name == "pyproject.toml" else spec.default_relpath
+            )
             checkbox = f"{dim}[-]{reset}"
-            status = f"{dim}(already exists: {spec.default_relpath}){reset}"
+            status = f"{dim}(already exists: {existing_label}){reset}"
             label = f"{dim}{kind.value:<13}{reset}"
         elif kind in selected:
             checkbox = f"{green}[x]{reset}"
