@@ -175,6 +175,19 @@ Policy discovery selects one nearest `.yaga.toml` or `pyproject.toml`; use `--co
 source must be explicit. Use `yaga config init --repo . --dry-run` when a bootstrap or CI
 step should validate and inspect the starter policy without writing it.
 
+To scaffold multiple starter policies under `.yaga/` (branch, change, description, repository plan,
+committed-tree, agent-review, or test policies) and audit every policy file in your repository
+against YAGA's versioned schemas:
+
+```bash
+yaga policy init --repo .
+yaga policy check --repo . --strict
+```
+
+In an interactive terminal with no policy names or `--all`, `yaga policy init` opens a checkbox
+selector; in scripts or CI, pass explicit policy names or `--all` (plus `--skip-existing` or
+`--dry-run` as needed). See the [command reference](commands.md) for all 11 supported policy kinds.
+
 ## Check a commit
 
 With no source option, `commit check` checks `HEAD`. Otherwise select exactly one source:

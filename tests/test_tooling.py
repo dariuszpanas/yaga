@@ -154,6 +154,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
 
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert project["project"]["name"] == "yaga-cli"
+    assert project["project"]["version"] == VERSION
     assert project["project"]["scripts"] == {"yaga": "yaga.cli:main"}
     assert project["project"]["dependencies"] == [
         "pydantic>=2.14.2,<3",
@@ -203,6 +204,7 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     assert "DOCS_ADDR ?= localhost:9000" in makefile
     assert 'uv run zensical serve --dev-addr "$(DOCS_ADDR)"' in makefile
     assert "uv run pre-commit validate-manifest .pre-commit-hooks.yaml" in makefile
+    assert "uv run yaga policy check --strict" in makefile
     assert "uv run yaga workflow lint .github/workflows examples" in makefile
     assert (
         "uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD"
@@ -338,9 +340,21 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     commit_policy_wf = (ROOT / ".github" / "workflows" / "commit-policy.yml").read_text(
         encoding="utf-8"
     )
-    assert "name: YAGA Checks (branch, change, repo)" in ci
+    assert "name: YAGA Checks (branch, change, policy, repo)" in ci
     assert "name: Lint, Package Build & Docs" in ci
     assert ci.count('version: "0.13.0"') == 3
+    assert "Audit YAGA policy schemas" in ci
+    assert "check: policy" in ci
+    for workflow_name, expected_uv_count in (
+        ("release.yml", 2),
+        ("docs.yml", 1),
+        ("commit-quality.yml", 1),
+    ):
+        workflow_source = (ROOT / ".github" / "workflows" / workflow_name).read_text(
+            encoding="utf-8"
+        )
+        assert workflow_source.count('version: "0.13.0"') == expected_uv_count
+        assert 'version: "0.12.7"' not in workflow_source
     assert "yaga pull-request review check" not in ci
     assert "yaga --help" in ci
     assert "python -m yaga --help" in ci
@@ -507,6 +521,8 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     ):
         assert f'"yaga/test_planning/{module}.py"' in build_gate
     assert 'operation="test policy check"' in build_gate
+    assert 'operation="policy init"' in build_gate
+    assert 'operation="policy check"' in build_gate
     assert 'operation=f"test plan {profile}"' in build_gate
     assert "create_handoff(planned, registry, **expected)" in build_gate
     assert '"rejected_handoffs": [True, True, True]' in build_gate
@@ -749,6 +765,39 @@ def test_root_action_marketplace_metadata_and_banner_sanitization() -> None:
     assert f"> version:  {VERSION}" in plain.stdout
     assert "> check:    gate (prepare)" in plain.stdout
     assert "\x1b[" not in plain.stdout
+
+    for mode in (
+        "commit",
+        "policy",
+        "pr-review",
+        "pr-description",
+        "repo",
+        "branch",
+        "change",
+        "workflow",
+        "workflow-security",
+        "workflow-lint",
+        "mode",
+        "path",
+        "size",
+        "tree",
+    ):
+        mode_run = subprocess.run(
+            [bash, "-c", banner_step["run"]],
+            env={
+                **os.environ,
+                "NO_COLOR": "1",
+                "YAGA_BANNER_CHECK": mode,
+                "YAGA_BANNER_OPERATION": "",
+            },
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+            timeout=15,
+        )
+        assert f"> check:    {mode}" in mode_run.stdout
+        assert "> check:    unsupported" not in mode_run.stdout
 
     colored = subprocess.run(
         [bash, "-c", banner_step["run"]],

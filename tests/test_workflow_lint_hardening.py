@@ -1152,13 +1152,24 @@ def test_volume_cleanup_runs_after_primary_error_and_can_override_success(
         lint.lint_workflows(tmp_path)
 
 
-def test_bounded_process_terminates_spawned_descendants(tmp_path: Path) -> None:
+@pytest.mark.parametrize("startup_delay", [0.0, 0.8])
+def test_bounded_process_terminates_spawned_descendants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    startup_delay: float,
+) -> None:
     started = tmp_path / "started"
+    armed = tmp_path / "armed"
     survived = tmp_path / "survived"
     child = (
         "from pathlib import Path; import time; "
+        f"time.sleep({startup_delay!r}); "
         f"Path({str(started)!r}).write_text('started'); "
-        "time.sleep(0.6); "
+        f"armed = Path({str(armed)!r}); "
+        "deadline = time.monotonic() + 10; "
+        "\nwhile not armed.exists() and time.monotonic() < deadline: time.sleep(0.01); "
+        "\nif not armed.exists(): raise SystemExit(2)"
+        "\ntime.sleep(0.9); "
         f"Path({str(survived)!r}).write_text('survived')"
     )
     parent = (
@@ -1166,6 +1177,30 @@ def test_bounded_process_terminates_spawned_descendants(tmp_path: Path) -> None:
         f"subprocess.Popen([sys.executable, '-c', {child!r}]); "
         "time.sleep(30)"
     )
+
+    real_spawn_bounded_process = runtime._spawn_bounded_process
+
+    def ready_spawn_bounded_process(
+        command: list[str],
+        *,
+        cwd: Path,
+        environment: dict[str, str] | None,
+    ) -> runtime._ProcessTree:
+        tree = real_spawn_bounded_process(command, cwd=cwd, environment=environment)
+        startup_deadline = time.monotonic() + 5.0
+        while (
+            tree.process.poll() is None
+            and not started.exists()
+            and time.monotonic() < startup_deadline
+        ):
+            time.sleep(0.01)
+        if tree.process.poll() is not None or not started.exists():
+            tree.terminate()
+            raise OSError("test setup did not establish a ready descendant before timeout")
+        armed.write_text("armed")
+        return tree
+
+    monkeypatch.setattr(runtime, "_spawn_bounded_process", ready_spawn_bounded_process)
 
     result = lint._run_bounded_process(
         [sys.executable, "-c", parent],
@@ -1175,7 +1210,7 @@ def test_bounded_process_terminates_spawned_descendants(tmp_path: Path) -> None:
         stdout_limit=128,
         stderr_limit=128,
     )
-    time.sleep(0.8)
+    time.sleep(0.6)
 
     assert result.timed_out is True
     assert started.exists()
