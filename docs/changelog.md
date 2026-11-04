@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-03
+
 ### Added
 
 - Add `pull-request review check` for offline review-state snapshots (`--file`) and live GitHub

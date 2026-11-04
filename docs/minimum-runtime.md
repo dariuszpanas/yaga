@@ -39,7 +39,7 @@ To qualify an already-built wheel without rebuilding it, pass its exact path:
 
 ```bash
 uv run --locked --python 3.12 python scripts/check_minimum_runtime.py \
-  --wheel dist/yaga_cli-0.4.1-py3-none-any.whl --report minimum-runtime.json
+  --wheel dist/yaga_cli-0.5.0-py3-none-any.whl --report minimum-runtime.json
 ```
 
 Use the filename of the version being qualified. The receipt binds the selected wheel's SHA-256

@@ -3,8 +3,8 @@ revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'linux'",
-    "python_full_version < '3.15' and sys_platform == 'linux'",
     "python_full_version >= '3.15' and sys_platform != 'linux'",
+    "python_full_version < '3.15' and sys_platform == 'linux'",
     "python_full_version < '3.15' and sys_platform != 'linux'",
 ]
 
@@ -1775,7 +1775,7 @@ wheels = [
 
 [[package]]
 name = "yaga-cli"
-version = "0.4.1"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },

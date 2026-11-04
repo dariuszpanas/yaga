@@ -270,7 +270,7 @@ runs:
         printf '  %s\n' "${G}${L10}${R}    ${L}--------------------------------------${R}"
         printf '  %s\n' "${G}${L11}${R}"
         printf '  %s\n' "${G}${L12}${R}    ${G}>${R} ${D}check:   ${R} ${B}${YAGA_MODE}${R}"
-        printf '  %s\n' "${G}${L13}${R}    ${G}>${R} ${D}version:  0.4.1${R}"
+        printf '  %s\n' "${G}${L13}${R}    ${G}>${R} ${D}version:  0.5.0${R}"
         printf '  %s\n' "${G}${L14}${R}    ${G}>${R} ${D}docs:     https://dariuszpanas.github.io/yaga/${R}"
         printf '  %s\n' "${G}${L15}${R}"
         printf '  %s\n' "${G}${L16}${R}    ${G}Automate the next gate.${R}"
@@ -310,7 +310,7 @@ runs:
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
           {
             printf '%s\n\n' '## `>_` YAGA Checks · `action`'
-            printf '%s\n' '**Status:** Error (exit `2`) · **Version:** `0.4.1` · **Summary:** YAGA input error: unsupported check mode'
+            printf '%s\n' '**Status:** Error (exit `2`) · **Version:** `0.5.0` · **Summary:** YAGA input error: unsupported check mode'
           } >> "$GITHUB_STEP_SUMMARY"
         fi
         exit 2
@@ -399,7 +399,7 @@ runs:
           else
             {
               printf '%s\n\n' '## `>_` YAGA Checks · `commit`'
-              printf '**Status:** Error (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_STATUS"
+              printf '**Status:** Error (exit `%s`) · **Version:** `0.5.0`\n\n' "$YAGA_STATUS"
               printf '%s\n' '<pre>'
               { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
                 sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
@@ -454,7 +454,7 @@ runs:
           esac
           {
             printf '%s\n\n' '## `>_` YAGA Checks · `gate`'
-            printf '**Status:** %s (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
+            printf '**Status:** %s (exit `%s`) · **Version:** `0.5.0`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
             printf '%s\n' '<pre>'
             { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
               sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
@@ -539,7 +539,7 @@ runs:
           else
             {
               printf '## `>_` YAGA Checks · `%s`\n\n' "$YAGA_INPUT_CHECK"
-              printf '**Status:** Error (exit `%s`) · **Version:** `0.4.1`\n\n' "$YAGA_STATUS"
+              printf '**Status:** Error (exit `%s`) · **Version:** `0.5.0`\n\n' "$YAGA_STATUS"
               printf '%s\n' '<pre>'
               { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
                 sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
