@@ -61,8 +61,8 @@ same selection; branch and change checks remain separate commands.
 
 For GitHub pull requests, choose between running `yaga` directly and the unified
 [`YAGA Checks` GitHub Action](github-actions.md) (`uses: dariuszpanas/yaga@...`), which supports
-event-aware `commit` validation (including PR titles) as well as `pr-description`, `pr-review`,
-`repo`, `branch`, `change`, `workflow*`, `mode`, `path`, `size`, and `tree` checks.
+event-aware `commit` validation (including PR titles) as well as `policy`, `pr-description`,
+`pr-review`, `repo`, `branch`, `change`, `workflow*`, `mode`, `path`, `size`, and `tree` checks.
 Use an unprivileged PR workflow with read-only permissions for ordinary quality checks; reserve
 `pull_request_target` / `workflow_run` only when opting into trusted commit policy or
 `check: pr-review` review submission.

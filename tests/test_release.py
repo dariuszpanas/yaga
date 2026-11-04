@@ -9,7 +9,22 @@ from scripts.check_release import release_notes, validate_release
 
 
 def test_release_accepts_exact_version_and_date() -> None:
-    validate_release("v0.1.0", "0.1.0", "## [Unreleased]\n\n## [0.1.0] - 2026-09-13\n")
+    validate_release(
+        "v0.1.0",
+        "0.1.0",
+        "## [Unreleased]\n\n## [0.1.0] - 2026-09-13\n",
+        runtime_version="0.1.0",
+    )
+
+
+def test_release_rejects_mismatched_runtime_version() -> None:
+    with pytest.raises(ValueError, match="runtime VERSION constant"):
+        validate_release(
+            "v0.1.0",
+            "0.1.0",
+            "## [Unreleased]\n\n## [0.1.0] - 2026-09-13\n",
+            runtime_version="0.0.9",
+        )
 
 
 @pytest.mark.parametrize(

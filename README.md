@@ -35,10 +35,13 @@ is **`yaga`**; the PyPI distribution named `yaga` is an unrelated project):
 
 ```bash
 uv tool install --python 3.12 yaga-cli
-yaga config init --repo .
+yaga policy init --repo .
+yaga policy check --repo .
 yaga commit check
 ```
 
+Use `yaga policy init --repo .` interactively (or pass policy names or `--all`) to scaffold starter
+policies under `.yaga/`, or `yaga config init --repo .` for a standalone `.yaga.toml` commit policy.
 See [Get started](https://dariuszpanas.github.io/yaga/getting-started.html) for convenience
 installers, `pipx`, virtual environments, and `pre-commit` setup. The core CLI is tested on
 Python 3.12 through 3.15.
@@ -46,7 +49,7 @@ Python 3.12 through 3.15.
 ### GitHub Action (`YAGA Checks`)
 
 Run YAGA in GitHub Actions with `uses: dariuszpanas/yaga@<commit-sha>` (published on GitHub
-Marketplace as **YAGA Checks**). `check` defaults to `commit` and supports `pr-review`,
+Marketplace as **YAGA Checks**). `check` defaults to `commit` and supports `policy`, `pr-review`,
 `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`,
 `mode`, `path`, `size`, `tree`, and `gate`:
 

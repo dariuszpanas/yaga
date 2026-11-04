@@ -82,7 +82,7 @@ engineering and test-fixture jobs so status checks are immediately self-explanat
 | Pull-request check job | Workflow | Role | Policies / scope exercised |
 | --- | --- | --- | --- |
 | `Commit Messages` | `.github/workflows/commit-policy.yml` | **Marketplace Action dogfooding** (`check: commit`, `pr-description`) | `[tool.yaga.commit]` in `pyproject.toml` (PR title + branch commits) and `.yaga/description-policy.toml` (PR body, rechecked on `edited`) |
-| `YAGA Checks (branch, change, repo)` | `.github/workflows/ci.yml` | **Marketplace Action dogfooding** (`check: branch`, `change`, `repo`) | `.yaga/branch-policy.toml`, `.yaga/change-policy.toml`, and `.yaga/checks/ci.toml` (`commit`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) |
+| `YAGA Checks (branch, change, policy, repo)` | `.github/workflows/ci.yml` | **Marketplace Action dogfooding** (`check: branch`, `change`, `policy`, `repo`) | `.yaga/branch-policy.toml`, `.yaga/change-policy.toml`, versioned schema audit across `.yaga/` and `pyproject.toml`, and `.yaga/checks/ci.toml` (`commit`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) |
 | `Publish Pull Request Review` | `.github/workflows/pr-review.yml` | **Marketplace Action dogfooding** (`check: pr-review`, trusted `pull_request_target` / `workflow_run`) | `.yaga/agent-review-policy.toml` (waits for head-bound Codex review and submits `APPROVE` / `REQUEST_CHANGES`) |
 | `Lint, Package Build & Docs` | `.github/workflows/ci.yml` | **Repository engineering gate** | `ruff`, `ty`, `pre-commit` hook smoke, `actionlint` integration tests, strict wheel/sdist build (`scripts/check_build.py`), Zensical docs (`scripts/check_docs.py`, `scripts/check_description.py`), and `check: gate` stdlib wiring smoke |
 | `Python 3.12..3.15 on ubuntu/windows` | `.github/workflows/ci.yml` | **Repository test matrix** | Full `pytest` suite against non-editable installs |
@@ -94,7 +94,7 @@ engineering and test-fixture jobs so status checks are immediately self-explanat
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `mode`,
-`path`, `pull-request`, `repo`, `self`, `size`, `test`, `tree`, `workflow`, and `gate`.
+`path`, `policy`, `pull-request`, `repo`, `self`, `size`, `test`, `tree`, `workflow`, and `gate`.
 Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
 configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
 `src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.

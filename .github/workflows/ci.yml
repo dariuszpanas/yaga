@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   yaga-checks:
-    name: YAGA Checks (branch, change, repo)
+    name: YAGA Checks (branch, change, policy, repo)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

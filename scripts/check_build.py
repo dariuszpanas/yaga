@@ -862,6 +862,66 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
     exercise_installed_runtime(environment, output)
 
 
+def exercise_installed_policy_commands(
+    executable: Path, *, consumer: Path, env: dict[str, str]
+) -> None:
+    """Exercise versioned policy initialization and strict schema auditing in the wheel."""
+    policy_repo = consumer.parent / "policy-repo"
+    policy_repo.mkdir()
+    initialized = run_bounded(
+        [
+            str(executable),
+            "policy",
+            "init",
+            "--repo",
+            str(policy_repo),
+            "--all",
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=env,
+    )
+    init_document = successful_json(initialized, operation="policy init")
+    if not (
+        init_document.get("schema_version") == 1
+        and init_document.get("kind") == "policy_init"
+        and init_document.get("dry_run") is False
+        and init_document.get("created") == 11
+        and init_document.get("previewed") == 0
+        and init_document.get("skipped") == 0
+    ):
+        raise SystemExit("installed wheel CLI policy init emitted the wrong report contract")
+
+    checked = run_bounded(
+        [
+            str(executable),
+            "policy",
+            "check",
+            "--repo",
+            str(policy_repo),
+            "--strict",
+            "--format",
+            "json",
+        ],
+        cwd=consumer,
+        env=env,
+    )
+    check_document = successful_json(checked, operation="policy check")
+    if not (
+        check_document.get("schema_version") == 1
+        and check_document.get("kind") == "policy_check"
+        and check_document.get("status") == "passed"
+        and check_document.get("valid") is True
+        and check_document.get("strict") is True
+        and check_document.get("checked") == 11
+        and check_document.get("current") == 11
+        and check_document.get("deprecated") == 0
+        and check_document.get("invalid") == 0
+    ):
+        raise SystemExit("installed wheel CLI policy check emitted the wrong report contract")
+
+
 def exercise_installed_runtime(environment: Path, output: Path) -> None:
     """Exercise the same installed CLI contracts with an already provisioned runtime."""
     consumer = output / "consumer"
@@ -893,6 +953,7 @@ def exercise_installed_runtime(environment: Path, output: Path) -> None:
     child_environment["PYTHONNOUSERSITE"] = "1"
     child_environment["PYTHONSAFEPATH"] = "1"
     exercise_installed_description(executable, consumer=consumer, env=child_environment)
+    exercise_installed_policy_commands(executable, consumer=consumer, env=child_environment)
     exercise_installed_remote_description(python, consumer=consumer, env=child_environment)
     exercise_installed_test_planning(python, consumer=consumer, env=child_environment)
     test_policy = exercise_installed_test_policy(

@@ -205,7 +205,7 @@ runs:
         set -euo pipefail
         unset GITHUB_TOKEN GH_TOKEN
         case "${YAGA_BANNER_CHECK:-}" in
-          commit|pr-review|pr-description|repo|branch|change|workflow|workflow-security|workflow-lint|mode|path|size|tree)
+          commit|policy|pr-review|pr-description|repo|branch|change|workflow|workflow-security|workflow-lint|mode|path|size|tree)
             YAGA_MODE="$YAGA_BANNER_CHECK"
             ;;
           gate)

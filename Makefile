@@ -23,6 +23,7 @@ check:
 	uv run ruff format --check .
 	uv run ty check
 	uv run pre-commit validate-manifest .pre-commit-hooks.yaml
+	uv run yaga policy check --strict
 	uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD
 	uv run yaga change check --policy .yaga/change-policy.toml --range "$(CHANGE_RANGE)"
 	bash -n scripts/composite_smoke_python

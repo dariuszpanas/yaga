@@ -9,18 +9,34 @@ import tomllib
 from pathlib import Path
 
 
-def validate_release(tag: str, version: str, changelog: str) -> None:
+def validate_release(
+    tag: str,
+    version: str,
+    changelog: str,
+    *,
+    runtime_version: str | None = None,
+) -> None:
     """Reject mismatched versions and undated or ambiguous release headings."""
     if not re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag):
         raise ValueError("release tag must have the form vMAJOR.MINOR.PATCH")
     if tag != f"v{version}":
         raise ValueError("release tag does not match the package version")
+    if runtime_version is not None and runtime_version != version:
+        raise ValueError("runtime VERSION constant does not match the package version")
     dates = re.findall(
         rf"^## \[{re.escape(version)}\] - (\d{{4}}-\d{{2}}-\d{{2}})$", changelog, re.M
     )
     if len(dates) != 1:
         raise ValueError("release requires exactly one dated changelog heading")
     datetime.date.fromisoformat(dates[0])
+
+
+def _read_runtime_version(root: Path) -> str:
+    source = (root / "src/yaga/version_requirement.py").read_text(encoding="utf-8")
+    matches = re.findall(r'^VERSION\s*=\s*"([^"]+)"$', source, re.M)
+    if len(matches) != 1:
+        raise ValueError("src/yaga/version_requirement.py must define exactly one VERSION string")
+    return matches[0]
 
 
 def release_notes(version: str, changelog: str) -> str:
@@ -44,7 +60,12 @@ def main() -> None:
     root = Path(__file__).resolve().parents[1]
     project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     changelog = (root / "docs/changelog.md").read_text("utf-8")
-    validate_release(args.tag or f"v{project['version']}", project["version"], changelog)
+    validate_release(
+        args.tag or f"v{project['version']}",
+        project["version"],
+        changelog,
+        runtime_version=_read_runtime_version(root),
+    )
     if args.notes_file is not None:
         args.notes_file.write_text(release_notes(project["version"], changelog), encoding="utf-8")
 
