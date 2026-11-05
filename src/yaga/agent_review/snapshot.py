@@ -11,7 +11,7 @@ from typing import Any
 
 from yaga.agent_review.evaluation import LensOutcome, ReviewAggregate
 from yaga.agent_review.plan import build_plan
-from yaga.agent_review.policy import AgentReviewPolicy, ReviewLens
+from yaga.agent_review.policy import AgentReviewPolicy, BotIdentity, ReviewLens
 from yaga.agent_review.results import AgentReviewResults, LensResult, evaluate_results
 from yaga.errors import ConfigurationError, InputError
 from yaga.files import read_file_prefix
@@ -47,6 +47,18 @@ _CHECK_RUN_CONCLUSIONS = frozenset(
     }
 )
 _CODEX_FINDING_BADGE = re.compile(r"!\[P[0-3]\s+Badge\]", re.IGNORECASE)
+_COPILOT_UNABLE_TO_REVIEW = re.compile(
+    r"\bcopilot\s+(?:encountered\s+an\s+error\s+and\s+)?was\s+unable\s+to\s+review\s+this\s+pull\s+request\b",
+    re.IGNORECASE,
+)
+_COPILOT_CHANGES_RECOMMENDED = re.compile(
+    r"(?m)^###[ \t]+(?:\S+[ \t]+)?Changes[ \t]+recommended[ \t]*\r?$",
+    re.IGNORECASE,
+)
+_COPILOT_APPROVAL_RECOMMENDED = re.compile(
+    r"<!--\s*ccr-overview-v\d+\s*-->[\s\S]*?(?m:^###[ \t]+(?:\S+[ \t]+)?Approval[ \t]+recommended[ \t]*\r?$)",
+    re.IGNORECASE,
+)
 _CLEAN_CODEX_COMMENT = re.compile(
     r"(?:agent|codex)\s+review:\s*didn['\u2019]t\s+find\s+any\s+major\s+issues\.",
     re.IGNORECASE,
@@ -76,6 +88,7 @@ _ROOT_KEYS = frozenset(
         "issue_comments",
         "reactions",
         "check_runs",
+        "requested_reviewers",
     }
 )
 _REVIEW_KEYS = frozenset(
@@ -97,6 +110,7 @@ _ISSUE_COMMENT_KEYS = frozenset(
     {"id", "author_login", "author_id", "app_id", "created_at", "updated_at", "body"}
 )
 _REACTION_KEYS = frozenset({"id", "author_login", "author_id", "content", "created_at"})
+_REQUESTED_REVIEWER_KEYS = frozenset({"author_login", "author_id"})
 _CHECK_RUN_KEYS = frozenset(
     {
         "id",
@@ -171,6 +185,14 @@ class PullRequestReactionRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class PullRequestRequestedReviewerRecord:
+    """One pending pull-request reviewer entry from a snapshot."""
+
+    author_login: str
+    author_id: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class PullRequestCheckRunRecord:
     """One head-commit check-run entry from a snapshot."""
 
@@ -201,6 +223,7 @@ class PullRequestReviewSnapshot:
     issue_comments: tuple[PullRequestIssueCommentRecord, ...] = ()
     reactions: tuple[PullRequestReactionRecord, ...] = ()
     check_runs: tuple[PullRequestCheckRunRecord, ...] = ()
+    requested_reviewers: tuple[PullRequestRequestedReviewerRecord, ...] = ()
     plan_digest: str | None = None
 
 
@@ -276,6 +299,9 @@ def parse_pull_request_snapshot(
     issue_comments = _parse_issue_comments(document.get("issue_comments", []), source)
     reactions = _parse_reactions(document.get("reactions", []), source)
     check_runs = _parse_check_runs(document.get("check_runs", []), source)
+    requested_reviewers = _parse_requested_reviewers(
+        document.get("requested_reviewers", []), source
+    )
     return PullRequestReviewSnapshot(
         number=number,
         head_sha=head_sha,
@@ -289,6 +315,7 @@ def parse_pull_request_snapshot(
         issue_comments=issue_comments,
         reactions=reactions,
         check_runs=check_runs,
+        requested_reviewers=requested_reviewers,
         plan_digest=plan_digest,
     )
 
@@ -311,14 +338,19 @@ def evaluate_pull_request_snapshot(
     seen_bots: dict[str, str] = {}
     for lens in policy.lenses:
         bot = lens.resolve_bot()
-        bot_key = bot.bot_login.casefold()
-        if bot_key in seen_bots:
-            raise ConfigurationError(
-                f"Agent review lenses {seen_bots[bot_key]} and {lens.name} resolve to "
-                f"the same bot-login ({bot.bot_login}); pull-request snapshot evaluation "
-                "requires distinct bot identities per lens"
-            )
-        seen_bots[bot_key] = lens.name
+        bot_keys = {
+            bot.bot_login.casefold(),
+            *(alias.casefold() for alias in bot.bot_login_aliases),
+        }
+        for bot_key in sorted(bot_keys):
+            if bot_key in seen_bots:
+                raise ConfigurationError(
+                    f"Agent review lenses {seen_bots[bot_key]} and {lens.name} resolve to "
+                    f"the same bot-login ({bot.bot_login}); pull-request snapshot evaluation "
+                    "requires distinct bot identities per lens"
+                )
+        for bot_key in bot_keys:
+            seen_bots[bot_key] = lens.name
     lens_results = tuple(_evaluate_lens(lens, snapshot) for lens in policy.lenses)
     results = AgentReviewResults(
         version=policy.version,
@@ -331,12 +363,11 @@ def evaluate_pull_request_snapshot(
 
 def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> LensResult:
     bot = lens.resolve_bot()
-    bot_key = bot.bot_login.casefold()
     short_head = snapshot.head_sha[:12]
 
     matched_reviews: list[PullRequestReviewRecord] = []
     for review in snapshot.reviews:
-        if review.author_login.casefold() != bot_key:
+        if not _matches_bot_login(review.author_login, bot):
             continue
         _verify_user_id(review.author_id, bot.bot_user_id, bot.bot_login, "review")
         if review.state in {"DISMISSED", "PENDING"}:
@@ -372,7 +403,7 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
 
     current_inline_comments: list[PullRequestReviewCommentRecord] = []
     for comment in snapshot.review_comments:
-        if comment.author_login.casefold() != bot_key:
+        if not _matches_bot_login(comment.author_login, bot):
             continue
         _verify_user_id(comment.author_id, bot.bot_user_id, bot.bot_login, "review comment")
         if comment.pull_request_review_id in stale_review_ids:
@@ -395,7 +426,7 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
     current_codex_states: list[_CodexCommentState] = []
     stale_codex_states: list[_CodexCommentState] = []
     for issue_comment in snapshot.issue_comments:
-        if issue_comment.author_login.casefold() != bot_key:
+        if not _matches_bot_login(issue_comment.author_login, bot):
             continue
         _verify_user_id(issue_comment.author_id, bot.bot_user_id, bot.bot_login, "issue comment")
         if bot.bot_app_id is not None and issue_comment.app_id != bot.bot_app_id:
@@ -463,10 +494,17 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
 
     matched_reactions: list[PullRequestReactionRecord] = []
     for reaction in snapshot.reactions:
-        if reaction.author_login.casefold() != bot_key:
+        if not _matches_bot_login(reaction.author_login, bot):
             continue
         _verify_user_id(reaction.author_id, bot.bot_user_id, bot.bot_login, "reaction")
         matched_reactions.append(reaction)
+
+    is_requested_reviewer = False
+    for reviewer in snapshot.requested_reviewers:
+        if not _matches_bot_login(reviewer.author_login, bot):
+            continue
+        _verify_user_id(reviewer.author_id, bot.bot_user_id, bot.bot_login, "requested reviewer")
+        is_requested_reviewer = True
 
     failed_check_runs: list[tuple[str, str]] = []
     in_progress_check_runs: list[tuple[str, str]] = []
@@ -641,6 +679,41 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
         if comment.pull_request_review_id is not None
     }
 
+    if is_requested_reviewer:
+        return LensResult(
+            lens=lens.name,
+            outcome=LensOutcome.PENDING,
+            summary=f"{bot.bot_login} review is in progress (requested) for head {short_head}",
+        )
+
+    badge_finding_times = [
+        review.submitted_at
+        for review in current_reviews
+        if review.state == "COMMENTED"
+        and review.submitted_at is not None
+        and _has_review_finding_marker(review.body)
+    ]
+    latest_badge_time = max(badge_finding_times, default=None)
+    copilot_approval_times = [
+        review.submitted_at
+        for review in current_reviews
+        if review.state == "COMMENTED"
+        and review.submitted_at is not None
+        and review.review_id not in review_ids_with_inline_comments
+        and not _is_unable_to_review_body(review.body)
+        and not _has_review_finding_marker(review.body)
+        and _COPILOT_APPROVAL_RECOMMENDED.search(review.body) is not None
+    ]
+    latest_copilot_approval_time = max(copilot_approval_times, default=None)
+    has_active_copilot_approval = (
+        latest_copilot_approval_time is not None
+        and (
+            latest_changes_requested_time is None
+            or latest_copilot_approval_time > latest_changes_requested_time
+        )
+        and (latest_badge_time is None or latest_copilot_approval_time > latest_badge_time)
+    )
+
     if current_inline_comments:
         latest_inline_time = max(
             max(
@@ -650,10 +723,15 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
             for comment in current_inline_comments
         )
         cleared_by_approval = has_active_approval and latest_approval_time > latest_inline_time
+        cleared_by_copilot_overview = (
+            has_active_copilot_approval
+            and latest_copilot_approval_time is not None
+            and latest_copilot_approval_time > latest_inline_time
+        )
         cleared_by_summary = (
             has_active_codex_resolution and latest_codex_passed_time >= latest_inline_time
         )
-        if not (cleared_by_approval or cleared_by_summary):
+        if not (cleared_by_approval or cleared_by_copilot_overview or cleared_by_summary):
             return LensResult(
                 lens=lens.name,
                 outcome=LensOutcome.FAILED,
@@ -670,20 +748,17 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
             summary=f"{bot.bot_login} requested changes on head {short_head}",
         )
 
-    badge_finding_times = [
-        review.submitted_at
-        for review in current_reviews
-        if review.state == "COMMENTED"
-        and review.submitted_at is not None
-        and _CODEX_FINDING_BADGE.search(review.body) is not None
-    ]
-    if badge_finding_times:
-        latest_badge_time = max(badge_finding_times)
+    if latest_badge_time is not None:
         cleared_by_approval = has_active_approval and latest_approval_time > latest_badge_time
+        cleared_by_copilot_overview = (
+            has_active_copilot_approval
+            and latest_copilot_approval_time is not None
+            and latest_copilot_approval_time > latest_badge_time
+        )
         cleared_by_summary = (
             has_active_codex_resolution and latest_codex_passed_time >= latest_badge_time
         )
-        if not (cleared_by_approval or cleared_by_summary):
+        if not (cleared_by_approval or cleared_by_copilot_overview or cleared_by_summary):
             return LensResult(
                 lens=lens.name,
                 outcome=LensOutcome.FAILED,
@@ -761,6 +836,14 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
         if codex_passed_states
         else None
     )
+    unable_review_times = [
+        review.submitted_at
+        for review in current_reviews
+        if review.state == "COMMENTED"
+        and review.submitted_at is not None
+        and _is_unable_to_review_body(review.body)
+    ]
+    latest_unable_time = max(unable_review_times, default=None)
     clean_reviews = [
         review
         for review in current_reviews
@@ -768,7 +851,8 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
         or (
             review.state == "COMMENTED"
             and review.review_id not in review_ids_with_inline_comments
-            and _CODEX_FINDING_BADGE.search(review.body) is None
+            and not _has_review_finding_marker(review.body)
+            and not _is_unable_to_review_body(review.body)
         )
     ]
     latest_review = clean_reviews[-1] if clean_reviews else None
@@ -797,6 +881,22 @@ def _evaluate_lens(lens: ReviewLens, snapshot: PullRequestReviewSnapshot) -> Len
         if run_time is not None:
             completion_times.append(run_time)
     latest_completion_time = max(completion_times, default=None)
+
+    if latest_unable_time is not None and (
+        latest_completion_time is None or latest_unable_time > latest_completion_time
+    ):
+        pending_reaction_newer = (
+            latest_pending is not None and latest_pending.created_at > latest_unable_time
+        )
+        pending_summary_newer = (
+            latest_codex_pending_time is not None and latest_codex_pending_time > latest_unable_time
+        )
+        if not (pending_reaction_newer or pending_summary_newer):
+            return LensResult(
+                lens=lens.name,
+                outcome=LensOutcome.PENDING,
+                summary=f"{bot.bot_login} was unable to review head {short_head}",
+            )
 
     if latest_completion_time is not None or passed_check_runs:
         pending_reaction_newer = latest_pending is not None and (
@@ -1040,6 +1140,24 @@ def _parse_codex_comment_state(
     )
 
 
+def _matches_bot_login(login: str, bot: BotIdentity) -> bool:
+    folded = login.casefold()
+    if folded == bot.bot_login.casefold():
+        return True
+    return any(folded == alias.casefold() for alias in bot.bot_login_aliases)
+
+
+def _is_unable_to_review_body(body: str) -> bool:
+    return _COPILOT_UNABLE_TO_REVIEW.search(body) is not None
+
+
+def _has_review_finding_marker(body: str) -> bool:
+    return (
+        _CODEX_FINDING_BADGE.search(body) is not None
+        or _COPILOT_CHANGES_RECOMMENDED.search(body) is not None
+    )
+
+
 def _verify_user_id(
     actual: int | None,
     expected: int | None,
@@ -1183,6 +1301,32 @@ def _parse_reactions(raw: Any, source: str) -> tuple[PullRequestReactionRecord, 
                 author_id=author_id,
                 content=content,
                 created_at=created_at,
+            )
+        )
+    return tuple(parsed)
+
+
+def _parse_requested_reviewers(
+    raw: Any, source: str
+) -> tuple[PullRequestRequestedReviewerRecord, ...]:
+    items = _record_list(raw, "requested_reviewers", source)
+    seen_logins: set[str] = set()
+    parsed: list[PullRequestRequestedReviewerRecord] = []
+    for index, item in enumerate(items):
+        label = f"requested_reviewers[{index}]"
+        if not isinstance(item, dict):
+            raise InputError(f"{label} must be an object in {source}")
+        _reject_unknown(item, _REQUESTED_REVIEWER_KEYS, label, source)
+        author_login = _login(item.get("author_login"), f"{label}.author_login", source)
+        folded = author_login.casefold()
+        if folded in seen_logins:
+            raise InputError(f"{label}.author_login is repeated in {source}")
+        seen_logins.add(folded)
+        author_id = _optional_positive_int(item.get("author_id"), f"{label}.author_id", source)
+        parsed.append(
+            PullRequestRequestedReviewerRecord(
+                author_login=author_login,
+                author_id=author_id,
             )
         )
     return tuple(parsed)

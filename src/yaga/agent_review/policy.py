@@ -31,6 +31,8 @@ CODEX_DEFAULT_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 CODEX_DEFAULT_BOT_USER_ID = 199175422
 CODEX_DEFAULT_BOT_APP_ID = 1144995
 COPILOT_DEFAULT_BOT_LOGIN = "copilot-pull-request-reviewer[bot]"
+COPILOT_SHORT_BOT_LOGIN = "Copilot"
+COPILOT_DEFAULT_BOT_USER_ID = 175728472
 CLAUDE_DEFAULT_BOT_LOGIN = "claude[bot]"
 BUILTIN_PRESETS = frozenset({"codex", "copilot", "claude"})
 DEFAULT_PASS_REACTIONS: tuple[str, ...] = ("+1",)
@@ -68,6 +70,7 @@ class BotIdentity:
     bot_login: str
     bot_user_id: int | None = None
     bot_app_id: int | None = None
+    bot_login_aliases: tuple[str, ...] = ()
     pass_reactions: tuple[str, ...] = DEFAULT_PASS_REACTIONS
     pending_reactions: tuple[str, ...] = DEFAULT_PENDING_REACTIONS
     check_runs: tuple[str, ...] = ()
@@ -136,10 +139,28 @@ class ReviewLens:
             )
         if self.preset == "copilot":
             bot_login = COPILOT_DEFAULT_BOT_LOGIN if self.bot_login is None else self.bot_login
+            copilot_default_logins = {
+                COPILOT_DEFAULT_BOT_LOGIN.casefold(),
+                COPILOT_SHORT_BOT_LOGIN.casefold(),
+            }
+            use_copilot_defaults = bot_login.casefold() in copilot_default_logins
+            bot_user_id = (
+                COPILOT_DEFAULT_BOT_USER_ID
+                if self.bot_user_id is None and use_copilot_defaults
+                else self.bot_user_id
+            )
+            bot_login_aliases: tuple[str, ...] = ()
+            if use_copilot_defaults:
+                bot_login_aliases = (
+                    (COPILOT_SHORT_BOT_LOGIN,)
+                    if bot_login.casefold() == COPILOT_DEFAULT_BOT_LOGIN.casefold()
+                    else (COPILOT_DEFAULT_BOT_LOGIN,)
+                )
             return BotIdentity(
                 bot_login=bot_login,
-                bot_user_id=self.bot_user_id,
+                bot_user_id=bot_user_id,
                 bot_app_id=self.bot_app_id,
+                bot_login_aliases=bot_login_aliases,
                 pass_reactions=pass_reactions,
                 pending_reactions=pending_reactions,
                 check_runs=check_runs,

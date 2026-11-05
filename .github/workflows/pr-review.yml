@@ -107,7 +107,8 @@ jobs:
                   elif (
                       path == ".github/workflows/pr-review-wake.yml"
                       and run.get("conclusion") == "success"
-                      and run.get("event") in {"issue_comment", "workflow_dispatch"}
+                      and run.get("event")
+                      in {"issue_comment", "pull_request_review", "workflow_dispatch"}
                   ):
                       match = re.fullmatch(r"YAGA review wake for #([1-9][0-9]{0,18})", title)
                       if match is not None:

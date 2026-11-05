@@ -962,6 +962,7 @@ def test_pr_review_publisher_workflow_preserves_default_branch_trust_boundary() 
     )
     wake_triggers = wake_workflow.get("on", wake_workflow.get(True))
     assert isinstance(wake_triggers, dict)
-    assert set(wake_triggers) == {"issue_comment", "workflow_dispatch"}
+    assert set(wake_triggers) == {"issue_comment", "pull_request_review", "workflow_dispatch"}
+    assert wake_triggers["pull_request_review"] == {"types": ["submitted"]}
     assert wake_workflow["permissions"] == {}
     assert wake_workflow["jobs"]["wake"]["permissions"] == {}
