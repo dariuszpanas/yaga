@@ -14,11 +14,14 @@ from yaga.agent_review.policy import (
     CODEX_DEFAULT_BOT_LOGIN,
     CODEX_DEFAULT_BOT_USER_ID,
     COPILOT_DEFAULT_BOT_LOGIN,
+    COPILOT_DEFAULT_BOT_USER_ID,
+    COPILOT_SHORT_BOT_LOGIN,
     AgentReviewPolicy,
     ReviewLens,
 )
 from yaga.agent_review.snapshot import (
     evaluate_pull_request_snapshot,
+    is_review_actively_in_progress,
     load_pull_request_snapshot,
     parse_pull_request_snapshot,
 )
@@ -86,7 +89,7 @@ def test_current_head_codex_thumbs_up_and_copilot_clean_review_pass(tmp_path: Pa
                     {
                         "id": 10,
                         "author_login": COPILOT_DEFAULT_BOT_LOGIN,
-                        "author_id": 500,
+                        "author_id": COPILOT_DEFAULT_BOT_USER_ID,
                         "state": "COMMENTED",
                         "commit_id": HEAD_SHA,
                         "submitted_at": "2026-11-01T18:05:00Z",
@@ -597,6 +600,7 @@ def test_stale_review_on_previous_commit_reports_pending_with_stale_summary() ->
                 {
                     "id": 10,
                     "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
                     "state": "APPROVED",
                     "commit_id": OLD_SHA,
                     "submitted_at": "2026-11-01T17:50:00Z",
@@ -642,6 +646,7 @@ def test_inline_findings_and_severity_badges_fail_current_head() -> None:
                 {
                     "id": 11,
                     "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
                     "state": "COMMENTED",
                     "commit_id": HEAD_SHA,
                     "submitted_at": "2026-11-01T18:06:00Z",
@@ -652,7 +657,8 @@ def test_inline_findings_and_severity_badges_fail_current_head() -> None:
                 {
                     "id": 100,
                     "pull_request_review_id": 11,
-                    "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_login": COPILOT_SHORT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
                     "commit_id": HEAD_SHA,
                     "created_at": "2026-11-01T18:06:00Z",
                     "path": "src/yaga/cli.py",
@@ -1132,3 +1138,250 @@ def test_is_review_actively_in_progress_distinguishes_active_from_stale_or_inact
     assert not is_review_actively_in_progress(
         evaluate_pull_request_snapshot(policy, draft_snapshot)
     )
+
+
+def test_copilot_login_alias_spoofing_and_duplicate_lenses_fail_closed() -> None:
+    duplicate_alias_policy = AgentReviewPolicy(
+        version=1,
+        required=("copilot-a", "copilot-b"),
+        aggregation="all-required",
+        lenses=(
+            ReviewLens("copilot-a", "copilot", "review"),
+            ReviewLens("copilot-b", "copilot", "review", bot_login=COPILOT_SHORT_BOT_LOGIN),
+        ),
+    )
+    dup_snapshot = parse_pull_request_snapshot(base_snapshot_dict(policy=duplicate_alias_policy))
+    with pytest.raises(ConfigurationError, match="same bot-login"):
+        evaluate_pull_request_snapshot(duplicate_alias_policy, dup_snapshot)
+
+    copilot_only = AgentReviewPolicy(
+        version=1,
+        required=("copilot",),
+        aggregation="all-required",
+        lenses=(ReviewLens("copilot", "copilot", "review"),),
+    )
+    spoofed_comment = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=copilot_only,
+            review_comments=[
+                {
+                    "id": 901,
+                    "author_login": COPILOT_SHORT_BOT_LOGIN,
+                    "author_id": 999999,
+                    "commit_id": HEAD_SHA,
+                    "created_at": "2026-11-01T18:05:00Z",
+                    "path": "src/app.py",
+                    "body": "Spoofed inline comment.",
+                }
+            ],
+        )
+    )
+    with pytest.raises(InputError, match="unexpected author_id"):
+        evaluate_pull_request_snapshot(copilot_only, spoofed_comment)
+
+    spoofed_requested = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=copilot_only,
+            requested_reviewers=[
+                {"author_login": COPILOT_SHORT_BOT_LOGIN, "author_id": 999999},
+            ],
+        )
+    )
+    with pytest.raises(InputError, match="unexpected author_id"):
+        evaluate_pull_request_snapshot(copilot_only, spoofed_requested)
+
+
+def test_copilot_unable_to_review_reports_inactive_pending_until_clean_rerun() -> None:
+    copilot_only = AgentReviewPolicy(
+        version=1,
+        required=("copilot",),
+        aggregation="all-required",
+        lenses=(ReviewLens("copilot", "copilot", "review"),),
+    )
+    for error_body in (
+        "Copilot was unable to review this pull request because the user who requested "
+        "the review has insufficient remaining quota.",
+        "Copilot encountered an error and was unable to review this pull request. "
+        "You can try again by re-requesting a review.",
+    ):
+        unable_snapshot = parse_pull_request_snapshot(
+            base_snapshot_dict(
+                policy=copilot_only,
+                head_committed_at=None,
+                reviews=[
+                    {
+                        "id": 301,
+                        "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                        "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                        "state": "COMMENTED",
+                        "commit_id": HEAD_SHA,
+                        "submitted_at": "2026-11-01T18:05:00Z",
+                        "body": error_body,
+                    }
+                ],
+            )
+        )
+        evaluated = evaluate_pull_request_snapshot(copilot_only, unable_snapshot)
+        assert evaluated.aggregate.state is LensOutcome.PENDING
+        assert "was unable to review head" in (evaluated.results.results[0].summary or "")
+        assert not is_review_actively_in_progress(evaluated)
+
+    recovered_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=copilot_only,
+            head_committed_at=None,
+            reviews=[
+                {
+                    "id": 301,
+                    "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                    "state": "COMMENTED",
+                    "commit_id": HEAD_SHA,
+                    "submitted_at": "2026-11-01T18:05:00Z",
+                    "body": "Copilot encountered an error and was unable to review this pull request.",
+                },
+                {
+                    "id": 302,
+                    "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                    "state": "COMMENTED",
+                    "commit_id": HEAD_SHA,
+                    "submitted_at": "2026-11-01T18:09:00Z",
+                    "body": "## Pull request overview\nAll files look good.",
+                },
+            ],
+        )
+    )
+    assert (
+        evaluate_pull_request_snapshot(copilot_only, recovered_snapshot).aggregate.state
+        is LensOutcome.PASSED
+    )
+
+
+def test_copilot_ccr_overview_changes_and_approval_recommended_markers() -> None:
+    copilot_only = AgentReviewPolicy(
+        version=1,
+        required=("copilot",),
+        aggregation="all-required",
+        lenses=(ReviewLens("copilot", "copilot", "review"),),
+    )
+    changes_recommended = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=copilot_only,
+            head_committed_at=None,
+            reviews=[
+                {
+                    "id": 401,
+                    "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                    "state": "COMMENTED",
+                    "commit_id": HEAD_SHA,
+                    "submitted_at": "2026-11-01T18:05:00Z",
+                    "body": (
+                        "<!-- ccr-overview-v2 -->\r\n\r\n"
+                        "### 🟡 Changes recommended\r\n\r\n"
+                        "1 open issue carried forward from previous push.\r\n"
+                    ),
+                }
+            ],
+        )
+    )
+    failed_eval = evaluate_pull_request_snapshot(copilot_only, changes_recommended)
+    assert failed_eval.aggregate.state is LensOutcome.FAILED
+    assert "reported review findings on head" in (failed_eval.results.results[0].summary or "")
+
+    cleared_by_overview = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=copilot_only,
+            head_committed_at=None,
+            reviews=[
+                {
+                    "id": 401,
+                    "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                    "state": "COMMENTED",
+                    "commit_id": HEAD_SHA,
+                    "submitted_at": "2026-11-01T18:05:00Z",
+                    "body": "<!-- ccr-overview-v2 -->\n\n### 🟡 Changes recommended\n",
+                },
+                {
+                    "id": 402,
+                    "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                    "state": "COMMENTED",
+                    "commit_id": HEAD_SHA,
+                    "submitted_at": "2026-11-01T18:10:00Z",
+                    "body": (
+                        "<!-- ccr-overview-v2 -->\r\n\r\n"
+                        "### 🟢 Approval recommended\r\n\r\n"
+                        "**0 open findings**\r\n"
+                    ),
+                },
+            ],
+            review_comments=[
+                {
+                    "id": 501,
+                    "pull_request_review_id": 401,
+                    "author_login": COPILOT_SHORT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                    "commit_id": HEAD_SHA,
+                    "created_at": "2026-11-01T18:05:00Z",
+                    "path": "src/app.py",
+                    "body": "Resolved thread.",
+                }
+            ],
+        )
+    )
+    assert (
+        evaluate_pull_request_snapshot(copilot_only, cleared_by_overview).aggregate.state
+        is LensOutcome.PASSED
+    )
+
+
+def test_requested_reviewers_marks_copilot_actively_in_progress() -> None:
+    copilot_only = AgentReviewPolicy(
+        version=1,
+        required=("copilot",),
+        aggregation="all-required",
+        lenses=(ReviewLens("copilot", "copilot", "review"),),
+    )
+    queued_snapshot = parse_pull_request_snapshot(
+        base_snapshot_dict(
+            policy=copilot_only,
+            head_committed_at=None,
+            reviews=[
+                {
+                    "id": 601,
+                    "author_login": COPILOT_DEFAULT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                    "state": "COMMENTED",
+                    "commit_id": OLD_SHA,
+                    "submitted_at": "2026-11-01T17:50:00Z",
+                    "body": "Previous commit review.",
+                }
+            ],
+            requested_reviewers=[
+                {
+                    "author_login": COPILOT_SHORT_BOT_LOGIN,
+                    "author_id": COPILOT_DEFAULT_BOT_USER_ID,
+                }
+            ],
+        )
+    )
+    evaluated = evaluate_pull_request_snapshot(copilot_only, queued_snapshot)
+    assert evaluated.aggregate.state is LensOutcome.PENDING
+    assert "review is in progress (requested) for head" in (
+        evaluated.results.results[0].summary or ""
+    )
+    assert is_review_actively_in_progress(evaluated)
+
+    with pytest.raises(InputError, match="repeated"):
+        parse_pull_request_snapshot(
+            base_snapshot_dict(
+                policy=copilot_only,
+                requested_reviewers=[
+                    {"author_login": "Copilot", "author_id": COPILOT_DEFAULT_BOT_USER_ID},
+                    {"author_login": "copilot", "author_id": COPILOT_DEFAULT_BOT_USER_ID},
+                ],
+            )
+        )

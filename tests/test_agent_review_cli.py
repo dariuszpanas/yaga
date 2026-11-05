@@ -18,6 +18,8 @@ from yaga.agent_review.policy import (
     CODEX_DEFAULT_BOT_LOGIN,
     CODEX_DEFAULT_BOT_USER_ID,
     COPILOT_DEFAULT_BOT_LOGIN,
+    COPILOT_DEFAULT_BOT_USER_ID,
+    COPILOT_SHORT_BOT_LOGIN,
     load_policy,
 )
 from yaga.agent_review.remote import (
@@ -148,7 +150,10 @@ def _default_gh_endpoints(
             else [
                 {
                     "id": 10,
-                    "user": {"login": COPILOT_DEFAULT_BOT_LOGIN, "id": 9001},
+                    "user": {
+                        "login": COPILOT_DEFAULT_BOT_LOGIN,
+                        "id": COPILOT_DEFAULT_BOT_USER_ID,
+                    },
                     "state": "COMMENTED",
                     "commit_id": HEAD_SHA,
                     "submitted_at": "2026-11-01T18:03:00Z",
@@ -216,8 +221,10 @@ def _mock_gh_api(
 
 def test_repository_agent_review_policy_is_valid() -> None:
     policy = load_policy(ROOT / ".yaga" / "agent-review-policy.toml")
-    assert policy.required == ("codex",)
+    assert policy.required == ("codex", "copilot")
     assert policy.lenses[0].resolve_bot().bot_login == CODEX_DEFAULT_BOT_LOGIN
+    assert policy.lenses[1].resolve_bot().bot_login == COPILOT_DEFAULT_BOT_LOGIN
+    assert policy.lenses[1].resolve_bot().bot_user_id == COPILOT_DEFAULT_BOT_USER_ID
 
 
 @pytest.mark.parametrize(
@@ -416,7 +423,7 @@ def test_offline_and_remote_review_checks_match_across_formats(
                     {
                         "id": 10,
                         "author_login": COPILOT_DEFAULT_BOT_LOGIN,
-                        "author_id": 9001,
+                        "author_id": COPILOT_DEFAULT_BOT_USER_ID,
                         "state": "COMMENTED",
                         "commit_id": HEAD_SHA,
                         "submitted_at": "2026-11-01T18:03:00Z",
@@ -1263,3 +1270,80 @@ required = ["codex"]
         f"::notice title=YAGA pull-request review::Submitted review APPROVED (submitted, id 777) on head {HEAD_SHA[:12]}."
         in gh_res.stdout
     )
+
+
+def test_live_fetch_polls_past_startup_grace_while_copilot_in_requested_reviewers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yaga.agent_review import service
+
+    policy_path = _write_policy(tmp_path)
+    monkeypatch.setattr(remote, "_find_gh", lambda: str(Path(sys.executable).resolve()))
+
+    slept: list[int | float] = []
+    monkeypatch.setattr(service, "sleep_for_review_poll", lambda seconds: slept.append(seconds))
+
+    pr_polls = 0
+
+    def run_polling(command: list[str], **options: Any) -> ProcessResult:
+        nonlocal pr_polls
+        endpoint = command[-1]
+        if endpoint == "repos/example/project/pulls/23":
+            pr_polls += 1
+        copilot_done = pr_polls >= 4
+        endpoints = _default_gh_endpoints(
+            reviews=(
+                [
+                    {
+                        "id": 10,
+                        "user": {
+                            "login": COPILOT_DEFAULT_BOT_LOGIN,
+                            "id": COPILOT_DEFAULT_BOT_USER_ID,
+                        },
+                        "state": "COMMENTED",
+                        "commit_id": HEAD_SHA,
+                        "submitted_at": "2026-11-01T18:03:00Z",
+                        "body": "<!-- ccr-overview-v2 -->\n\n### 🟢 Approval recommended\n",
+                    }
+                ]
+                if copilot_done
+                else []
+            ),
+            pr_overrides={
+                "requested_reviewers": (
+                    []
+                    if copilot_done
+                    else [
+                        {
+                            "login": COPILOT_SHORT_BOT_LOGIN,
+                            "id": COPILOT_DEFAULT_BOT_USER_ID,
+                        }
+                    ]
+                )
+            },
+        )
+        return ProcessResult(
+            0, json.dumps(endpoints[endpoint]).encode("utf-8"), b"", False, False, False
+        )
+
+    monkeypatch.setattr(remote, "run_bounded_process", run_polling)
+    res = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--wait-seconds",
+            "120",
+            "--format",
+            "json",
+        ],
+    )
+    assert res.exit_code == 0, res.stderr
+    # 3 poll sleeps (45s total) exceed STARTUP_GRACE_SECONDS (30s), proving
+    # requested_reviewers keeps polling alive until Copilot submits its review.
+    assert slept == [15, 15, 15]
+    assert json.loads(res.stdout)["status"] == "passed"

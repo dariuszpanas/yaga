@@ -259,6 +259,9 @@ def fetch_pull_request_review_snapshot(
         "issue_comments": _normalize_issue_comments(issue_comments_doc),
         "reactions": _normalize_reactions(reactions_doc),
         "check_runs": check_runs_items,
+        "requested_reviewers": _normalize_requested_reviewers(
+            pr_doc.get("requested_reviewers", [])
+        ),
     }
     return parse_pull_request_snapshot(snapshot_document, source=actual.url)
 
@@ -479,6 +482,25 @@ def _extract_branch_sha(raw: Any, *, label: str) -> str:
     if not isinstance(sha, str) or _SHA.fullmatch(sha) is None:
         raise InputError(f"gh returned an invalid pull-request {label}.sha")
     return sha.lower()
+
+
+def _normalize_requested_reviewers(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        raise InputError("gh returned a non-list pull-request requested_reviewers field")
+    if len(raw) >= MAX_SNAPSHOT_RECORDS:
+        raise InputError("gh returned an incomplete pull-request requested_reviewers list")
+    items: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise InputError("gh returned a non-object pull-request requested reviewer entry")
+        login, user_id = _extract_user(entry, label="requested reviewer")
+        items.append(
+            {
+                "author_login": login,
+                "author_id": user_id,
+            }
+        )
+    return items
 
 
 def _normalize_reviews(raw: Any) -> list[dict[str, Any]]:

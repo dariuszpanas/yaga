@@ -216,7 +216,8 @@ yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr 123 
 When `required` only names built-in presets (`codex`, `copilot`, or `claude`), the
 `[agent-review.agents]` table can be omitted entirely. Each configured lens resolves its review bot
 identity from built-in presets (`codex` defaults to `chatgpt-codex-connector[bot]` with user ID
-`199175422` and app ID `1144995`; `copilot` defaults to `copilot-pull-request-reviewer[bot]`;
+`199175422` and app ID `1144995`; `copilot` defaults to `copilot-pull-request-reviewer[bot]` with
+user ID `175728472` and accepts GitHub's `Copilot` comment/reviewer login alias;
 `claude` defaults to `claude[bot]`) or explicit lens keys (`bot-login`, `bot-user-id`,
 `bot-app-id`, `pass-reactions`, `pending-reactions`, `check-runs`, `delay-seconds`, `wait-seconds`).
 Lenses with `check-runs` also inspect head-commit check runs

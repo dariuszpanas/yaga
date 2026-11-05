@@ -10,6 +10,8 @@ from yaga.agent_review.policy import (
     CODEX_DEFAULT_BOT_LOGIN,
     CODEX_DEFAULT_BOT_USER_ID,
     COPILOT_DEFAULT_BOT_LOGIN,
+    COPILOT_DEFAULT_BOT_USER_ID,
+    COPILOT_SHORT_BOT_LOGIN,
     BotIdentity,
     ReviewLens,
     load_policy,
@@ -114,8 +116,31 @@ wait-seconds = 300
     )
     assert policy.lens("copilot-default").resolve_bot() == BotIdentity(
         bot_login=COPILOT_DEFAULT_BOT_LOGIN,
+        bot_user_id=COPILOT_DEFAULT_BOT_USER_ID,
+        bot_app_id=None,
+        bot_login_aliases=(COPILOT_SHORT_BOT_LOGIN,),
+        pass_reactions=("+1",),
+        pending_reactions=("eyes",),
+    )
+    assert ReviewLens(
+        "copilot-short", "copilot", bot_login=COPILOT_SHORT_BOT_LOGIN
+    ).resolve_bot() == (
+        BotIdentity(
+            bot_login=COPILOT_SHORT_BOT_LOGIN,
+            bot_user_id=COPILOT_DEFAULT_BOT_USER_ID,
+            bot_app_id=None,
+            bot_login_aliases=(COPILOT_DEFAULT_BOT_LOGIN,),
+            pass_reactions=("+1",),
+            pending_reactions=("eyes",),
+        )
+    )
+    assert ReviewLens(
+        "copilot-custom", "copilot", bot_login="custom-copilot[bot]"
+    ).resolve_bot() == BotIdentity(
+        bot_login="custom-copilot[bot]",
         bot_user_id=None,
         bot_app_id=None,
+        bot_login_aliases=(),
         pass_reactions=("+1",),
         pending_reactions=("eyes",),
     )
