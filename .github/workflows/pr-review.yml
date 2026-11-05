@@ -81,7 +81,7 @@ jobs:
                   and 1 <= number <= 10**18
               ):
                   pr_number = number
-                  wait_seconds = 480
+                  wait_seconds = 600
           elif event_name == "workflow_run":
               run = payload.get("workflow_run") or {}
               repo = run.get("repository") or {}
@@ -129,7 +129,7 @@ jobs:
       group: yaga-pr-review-${{ needs.resolve.outputs.pull_request_number }}
       cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
