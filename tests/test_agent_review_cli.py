@@ -221,10 +221,8 @@ def _mock_gh_api(
 
 def test_repository_agent_review_policy_is_valid() -> None:
     policy = load_policy(ROOT / ".yaga" / "agent-review-policy.toml")
-    assert policy.required == ("codex", "copilot")
+    assert policy.required == ("codex",)
     assert policy.lenses[0].resolve_bot().bot_login == CODEX_DEFAULT_BOT_LOGIN
-    assert policy.lenses[1].resolve_bot().bot_login == COPILOT_DEFAULT_BOT_LOGIN
-    assert policy.lenses[1].resolve_bot().bot_user_id == COPILOT_DEFAULT_BOT_USER_ID
 
 
 @pytest.mark.parametrize(
