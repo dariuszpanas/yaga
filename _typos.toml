@@ -1,3 +1,6 @@
 [default]
 # The vendored public key is exact cryptographic data; prose remains checked.
 extend-ignore-re = ['(?s)\b_KEYRING_BASE64 = \(\s*(?:"[A-Za-z0-9+/=]+"\s*)+\)']
+
+[default.extend-words]
+certifi = "certifi"
