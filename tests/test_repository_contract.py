@@ -81,6 +81,8 @@ def test_action_has_one_closed_direct_publisher_interface() -> None:
         "repo",
         "wait-seconds",
         "submit-review",
+        "triage-policy",
+        "publish-comment",
         "branch",
         "range",
         "revision",
@@ -131,6 +133,25 @@ def test_action_has_one_closed_direct_publisher_interface() -> None:
     assert "uv " not in gate_step["run"]
     assert 'test "${YAGA_REQUEST_TIMEOUT:-}" = 5' in smoke
     assert 'test -z "${YAGA_APPROVAL_MARKER:-}"' in smoke
+
+
+def test_trusted_publisher_posts_triage_and_propagates_admission_hold() -> None:
+    workflow = yaml.safe_load(read(".github/workflows/pr-review.yml"))
+    job = workflow["jobs"]["publish-review"]
+    assert job["permissions"]["issues"] == "write"
+    triage, review = [step for step in job["steps"] if step.get("uses") == "./"]
+    assert triage["with"]["check"] == "pr-triage"
+    assert triage["with"]["publish-comment"] == "true"
+    assert triage["with"]["policy"] == review["with"]["triage-policy"]
+    assert "continue-on-error" not in triage and "continue-on-error" not in job
+    assert "if" not in review  # default success() keeps HOLD from reaching formal publication.
+    for step in job["steps"]:
+        if str(step.get("uses", "")).startswith("actions/checkout@"):
+            assert "ref" not in step["with"]
+            assert step["with"]["persist-credentials"] is False
+    wake = read(".github/workflows/pr-review-wake.yml")
+    assert "types: [submitted, edited, dismissed]" in wake
+    assert "permissions: {}" in wake
 
 
 def test_commit_action_is_an_isolated_read_only_branch_in_root_action() -> None:
@@ -491,7 +512,7 @@ def test_examples_split_lifecycle_invalidation_from_post_ci_publication() -> Non
     assert "pull_request:" not in pr_review
     assert "check: pr-review" in pr_review
     assert "submit-review: both" in pr_review
-    assert FULL_SHA.findall(pr_review) == ["0" * 40]
+    assert FULL_SHA.findall(pr_review) == ["0" * 40, "0" * 40]
     assert lifecycle.startswith("name: YAGA Review Policy\n")
     assert "github.event.action == 'edited' && github.event.changes.base == null" in lifecycle
     assert "YAGA metadata edit for #{0}" in lifecycle

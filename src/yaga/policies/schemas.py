@@ -36,10 +36,36 @@ class PolicyKind(StrEnum):
     TREE = "tree"
     AGENT_REVIEW = "agent-review"
     TEST = "test"
+    TRIAGE = "triage"
 
 
 class _StrictWireModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class TriageBotWire(_StrictWireModel):
+    user_id: int = Field(alias="user-id")
+    login: str
+    allowed_patterns: list[str] = Field(alias="allowed-patterns")
+
+
+class TriagePolicyWire(_StrictWireModel):
+    required_version: str | None = Field(default=None, alias="required-version")
+    host: str
+    repository_id: int = Field(alias="repository-id")
+    maintainer_user_ids: list[int] = Field(alias="maintainer-user-ids")
+    trusted_bots: list[TriageBotWire] = Field(default_factory=list, alias="trusted-bots")
+    sensitive_patterns: list[str] | None = Field(default=None, alias="sensitive-patterns")
+    duplicate_candidates: int = Field(default=5, alias="duplicate-candidates")
+    comment_author_id: int | None = Field(default=None, alias="comment-author-id")
+
+
+TRIAGE_POLICY_FAMILY: SchemaFamily[TriagePolicyWire] = SchemaFamily(
+    model=TriagePolicyWire,
+    name="pull-request-triage",
+    version_metadata=VersionMetadata(path="triage-policy-version", owner="family"),
+    versions=(SchemaVersion("1"),),
+).compile()
 
 
 # ---------------------------------------------------------------------------
@@ -515,6 +541,14 @@ POLICY_SPECS: dict[PolicyKind, PolicySpec] = {
         version_key="test-policy-version",
         family=TEST_POLICY_FAMILY,
         description="Deterministic changed-path test suite and profile selection",
+    ),
+    PolicyKind.TRIAGE: PolicySpec(
+        kind=PolicyKind.TRIAGE,
+        title="Pull-request trust triage",
+        default_relpath=".yaga/triage-policy.toml",
+        version_key="triage-policy-version",
+        family=TRIAGE_POLICY_FAMILY,
+        description="Explicit maintainer identities and current-head PR admission",
     ),
 }
 

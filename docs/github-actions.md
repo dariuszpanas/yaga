@@ -15,12 +15,12 @@ interface, the root Action dispatches into three isolated runtime branches:
    `--no-dev` runtime into a temporary virtual environment outside the checkout with tokens unset
    and executes `YAGA_COMMIT_ACTION_RUNTIME=1` via `"$YAGA_RUNTIME_PYTHON" -I -m yaga` (isolated
    from `PYTHONPATH`, working-tree imports, Typer/CLI command modules, and `GITHUB_TOKEN`/`GH_TOKEN`).
-2. **Installed CLI checks (`policy`, `pr-review`, `pr-description`, `repo`, `branch`, `change`,
+2. **Installed CLI checks (`policy`, `pr-review`, `pr-triage`, `pr-description`, `repo`, `branch`, `change`,
    `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`)**: Reuses the
    same hash-locked `--no-dev` virtual environment outside the checkout and runs
    `python -I -m yaga.cli_action`. Every mode rejects unused inputs and option-like values
    fail-closed with exit `2`. `github-token` is stripped before `uv sync` and passed as `GH_TOKEN`
-   only when live `--pr` access is requested for `pr-review` or `pr-description`; offline checks
+   only when live `--pr` access is requested for `pr-review`, `pr-triage`, or `pr-description`; offline checks
    reject `github-token`.
 3. **`check: gate` (write-capable stdlib fast path)**: Runs `YAGA_ACTION_RUNTIME=1` with
    `python -P -S -m yaga gate` (no site packages and no runtime dependency installation) for the
@@ -164,6 +164,7 @@ verdict from a trusted default-branch `pull_request_target` workflow (see
   with:
     check: pr-review
     policy: .yaga/agent-review-policy.toml
+    triage-policy: .yaga/triage-policy.toml
     pr: ${{ github.event.pull_request.number }}
     repo: ${{ github.repository }}
     wait-seconds: 480
@@ -171,8 +172,17 @@ verdict from a trusted default-branch `pull_request_target` workflow (see
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+Precede this with `check: pr-triage`, `policy: .yaga/triage-policy.toml`, the same `pr`/`repo`,
+and explicit `publish-comment: "true"` to post a bounded admission comment and stop on hold.
+See the complete example and [triage guide](pull-request-triage.md) for `issues: write`, verified
+publisher identity, trusted wake events, and the separate merge-enforcement boundary.
+
 Enable *Allow GitHub Actions to create and approve pull requests* in repository Actions settings
 when `submit-review` is `approve` or `both`. Draft pull requests skip review submission cleanly;
+positive publication also requires the explicit trusted `triage-policy`. External PRs remain on
+hold until a configured maintainer approves their current head and acknowledges the exact current
+base and trusted policy. See
+[Pull-request trust triage](pull-request-triage.md) before adopting the publisher;
 see the [Agent review guide](agent-review-gate.md#pull-request-review-state) for policy options,
 polling bounds, and asynchronous re-review wake patterns.
 
@@ -216,15 +226,17 @@ exit `2`.
 
 | Input | Contract |
 | --- | --- |
-| `check` | Mode selector; `commit` (default), `policy`, `pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`, or `gate`. |
+| `check` | Mode selector; `commit` (default), `policy`, `pr-review`, `pr-triage`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`, or `gate`. |
 | `trusted-config` | Optional literal repository-relative commit config path for `check=commit` on `pull_request_target`. |
-| `policy` | Explicit versioned TOML policy path for `policy`, `pr-review`, `pr-description`, `branch`, `change`, `mode`, `path`, `size`, or `tree`. |
+| `policy` | Explicit versioned TOML policy path for `policy`, `pr-review`, `pr-triage`, `pr-description`, `branch`, `change`, `mode`, `path`, `size`, or `tree`. |
 | `template` | Optional explicit Markdown heading template path for `check=pr-description`. |
-| `file` | Offline review snapshot JSON path for `pr-review` or Markdown body file for `pr-description`. |
-| `pr` | Canonical HTTPS PR URL or positive PR number for live `pr-review` or `pr-description` via `gh`. |
-| `repo` | `[HOST/]OWNER/REPO` for numeric `pr` in `pr-review`/`pr-description`, or repository root directory for `policy`, `change`, `workflow*`, `mode`, `path`, `size`, `tree`, or `repo`. |
+| `file` | Offline snapshot JSON path for `pr-review`/`pr-triage` or Markdown body file for `pr-description`. |
+| `pr` | Canonical HTTPS PR URL or positive PR number for live `pr-review`, `pr-triage`, or `pr-description` via `gh`. |
+| `repo` | `[HOST/]OWNER/REPO` for numeric `pr` in `pr-review`/`pr-triage`/`pr-description`, or repository root directory for `policy`, `change`, `workflow*`, `mode`, `path`, `size`, `tree`, or `repo`. |
 | `wait-seconds` | Bounded active-review poll budget (`0..600`) for live `check=pr-review`. |
 | `submit-review` | Commit-bound PR review mode (`none`, `approve`, `request-changes`, or `both`) for live `check=pr-review`. |
+| `triage-policy` | Explicit trusted maintainer admission policy for live `check=pr-review`; required before positive formal review publication. |
+| `publish-comment` | Lowercase `true`/`false` for owned comment publication in live `check=pr-triage`; omitted means false. |
 | `branch` | Exact short branch name for `check=branch`. |
 | `range` | Exact `A..B` or `A...B` Git range for `check=change` or `check=repo`. |
 | `revision` | Exact Git commit-ish for `mode`, `path`, `size`, `tree`, or `repo`. |
@@ -239,7 +251,7 @@ exit `2`.
 | `path-policy` | Explicit path policy TOML path for `check=repo` without `plan`. |
 | `size-policy` | Explicit size policy TOML path for `check=repo` without `plan`. |
 | `tree-policy` | Explicit tree policy TOML path for `check=repo` without `plan`. |
-| `github-token` | Token passed via environment only for `check=gate` or live `pr` in `pr-review`/`pr-description`; rejected by offline checks. |
+| `github-token` | Token passed via environment only for `check=gate` or live `pr` in `pr-review`/`pr-triage`/`pr-description`; rejected by offline checks. |
 | `gate` | Closed gate selector for `check=gate`; defaults to `agent-review`. |
 | `operation` | One of `invalidate`, `prepare`, `authorize`, `observe`, `request`, or `finalize` for `check=gate`. |
 | `prerequisite-workflow` | Authenticated PR CI workflow path for `check=gate`; defaults to `.github/workflows/ci.yml`. |
@@ -281,5 +293,5 @@ It exempts title and commit rules, including spelling, after normal event/head v
 Alongside the copy-ready templates in `examples/`, YAGA dogfoods `YAGA Checks` (`uses: ./`) across
 its own pull-request workflows: `commit-policy.yml` (`check: commit` and `pr-description`), the
 `YAGA Checks` job in `ci.yml` (`check: branch`, `change`, `policy`, and `repo` with `.yaga/checks/ci.toml`), and
-`pr-review.yml` (`check: pr-review`). See [Contributing](contributing.md#pull-request-jobs-and-yaga-dogfooding)
+`pr-review.yml` (`check: pr-triage` then `pr-review`). See [Contributing](contributing.md#pull-request-jobs-and-yaga-dogfooding)
 for how those jobs separate Action dogfooding from internal Python build and fixture jobs.

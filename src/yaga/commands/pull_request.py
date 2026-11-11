@@ -22,15 +22,20 @@ from yaga.descriptions.reporting import (
 )
 from yaga.descriptions.service import check_description_source
 from yaga.errors import YagaError
+from yaga.pull_request_triage.service import check_triage, render_triage, render_triage_error
 
 app = typer.Typer(help="Check pull-request content.", no_args_is_help=True)
 description_app = typer.Typer(help="Check a Markdown PR description.", no_args_is_help=True)
 review_app = typer.Typer(help="Check pull-request review state.", no_args_is_help=True)
+triage_app = typer.Typer(
+    help="Check PR provenance and exact-head maintainer admission.", no_args_is_help=True
+)
 github_description_app = typer.Typer(
     help="Check the description in one explicit GitHub event.", no_args_is_help=True
 )
 app.add_typer(description_app, name="description")
 app.add_typer(review_app, name="review")
+app.add_typer(triage_app, name="triage")
 
 PolicyOption = Annotated[Path, typer.Option("--policy", help="Explicit description policy TOML.")]
 ReviewPolicyOption = Annotated[
@@ -123,6 +128,12 @@ def check_pull_request_review(
         ),
     ] = None,
     submit_review: ReviewSubmitOption = ReviewSubmitMode.NONE,
+    triage_policy: Annotated[
+        Path | None,
+        typer.Option(
+            "--triage-policy", help="Trusted admission policy; required before APPROVE submission."
+        ),
+    ] = None,
     output_format: ReviewFormatOption = ReviewOutputFormat.TEXT,
     quiet: QuietOption = False,
 ) -> None:
@@ -135,6 +146,7 @@ def check_pull_request_review(
             github_repository=github_repository,
             wait_seconds=wait_seconds,
             submit_review=submit_review,
+            triage_policy_path=triage_policy,
         )
     except YagaError as error:
         typer.echo(render_pull_request_review_error(error, output_format), err=True)
@@ -142,6 +154,47 @@ def check_pull_request_review(
     if not quiet:
         typer.echo(render_pull_request_review_report(checked, output_format))
     if checked.evaluation.aggregate.state is not LensOutcome.PASSED:
+        raise typer.Exit(code=1)
+    if checked.admission is not None and checked.admission["admission"]["decision"] != "allow":
+        raise typer.Exit(code=1)
+
+
+@triage_app.command("check")
+def check_pull_request_triage(
+    policy_path: Annotated[
+        Path, typer.Option("--policy", help="Explicit trusted triage policy TOML.")
+    ],
+    file_path: Annotated[
+        Path | None, typer.Option("--file", help="Explicit offline metadata snapshot.")
+    ] = None,
+    pull_request: Annotated[
+        str | None, typer.Option("--pr", help="Explicit PR URL or positive number.")
+    ] = None,
+    github_repository: Annotated[
+        str | None, typer.Option("--repo", help="[HOST/]OWNER/REPO for numeric PR.")
+    ] = None,
+    publish_comment: Annotated[
+        bool,
+        typer.Option(
+            "--publish-comment", help="Explicitly publish/update the owned bounded triage comment."
+        ),
+    ] = False,
+    output_format: ReviewFormatOption = ReviewOutputFormat.TEXT,
+) -> None:
+    """Evaluate bounded provenance and review facts; never execute PR content."""
+    try:
+        report = check_triage(
+            policy_path=policy_path,
+            file_path=file_path,
+            pull_request=pull_request,
+            github_repository=github_repository,
+            publish=publish_comment,
+        )
+        typer.echo(render_triage(report, output_format.value))
+    except YagaError as error:
+        typer.echo(render_triage_error(error, output_format.value), err=True)
+        raise typer.Exit(code=2) from error
+    if report["admission"]["decision"] != "allow":
         raise typer.Exit(code=1)
 
 

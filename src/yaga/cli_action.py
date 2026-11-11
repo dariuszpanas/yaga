@@ -23,6 +23,7 @@ CLI_ACTION_CHECKS = frozenset(
         "policy",
         "pr-description",
         "pr-review",
+        "pr-triage",
         "repo",
         "size",
         "tree",
@@ -40,6 +41,8 @@ ALL_CLI_INPUT_NAMES = (
     "repo",
     "wait-seconds",
     "submit-review",
+    "triage-policy",
+    "publish-comment",
     "branch",
     "range",
     "revision",
@@ -76,7 +79,10 @@ _ALLOWED_INPUTS_BY_CHECK: Mapping[str, frozenset[str]] = {
     "path": frozenset({"policy", "revision", "repo"}),
     "policy": frozenset({"policy", "repo"}),
     "pr-description": frozenset({"policy", "template", "file", "pr", "repo"}),
-    "pr-review": frozenset({"policy", "file", "pr", "repo", "wait-seconds", "submit-review"}),
+    "pr-review": frozenset(
+        {"policy", "file", "pr", "repo", "wait-seconds", "submit-review", "triage-policy"}
+    ),
+    "pr-triage": frozenset({"policy", "file", "pr", "repo", "publish-comment"}),
     "repo": frozenset(
         {
             "plan",
@@ -201,7 +207,7 @@ def build_cli_invocation(
         raise InputError("github-token is invalid")
     has_token = has_token_flag == "1" or bool(gh_token)
 
-    needs_gh_token = check in {"pr-review", "pr-description"} and bool(inputs["pr"])
+    needs_gh_token = check in {"pr-review", "pr-description", "pr-triage"} and bool(inputs["pr"])
     if has_token and not needs_gh_token:
         raise InputError(f"check '{check}' does not accept input 'github-token' in this mode")
     if needs_gh_token and not gh_token.strip():
@@ -234,6 +240,31 @@ def _build_arguments(
     *,
     environ: Mapping[str, str],
 ) -> list[str]:
+    if check == "pr-triage":
+        policy = _require_input(inputs, "policy", check=check)
+        file_val = inputs["file"]
+        pr_val = inputs["pr"]
+        publish = inputs["publish-comment"]
+        if publish not in {"", "true", "false"}:
+            raise InputError("check 'pr-triage' publish-comment must be true or false")
+        if bool(file_val) == bool(pr_val):
+            raise InputError("check 'pr-triage' requires exactly one of 'file' or 'pr'")
+        command = ["pull-request", "triage", "check", f"--policy={policy}"]
+        if file_val:
+            if inputs["repo"] or publish == "true":
+                raise InputError(
+                    "check 'pr-triage' offline file cannot use repo or publish-comment"
+                )
+            command.append(f"--file={file_val}")
+        else:
+            command.append(f"--pr={pr_val}")
+            if inputs["repo"]:
+                command.append(f"--repo={inputs['repo']}")
+            if publish == "true":
+                command.append("--publish-comment")
+        command.append("--format=github")
+        return command
+
     if check == "pr-review":
         policy = _require_input(inputs, "policy", check=check)
         file_val = inputs["file"]
@@ -241,7 +272,7 @@ def _build_arguments(
         if bool(file_val) == bool(pr_val):
             raise InputError("check 'pr-review' requires exactly one of 'file' or 'pr'")
         if file_val:
-            for live_only in ("repo", "wait-seconds", "submit-review"):
+            for live_only in ("repo", "wait-seconds", "submit-review", "triage-policy"):
                 if inputs[live_only]:
                     raise InputError(
                         f"check 'pr-review' with 'file' does not accept input '{live_only}'"
@@ -267,6 +298,8 @@ def _build_arguments(
             command.append(f"--wait-seconds={inputs['wait-seconds']}")
         if inputs["submit-review"]:
             command.append(f"--submit-review={inputs['submit-review']}")
+        if inputs["triage-policy"]:
+            command.append(f"--triage-policy={inputs['triage-policy']}")
         command.append("--format=github")
         return command
 

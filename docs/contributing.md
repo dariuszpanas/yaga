@@ -61,8 +61,9 @@ gates in separate named jobs:
     (`.yaga/branch-policy.toml`), `check: change` (`.yaga/change-policy.toml`), and `check: repo`
     (`.yaga/checks/ci.toml`, covering `mode`, `path`, `size`, `tree`, `workflow`,
     `workflow-security`, `workflow-lint`, and `commit`).
-  - `Publish Pull Request Review` (`pr-review.yml`): trusted `check: pr-review` against
-    `.yaga/agent-review-policy.toml`.
+  - `Publish Pull Request Review` (`pr-review.yml`): trusted `check: pr-triage` against
+    `.yaga/triage-policy.toml` posts admission findings and propagates holds, then
+    `check: pr-review` evaluates `.yaga/agent-review-policy.toml` before formal publication.
 - **Repository engineering & fixture suites**:
   - `Lint, Package Build & Docs`, `Python 3.12–3.15`, and `Minimum dependency security` in
     `ci.yml`, aggregated into the single branch-ruleset gate `CI Prerequisites`.

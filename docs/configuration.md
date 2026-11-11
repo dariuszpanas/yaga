@@ -100,7 +100,7 @@ version. Pin the installation separately when CI must always use one exact relea
 
 ## Policy initialization and schema audits
 
-Use `yaga policy init` to scaffold starter TOML files stamped with YAGA's latest schema versions across all 11 policy families (`commit`, `repo`, `branch`, `change`, `description`, `mode`, `path`, `size`, `tree`, `agent-review`, and `test`):
+Use `yaga policy init` to scaffold starter TOML files stamped with YAGA's latest schema versions across all 12 policy families (`commit`, `repo`, `branch`, `change`, `description`, `mode`, `path`, `size`, `tree`, `agent-review`, `test`, and `triage`):
 
 ```bash
 # Open the interactive shell checkbox selector (Up/Down, Space, 'a' all, Enter)

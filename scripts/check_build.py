@@ -887,9 +887,10 @@ def exercise_installed_policy_commands(
         init_document.get("schema_version") == 1
         and init_document.get("kind") == "policy_init"
         and init_document.get("dry_run") is False
-        and init_document.get("created") == 11
+        and init_document.get("created") == 12
         and init_document.get("previewed") == 0
         and init_document.get("skipped") == 0
+        and (policy_repo / ".yaga" / "triage-policy.toml").is_file()
     ):
         raise SystemExit("installed wheel CLI policy init emitted the wrong report contract")
 
@@ -914,8 +915,8 @@ def exercise_installed_policy_commands(
         and check_document.get("status") == "passed"
         and check_document.get("valid") is True
         and check_document.get("strict") is True
-        and check_document.get("checked") == 11
-        and check_document.get("current") == 11
+        and check_document.get("checked") == 12
+        and check_document.get("current") == 12
         and check_document.get("deprecated") == 0
         and check_document.get("invalid") == 0
     ):
@@ -1704,6 +1705,11 @@ def main() -> int:
                 "yaga/commands/commit.py",
                 "yaga/commands/github.py",
                 "yaga/commands/pull_request.py",
+                "yaga/pull_request_triage/__init__.py",
+                "yaga/pull_request_triage/core.py",
+                "yaga/pull_request_triage/policy.py",
+                "yaga/pull_request_triage/remote.py",
+                "yaga/pull_request_triage/service.py",
                 "yaga/commands/mode.py",
                 "yaga/commands/policy.py",
                 "yaga/commands/repo.py",

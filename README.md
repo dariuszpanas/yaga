@@ -49,7 +49,7 @@ Python 3.12 through 3.15.
 ### GitHub Action (`YAGA Checks`)
 
 Run YAGA in GitHub Actions with `uses: dariuszpanas/yaga@<commit-sha>` (published on GitHub
-Marketplace as **YAGA Checks**). `check` defaults to `commit` and supports `policy`, `pr-review`,
+Marketplace as **YAGA Checks**). `check` defaults to `commit` and supports `policy`, `pr-review`, `pr-triage`,
 `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`,
 `mode`, `path`, `size`, `tree`, and `gate`:
 

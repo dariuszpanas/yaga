@@ -5,7 +5,7 @@ author: Dariusz Panas
 inputs:
   check:
     description: >-
-      Check or adapter to run: commit (default), policy, pr-review,
+      Check or adapter to run: commit (default), policy, pr-review, pr-triage,
       pr-description, repo, branch, change, workflow, workflow-security,
       workflow-lint, mode, path, size, tree, or gate
     required: false
@@ -18,7 +18,7 @@ inputs:
     default: ""
   policy:
     description: >-
-      Explicit versioned TOML policy path for policy, pr-review,
+      Explicit versioned TOML policy path for policy, pr-review, pr-triage,
       pr-description, branch, change, mode, path, size, or tree
     required: false
     default: ""
@@ -28,19 +28,19 @@ inputs:
     default: ""
   file:
     description: >-
-      Offline snapshot JSON path for check=pr-review or Markdown body file for
+      Offline snapshot JSON path for check=pr-review/check=pr-triage or Markdown body file for
       check=pr-description
     required: false
     default: ""
   pr:
     description: >-
       Canonical HTTPS pull-request URL or positive pull-request number for live
-      check=pr-review or check=pr-description via gh
+      check=pr-review, check=pr-triage, or check=pr-description via gh
     required: false
     default: ""
   repo:
     description: >-
-      [HOST/]OWNER/REPO for numeric pr in pr-review or pr-description, or local
+      [HOST/]OWNER/REPO for numeric pr in pr-review, pr-triage, or pr-description, or local
       repository root for change, workflow*, mode, path, size, tree, or repo
     required: false
     default: ""
@@ -54,6 +54,14 @@ inputs:
     description: >-
       Commit-bound pull-request review submission mode for live check=pr-review:
       none, approve, request-changes, or both
+    required: false
+    default: ""
+  triage-policy:
+    description: Trusted explicit PR admission policy; required before APPROVE submission
+    required: false
+    default: ""
+  publish-comment:
+    description: Explicit true/false for owned comment publication in live check=pr-triage
     required: false
     default: ""
   branch:
@@ -205,7 +213,7 @@ runs:
         set -euo pipefail
         unset GITHUB_TOKEN GH_TOKEN
         case "${YAGA_BANNER_CHECK:-}" in
-          commit|policy|pr-review|pr-description|repo|branch|change|workflow|workflow-security|workflow-lint|mode|path|size|tree)
+          commit|policy|pr-review|pr-triage|pr-description|repo|branch|change|workflow|workflow-security|workflow-lint|mode|path|size|tree)
             YAGA_MODE="$YAGA_BANNER_CHECK"
             ;;
           gate)
@@ -288,6 +296,7 @@ runs:
         inputs.check != 'commit' &&
         inputs.check != 'policy' &&
         inputs.check != 'pr-review' &&
+        inputs.check != 'pr-triage' &&
         inputs.check != 'pr-description' &&
         inputs.check != 'repo' &&
         inputs.check != 'branch' &&
@@ -357,7 +366,7 @@ runs:
         YAGA_COMMIT_ACTION_RUNTIME: "1"
         YAGA_COMMIT_TRUSTED_CONFIG: ${{ inputs.trusted-config }}
         YAGA_RUNTIME_PYTHON: ${{ steps.uv_runtime.outputs.python }}
-        YAGA_UNUSED_INPUTS: ${{ (inputs.github-token != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '' || inputs.gate != '' || inputs.operation != '' || inputs.prerequisite-workflow != '' || inputs.lifecycle-workflow != '' || inputs.owner-id != '' || inputs.approval-marker != '' || inputs.request-timeout != '' || inputs.job-timeout-minutes != '' || inputs.agent-review-policy-file != '') && '1' || '0' }}
+        YAGA_UNUSED_INPUTS: ${{ (inputs.github-token != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.triage-policy != '' || inputs.publish-comment != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '' || inputs.gate != '' || inputs.operation != '' || inputs.prerequisite-workflow != '' || inputs.lifecycle-workflow != '' || inputs.owner-id != '' || inputs.approval-marker != '' || inputs.request-timeout != '' || inputs.job-timeout-minutes != '' || inputs.agent-review-policy-file != '') && '1' || '0' }}
       run: |
         # yaga-commit-action-shell
         set -euo pipefail
@@ -425,7 +434,7 @@ runs:
         YAGA_OWNER_ID: ${{ inputs.owner-id }}
         YAGA_PREREQUISITE_WORKFLOW: ${{ inputs.prerequisite-workflow != '' && inputs.prerequisite-workflow || '.github/workflows/ci.yml' }}
         YAGA_REQUEST_TIMEOUT: ${{ inputs.request-timeout != '' && inputs.request-timeout || '5' }}
-        YAGA_UNUSED_INPUTS: ${{ (inputs.trusted-config != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '') && '1' || '0' }}
+        YAGA_UNUSED_INPUTS: ${{ (inputs.trusted-config != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.triage-policy != '' || inputs.publish-comment != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '') && '1' || '0' }}
       run: |
         set -euo pipefail
         unset PYTHONHOME
@@ -468,6 +477,7 @@ runs:
       if: >-
         inputs.check == 'policy' ||
         inputs.check == 'pr-review' ||
+        inputs.check == 'pr-triage' ||
         inputs.check == 'pr-description' ||
         inputs.check == 'repo' ||
         inputs.check == 'branch' ||
@@ -490,6 +500,8 @@ runs:
         YAGA_INPUT_REPO: ${{ inputs.repo }}
         YAGA_INPUT_WAIT_SECONDS: ${{ inputs.wait-seconds }}
         YAGA_INPUT_SUBMIT_REVIEW: ${{ inputs.submit-review }}
+        YAGA_INPUT_TRIAGE_POLICY: ${{ inputs.triage-policy }}
+        YAGA_INPUT_PUBLISH_COMMENT: ${{ inputs.publish-comment }}
         YAGA_INPUT_BRANCH: ${{ inputs.branch }}
         YAGA_INPUT_RANGE: ${{ inputs.range }}
         YAGA_INPUT_REVISION: ${{ inputs.revision }}
@@ -506,7 +518,7 @@ runs:
         YAGA_INPUT_TREE_POLICY: ${{ inputs.tree-policy }}
         YAGA_NON_CLI_INPUTS: ${{ (inputs.trusted-config != '' || inputs.gate != '' || inputs.operation != '' || inputs.prerequisite-workflow != '' || inputs.lifecycle-workflow != '' || inputs.owner-id != '' || inputs.approval-marker != '' || inputs.request-timeout != '' || inputs.job-timeout-minutes != '' || inputs.agent-review-policy-file != '') && '1' || '0' }}
         YAGA_HAS_GITHUB_TOKEN: ${{ inputs.github-token != '' && '1' || '0' }}
-        YAGA_GH_TOKEN: ${{ ((inputs.check == 'pr-review' || inputs.check == 'pr-description') && inputs.pr != '') && inputs.github-token || '' }}
+        YAGA_GH_TOKEN: ${{ ((inputs.check == 'pr-review' || inputs.check == 'pr-triage' || inputs.check == 'pr-description') && inputs.pr != '') && inputs.github-token || '' }}
       run: |
         set -euo pipefail
         YAGA_SAVED_GH_TOKEN="${YAGA_GH_TOKEN:-}"

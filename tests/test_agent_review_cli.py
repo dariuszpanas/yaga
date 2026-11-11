@@ -219,6 +219,32 @@ def _mock_gh_api(
     return calls
 
 
+def _admit_test_publisher(tmp_path: Path, endpoints: dict[str, Any]) -> Path:
+    """Supply real admission metadata for existing review-publication contracts."""
+    path = tmp_path / "triage-policy.toml"
+    path.write_text(
+        'triage-policy-version = 1\nhost = "github.com"\nrepository-id = 100\n'
+        "maintainer-user-ids = [10]\nduplicate-candidates = 0\n",
+        encoding="utf-8",
+    )
+    prefix = "repos/example/project"
+    pr = endpoints[f"{prefix}/pulls/23"]
+    pr.update(user={"id": 10, "login": "maintainer", "type": "User"}, changed_files=1)
+    pr["head"] = {"sha": HEAD_SHA, "repo": {"id": 100, "fork": False}}
+    pr["base"] = {
+        "sha": BASE_SHA,
+        "ref": "main",
+        "repo": {"id": 100, "full_name": "example/project"},
+    }
+    endpoints[f"{prefix}/pulls/23/files?per_page=100&page=1"] = [
+        {"filename": "source.py", "sha": OLD_SHA, "status": "modified"}
+    ]
+    endpoints[f"{prefix}/git/commits/{HEAD_SHA}"] = {"sha": HEAD_SHA, "tree": {"sha": OLD_SHA}}
+    for review in endpoints[f"{prefix}/pulls/23/reviews?per_page=100"]:
+        review["user"]["type"] = "User" if review["user"]["id"] == 15094983 else "Bot"
+    return path
+
+
 def test_repository_agent_review_policy_is_valid() -> None:
     policy = load_policy(ROOT / ".yaga" / "agent-review-policy.toml")
     assert policy.required == ("codex",)
@@ -856,6 +882,7 @@ required = ["codex"]
         "state": "APPROVED",
         "commit_id": HEAD_SHA,
     }
+    triage_path = _admit_test_publisher(tmp_path, endpoints)
     calls = _mock_gh_api(monkeypatch, endpoints)
 
     approve_res = runner.invoke(
@@ -868,6 +895,8 @@ required = ["codex"]
             REFERENCE.url,
             "--submit-review",
             "approve",
+            "--triage-policy",
+            str(triage_path),
             "--format",
             "json",
         ],
@@ -900,6 +929,7 @@ required = ["codex"]
     }
     endpoints = _default_gh_endpoints(reviews=[existing_yaga_review], reactions=[])
     endpoints["user"] = {"login": "dariuszpanas", "id": 15094983}
+    _admit_test_publisher(tmp_path, endpoints)
     calls = _mock_gh_api(monkeypatch, endpoints)
 
     unchanged_res = runner.invoke(
@@ -912,6 +942,8 @@ required = ["codex"]
             REFERENCE.url,
             "--submit-review",
             "both",
+            "--triage-policy",
+            str(triage_path),
             "--format",
             "json",
         ],
@@ -1176,6 +1208,7 @@ required = ["codex"]
         "state": "APPROVED",
         "commit_id": HEAD_SHA,
     }
+    triage_path = _admit_test_publisher(tmp_path, endpoints)
     calls = _mock_gh_api(monkeypatch, endpoints)
 
     res = runner.invoke(
@@ -1188,6 +1221,8 @@ required = ["codex"]
             REFERENCE.url,
             "--submit-review",
             "approve",
+            "--triage-policy",
+            str(triage_path),
             "--format",
             "json",
         ],
@@ -1248,6 +1283,7 @@ required = ["codex"]
         "state": "APPROVED",
         "commit_id": HEAD_SHA,
     }
+    triage_path = _admit_test_publisher(tmp_path, open_endpoints)
     _mock_gh_api(monkeypatch, open_endpoints)
     gh_res = runner.invoke(
         app,
@@ -1259,6 +1295,8 @@ required = ["codex"]
             REFERENCE.url,
             "--submit-review",
             "approve",
+            "--triage-policy",
+            str(triage_path),
             "--format",
             "github",
         ],

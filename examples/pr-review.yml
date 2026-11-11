@@ -4,7 +4,7 @@ run-name: PR review verdict for #${{ github.event.pull_request.number }}
 on:
   pull_request_target:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions: {}
 
@@ -23,17 +23,27 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      issues: read
+      issues: write
       checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Triage admission and publish review surfaces
+        uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
+        with:
+          check: pr-triage
+          policy: .yaga/triage-policy.toml
+          pr: ${{ github.event.pull_request.number }}
+          repo: ${{ github.repository }}
+          publish-comment: "true"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Evaluate and submit pull-request review
         uses: dariuszpanas/yaga@0000000000000000000000000000000000000000 # replace with audited SHA
         with:
           check: pr-review
           policy: .yaga/agent-review-policy.toml
+          triage-policy: .yaga/triage-policy.toml
           pr: ${{ github.event.pull_request.number }}
           repo: ${{ github.repository }}
           wait-seconds: 480

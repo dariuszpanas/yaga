@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add bounded `pull-request triage check` and root Action `check: pr-triage` with explicit
+  versioned trust policy, immutable author/repository classification, sensitive-path and exact
+  recent merged-tree findings, and optional idempotent comment publication. External admission
+  requires a configured maintainer's current-head approval with an explicit acknowledgment of
+  the exact head/base/repository/PR/policy boundary. See [Pull-request trust triage](pull-request-triage.md).
+
+### Changed
+
+- Automatic positive `pr-review` submission now requires explicit trusted `triage-policy`.
+  Read-only review checks and negative-only publication remain compatible. The trusted dogfood
+  publisher posts triage first and stops on hold; this does not revoke existing reviews or
+  provide an authoritative current-head merge status.
+
 ## [0.5.0] - 2026-11-03
 
 ### Added

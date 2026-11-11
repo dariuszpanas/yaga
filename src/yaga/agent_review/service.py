@@ -29,6 +29,9 @@ from yaga.agent_review.snapshot import (
     load_pull_request_snapshot,
 )
 from yaga.errors import InputError, YagaError, safe_error_text
+from yaga.pull_request_triage.core import evaluate as evaluate_triage
+from yaga.pull_request_triage.policy import load_triage_policy
+from yaga.pull_request_triage.remote import TriageClient, collect_publication_snapshots
 
 
 class ReviewOutputFormat(StrEnum):
@@ -56,6 +59,7 @@ class CheckedPullRequestReview:
     policy_path: Path
     source: str
     submitted_review: SubmittedPullRequestReview | None = None
+    admission: dict[str, Any] | None = None
 
 
 def check_pull_request_review_source(
@@ -66,6 +70,7 @@ def check_pull_request_review_source(
     github_repository: str | None = None,
     wait_seconds: int | None = None,
     submit_review: ReviewSubmitMode = ReviewSubmitMode.NONE,
+    triage_policy_path: Path | None = None,
 ) -> CheckedPullRequestReview:
     """Check one explicit review snapshot file or current gh PR against one explicit policy."""
     if sum((file_path is not None, pull_request is not None)) != 1:
@@ -81,6 +86,10 @@ def check_pull_request_review_source(
         raise InputError("--submit-review must be none, approve, request-changes, or both")
     if submit_review is not ReviewSubmitMode.NONE and pull_request is None:
         raise InputError("--submit-review requires a live --pr source")
+    if triage_policy_path is not None and pull_request is None:
+        raise InputError("--triage-policy requires a live --pr source")
+    if triage_policy_path is not None and submit_review is ReviewSubmitMode.NONE:
+        raise InputError("--triage-policy requires explicit --submit-review")
     reference = (
         parse_pull_request_reference(pull_request, github_repository)
         if pull_request is not None
@@ -90,6 +99,7 @@ def check_pull_request_review_source(
     policy = load_policy(resolved_policy_path)
     plan_digest = build_plan(policy).digest()
     submitted_review: SubmittedPullRequestReview | None = None
+    admission = None
     if reference is not None:
         resolved_bots = [lens.resolve_bot() for lens in policy.lenses]
         include_check_runs = any(bool(bot.check_runs) for bot in resolved_bots)
@@ -143,12 +153,45 @@ def check_pull_request_review_source(
         if desired_event is not None:
             if evaluation.snapshot.state != "open":
                 raise InputError("cannot submit a pull-request review on a closed pull request")
-            submitted_review = submit_pull_request_review(
-                reference,
-                head_sha=evaluation.snapshot.head_sha,
-                event=desired_event,
-                existing_reviews=evaluation.snapshot.reviews,
-            )
+            if desired_event == "APPROVE" and triage_policy_path is None:
+                raise InputError("APPROVE submission requires an explicit trusted --triage-policy")
+            if triage_policy_path is not None:
+                admission_policy = load_triage_policy(triage_policy_path)
+                client = TriageClient(reference)
+                triage_snapshot, fresh = collect_publication_snapshots(
+                    client,
+                    admission_policy,
+                    plan_digest=plan_digest,
+                    include_check_runs=include_check_runs,
+                )
+                admission = evaluate_triage(admission_policy, triage_snapshot)
+            else:
+                fresh = fetch_pull_request_review_snapshot(
+                    reference,
+                    plan_digest=plan_digest,
+                    include_check_runs=include_check_runs,
+                    delay_seconds=0,
+                )
+            fresh_evaluation = evaluate_pull_request_snapshot(policy, fresh)
+            if (
+                (fresh.head_sha, fresh.base_sha)
+                != (evaluation.snapshot.head_sha, evaluation.snapshot.base_sha)
+                or fresh.state != "open"
+                or fresh.draft
+                or _desired_review_event(fresh_evaluation.aggregate.state, submit_review)
+                != desired_event
+            ):
+                raise InputError("PR review boundary or outcome changed before submission")
+            evaluation = fresh_evaluation
+            if desired_event != "APPROVE" or (
+                admission is not None and admission["admission"]["decision"] == "allow"
+            ):
+                submitted_review = submit_pull_request_review(
+                    reference,
+                    head_sha=evaluation.snapshot.head_sha,
+                    event=desired_event,
+                    existing_reviews=evaluation.snapshot.reviews,
+                )
         source = evaluation.snapshot.url or reference.url
     else:
         assert file_path is not None
@@ -161,6 +204,7 @@ def check_pull_request_review_source(
         policy_path=resolved_policy_path,
         source=source,
         submitted_review=submitted_review,
+        admission=admission,
     )
 
 
@@ -214,6 +258,11 @@ def review_report_document(checked: CheckedPullRequestReview) -> dict[str, Any]:
     }
     if checked.submitted_review is not None:
         document["submitted_review"] = checked.submitted_review.document()
+    if checked.admission is not None:
+        document["triage"] = checked.admission
+        if checked.admission["admission"]["decision"] != "allow":
+            document["valid"] = False
+            document["status"] = "pending"
     return document
 
 
@@ -229,6 +278,11 @@ def render_pull_request_review_report(
     snapshot = evaluation.snapshot
     if output_format is ReviewOutputFormat.GITHUB:
         github_lines = [render_evaluation(evaluation.results, evaluation.aggregate, "github")]
+        if checked.admission is not None:
+            github_lines.append(
+                "::notice title=YAGA maintainer admission::"
+                + checked.admission["admission"]["decision"]
+            )
         if checked.submitted_review is not None:
             github_lines.append(
                 "::notice title=YAGA pull-request review::"
@@ -243,6 +297,8 @@ def render_pull_request_review_report(
         f"Pull request: #{snapshot.number} (head {snapshot.head_sha[:12]})",
         rendered,
     ]
+    if checked.admission is not None:
+        lines.append("Maintainer admission: " + checked.admission["admission"]["decision"])
     if checked.submitted_review is not None:
         lines.append(
             f"Submitted review: {checked.submitted_review.state} "
