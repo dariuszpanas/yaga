@@ -158,7 +158,7 @@ policy finding.
 
 The root composite Action (`uses: dariuszpanas/yaga@...`, listed on GitHub Marketplace as
 **YAGA Checks**) defaults `check` to `commit` and dispatches into isolated runtimes for read-only
-pull-request commit checks, installed-CLI checks (`pr-review`, `pr-description`, `repo`,
+pull-request commit checks, installed-CLI checks (`pr-review`, `pr-triage`, `pr-description`, `repo`,
 `branch`, `change`, `workflow*`, `mode`, `path`, `size`, `tree`), and the write-capable `gate`
 lifecycle adapter. See [GitHub Actions](github-actions.md) for per-mode inputs and token isolation.
 

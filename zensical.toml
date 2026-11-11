@@ -37,6 +37,7 @@ nav = [
   { "Optional review tools" = [
     { "Commit quality" = "commit-quality.md" },
     { "Agent review gate" = "agent-review-gate.md" },
+    { "Pull-request trust triage" = "pull-request-triage.md" },
     { "GitHub review adapter" = "github-review-adapter.md" },
   ] },
   { "Project" = [

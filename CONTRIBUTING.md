@@ -83,7 +83,7 @@ engineering and test-fixture jobs so status checks are immediately self-explanat
 | --- | --- | --- | --- |
 | `Commit Messages` | `.github/workflows/commit-policy.yml` | **Marketplace Action dogfooding** (`check: commit`, `pr-description`) | `[tool.yaga.commit]` in `pyproject.toml` (PR title + branch commits) and `.yaga/description-policy.toml` (PR body, rechecked on `edited`) |
 | `YAGA Checks (branch, change, policy, repo)` | `.github/workflows/ci.yml` | **Marketplace Action dogfooding** (`check: branch`, `change`, `policy`, `repo`) | `.yaga/branch-policy.toml`, `.yaga/change-policy.toml`, versioned schema audit across `.yaga/` and `pyproject.toml`, and `.yaga/checks/ci.toml` (`commit`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) |
-| `Publish Pull Request Review` | `.github/workflows/pr-review.yml` | **Marketplace Action dogfooding** (`check: pr-review`, trusted `pull_request_target` / `workflow_run`) | `.yaga/agent-review-policy.toml` (waits for head-bound Codex review and submits `APPROVE` / `REQUEST_CHANGES`) |
+| `Publish Pull Request Review` | `.github/workflows/pr-review.yml` | **Marketplace Action dogfooding** (`check: pr-triage` then `pr-review`, trusted `pull_request_target` / `workflow_run`) | `.yaga/triage-policy.toml` posts admission findings and holds unacknowledged external changes; `.yaga/agent-review-policy.toml` waits for head-bound Codex review before formal publication. |
 | `Lint, Package Build & Docs` | `.github/workflows/ci.yml` | **Repository engineering gate** | `ruff`, `ty`, `pre-commit` hook smoke, `actionlint` integration tests, strict wheel/sdist build (`scripts/check_build.py`), Zensical docs (`scripts/check_docs.py`, `scripts/check_description.py`), and `check: gate` stdlib wiring smoke |
 | `Python 3.12..3.15 on ubuntu/windows` | `.github/workflows/ci.yml` | **Repository test matrix** | Full `pytest` suite against non-editable installs |
 | `Minimum dependency security on ubuntu/windows` | `.github/workflows/ci.yml` | **Supply-chain & floor qualification** | Lowest-resolved runtime dependency smoke and `pip-audit` (`scripts/check_minimum_runtime.py`) |
@@ -477,15 +477,15 @@ execution, validates one bounded event against the GitHub runner repository/ref 
 `HEAD` to equal the event head, and never fetches Git history. Keep its `edited`-aware workflow
 separate from the authenticated `CI` workflow used by the Codex gate. Its PR-head configuration is
 contributor-controlled and is only a quality signal. Installed-CLI `check` modes (`policy`,
-`pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`,
+`pr-review`, `pr-triage`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`,
 `workflow-lint`, `mode`, `path`, `size`, and `tree`) reuse that hash-locked `--no-dev` runtime and
-execute through `cli_action.py`, passing `GH_TOKEN` only for live `pr` fetches in `pr-review` and
-`pr-description`.
+execute through `cli_action.py`, passing `GH_TOKEN` only for live `pr` fetches in `pr-review`,
+`pr-triage`, and `pr-description`.
 
 ## Action contract
 
 The public inputs are exactly `check`, `trusted-config`, `policy`, `template`, `file`, `pr`,
-`repo`, `wait-seconds`, `submit-review`, `branch`, `range`, `revision`, `commit`, `config`,
+`repo`, `wait-seconds`, `submit-review`, `triage-policy`, `publish-comment`, `branch`, `range`, `revision`, `commit`, `config`,
 `plan`, `checks`, `workflow-paths`, `workflow-security-profile`, `workflow-security-rules`,
 `mode-policy`, `path-policy`, `size-policy`, `tree-policy`, `github-token`, `gate`, `operation`,
 `prerequisite-workflow`, `lifecycle-workflow`, `owner-id`, `approval-marker`, `request-timeout`,

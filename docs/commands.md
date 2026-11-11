@@ -15,7 +15,8 @@ first table needs GitHub credentials except explicit description or review `--pr
 | [`yaga commit check`](commit-policy.md) | One literal title/message, editor file, file, stdin, commit, or range; defaults to `HEAD`. One discovered or explicit commit config. | Offline. Git for history and `--edit`; Typos if spelling is enabled. |
 | [`yaga branch check`](branch-policy.md) | Literal short name via `--name` and explicit `--policy`. | Offline; no Git. |
 | [`yaga pull-request description check`](pull-request-descriptions.md) | File, stdin, or current PR; explicit `--policy`, optional `--template`. | File/stdin are offline. Only `--pr` uses authenticated `gh` and network to read current metadata; no checkout. Typos if enabled. |
-| [`yaga pull-request review check`](agent-review-gate.md#pull-request-review-state) | Snapshot JSON file or current PR; explicit `--policy`, optional `--wait-seconds` and `--submit-review`. | Snapshot file is offline. Only `--pr` uses authenticated `gh` and network to read (or opt-in submit) review state; no checkout. |
+| [`yaga pull-request review check`](agent-review-gate.md#pull-request-review-state) | Snapshot JSON file or current PR; explicit `--policy`, optional `--wait-seconds` and `--submit-review`; positive submission requires `--triage-policy`. | Snapshot file is offline. Only `--pr` uses authenticated `gh` and network to read (or opt-in submit) review state; no checkout. |
+| [`yaga pull-request triage check`](pull-request-triage.md) | Explicit trusted `--policy` plus offline `--file` or live `--pr`; optional `--publish-comment`. | Metadata-only provenance, sensitive paths, exact duplicate trees, and current-head maintainer admission; no PR execution. |
 | [`yaga change check`](change-policy.md) | Committed changed paths from explicit `--range A..B` or `A...B` and `--policy`. | Offline Git; complete history and a unique three-dot merge base. |
 | [`yaga tree check`](tree-policy.md) | Committed path names; explicit `--revision` and `--policy`. | Offline Git; selected commit/tree must exist. |
 | [`yaga path check`](path-policy.md) | Committed path portability; explicit `--revision` and `--policy`. | Offline Git; selected commit/tree must exist. |
@@ -60,6 +61,7 @@ structured operational errors use stderr. CLI usage errors may be plain text eve
 | `repo check` | Text, JSON, GitHub; `0/1/2` with operational errors taking precedence | Runs a selected plan. | Root Action (`check: repo`). |
 | `policy check` | Text, JSON, GitHub; `0/1/2` (`1` on deprecated schemas with `--strict`) | No. | Root Action (`check: policy`). |
 | `branch check`, `change check`, both description checks, `pull-request review check` | Text, JSON, GitHub; `0/1/2` | No. | Root Action (`branch`, `change`, `pr-description`, `pr-review`). |
+| `pull-request triage check` | Text, JSON, GitHub; `0` allow, `1` hold, `2` error | No. | Root Action `pr-triage`; review submission also accepts `triage-policy` in `pr-review`. |
 | `commit quality` | Text, JSON, GitHub; `0/1/2` | No. | None (requires optional model extras). |
 | `github pull-request check` | Text, JSON, GitHub; `0/1/2` | No. | Root Action default (`check: commit`). |
 | `test policy check`, `test plan` | Text, JSON; `0/2` | No. | None. |
@@ -131,7 +133,7 @@ pull-request state; they do not check event-bound commit history or edit the pul
 
 [`yaga config show`](configuration.md) reads one discovered or explicit config;
 [`yaga config init`](configuration.md) creates a new standalone config with no-overwrite semantics
-and supports `--dry-run`. [`yaga policy init`](configuration.md#policy-initialization-and-schema-audits) creates starter TOML files stamped with the latest schema version across YAGA's 11 policy families (with an interactive checkbox selector in a terminal, plus `--all`, `--skip-existing`, and `--dry-run`). All are offline, use text/JSON, and return `0/2`.
+and supports `--dry-run`. [`yaga policy init`](configuration.md#policy-initialization-and-schema-audits) creates starter TOML files stamped with the latest schema version across YAGA's 12 policy families (with an interactive checkbox selector in a terminal, plus `--all`, `--skip-existing`, and `--dry-run`). All are offline, use text/JSON, and return `0/2`.
 [`yaga commit template`](commit-policy.md#read-only-message-templates) prints an incomplete message
 from explicit conventional components or plain policy; it is offline, text-only, and returns
 `0/2`. None belongs to repository plans or the bundled Actions.

@@ -210,7 +210,7 @@ JSON file (`--file`) or a live GitHub pull request (`--pr`) fetched via the inst
 yaga pull-request review check --policy .yaga/agent-review-policy.toml --file pr-review-snapshot.json
 yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr https://github.com/OWNER/REPO/pull/123
 yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr 123 --repo OWNER/REPO --wait-seconds 300 --format json
-yaga pull-request review check --policy .yaga/agent-review-policy.toml --pr 123 --repo OWNER/REPO --submit-review both
+yaga pull-request review check --policy .yaga/agent-review-policy.toml --triage-policy .yaga/triage-policy.toml --pr 123 --repo OWNER/REPO --submit-review both
 ```
 
 When `required` only names built-in presets (`codex`, `copilot`, or `claude`), the
@@ -231,7 +231,11 @@ on an open non-draft PR) posts an idempotent commit-bound `APPROVE` or `REQUEST_
 `head_sha` from a trusted default-branch `pull_request_target` / `workflow_run` publisher workflow (never checking
 out PR code or cache) with `pull-requests: write` and the repository Actions setting
 `can_approve_pull_request_reviews` ("Allow GitHub Actions to create and approve pull requests")
-enabled. Reviews, check runs, and summary
+enabled. Positive publication requires an explicit trusted `--triage-policy`; external authors
+need a configured maintainer's current-head approval with explicit boundary acknowledgment even
+when automated review passes. See
+[Pull-request trust triage](pull-request-triage.md) for migration, operating bounds, and merge
+enforcement. Reviews, check runs, and summary
 comments bound to an older commit SHA, or reactions predating the current head commit timestamp,
 report `pending` (stale) and exit `1` so stale approvals never pass a new head commit.
 

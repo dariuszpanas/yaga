@@ -1,0 +1,7 @@
+# Repository-local trust boundary, verified against GitHub's immutable IDs.
+triage-policy-version = 1
+host = "github.com"
+repository-id = 1343251265
+maintainer-user-ids = [15094983]
+duplicate-candidates = 5
+comment-author-id = 41898282 # GitHub Actions installation-token publisher

@@ -923,6 +923,7 @@ def test_pr_review_publisher_workflow_preserves_default_branch_trust_boundary() 
         "synchronize",
         "reopened",
         "ready_for_review",
+        "edited",
     ]
     assert triggers["workflow_run"] == {
         "workflows": ["CI", "Pull Request Review Wake"],
@@ -939,17 +940,29 @@ def test_pr_review_publisher_workflow_preserves_default_branch_trust_boundary() 
     assert job["permissions"] == {
         "contents": "read",
         "pull-requests": "write",
-        "issues": "read",
+        "issues": "write",
         "checks": "read",
     }
     checkout = job["steps"][0]
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"] == {"persist-credentials": False}
-    action_step = job["steps"][1]
+    triage_step = job["steps"][1]
+    assert triage_step["uses"] == "./"
+    assert triage_step["with"] == {
+        "check": "pr-triage",
+        "policy": ".yaga/triage-policy.toml",
+        "pr": "${{ needs.resolve.outputs.pull_request_number }}",
+        "repo": "${{ github.repository }}",
+        "publish-comment": "true",
+        "github-token": "${{ secrets.GITHUB_TOKEN }}",
+    }
+    assert "continue-on-error" not in triage_step
+    action_step = job["steps"][2]
     assert action_step["uses"] == "./"
     assert action_step["with"] == {
         "check": "pr-review",
         "policy": ".yaga/agent-review-policy.toml",
+        "triage-policy": ".yaga/triage-policy.toml",
         "pr": "${{ needs.resolve.outputs.pull_request_number }}",
         "repo": "${{ github.repository }}",
         "wait-seconds": "${{ needs.resolve.outputs.wait_seconds }}",
@@ -963,6 +976,6 @@ def test_pr_review_publisher_workflow_preserves_default_branch_trust_boundary() 
     wake_triggers = wake_workflow.get("on", wake_workflow.get(True))
     assert isinstance(wake_triggers, dict)
     assert set(wake_triggers) == {"issue_comment", "pull_request_review", "workflow_dispatch"}
-    assert wake_triggers["pull_request_review"] == {"types": ["submitted"]}
+    assert wake_triggers["pull_request_review"] == {"types": ["submitted", "edited", "dismissed"]}
     assert wake_workflow["permissions"] == {}
     assert wake_workflow["jobs"]["wake"]["permissions"] == {}

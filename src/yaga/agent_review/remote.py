@@ -8,6 +8,7 @@ import re
 import shutil
 import stat
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -182,9 +183,31 @@ def fetch_pull_request_review_snapshot(
     executable = _find_gh()
     if delay_seconds > 0:
         time.sleep(delay_seconds)
+    snapshot, _ = _collect_pull_request_review_snapshot(
+        reference,
+        plan_digest=plan_digest,
+        include_check_runs=include_check_runs,
+        get=lambda endpoint: _gh_api_json(executable, reference, endpoint),
+    )
+    return snapshot
+
+
+def _collect_pull_request_review_snapshot(
+    reference: PullRequestReference,
+    *,
+    plan_digest: str,
+    include_check_runs: bool,
+    get: Callable[[str], Any],
+) -> tuple[PullRequestReviewSnapshot, Any]:
+    """Collect live evidence and preserve raw review identities for joint admission.
+
+    The caller supplies the bounded authenticated transport. Reviews are read
+    last so both code-review and maintainer admission consume the same payload.
+    Raw documents remain internal; the public offline snapshot is unchanged.
+    """
     base_endpoint = f"repos/{reference.owner}/{reference.repository}"
 
-    pr_doc = _gh_api_json(executable, reference, f"{base_endpoint}/pulls/{reference.number}")
+    pr_doc = get(f"{base_endpoint}/pulls/{reference.number}")
     if not isinstance(pr_doc, dict):
         raise InputError("gh returned an unexpected pull-request metadata document")
     if type(pr_doc.get("number")) is not int or pr_doc["number"] != reference.number:
@@ -211,34 +234,24 @@ def fetch_pull_request_review_snapshot(
     head_sha = _extract_branch_sha(pr_doc.get("head"), label="head")
     base_sha = _extract_branch_sha(pr_doc.get("base"), label="base")
 
-    reviews_doc = _gh_api_json(
-        executable,
-        reference,
-        f"{base_endpoint}/pulls/{reference.number}/reviews?per_page={MAX_SNAPSHOT_RECORDS}",
-    )
-    review_comments_doc = _gh_api_json(
-        executable,
-        reference,
+    review_comments_doc = get(
         f"{base_endpoint}/pulls/{reference.number}/comments?per_page={MAX_SNAPSHOT_RECORDS}",
     )
-    issue_comments_doc = _gh_api_json(
-        executable,
-        reference,
+    issue_comments_doc = get(
         f"{base_endpoint}/issues/{reference.number}/comments?per_page={MAX_SNAPSHOT_RECORDS}",
     )
-    reactions_doc = _gh_api_json(
-        executable,
-        reference,
+    reactions_doc = get(
         f"{base_endpoint}/issues/{reference.number}/reactions?per_page={MAX_SNAPSHOT_RECORDS}",
     )
     check_runs_items: list[dict[str, Any]] = []
     if include_check_runs:
-        check_runs_doc = _gh_api_json(
-            executable,
-            reference,
+        check_runs_doc = get(
             f"{base_endpoint}/commits/{head_sha}/check-runs?per_page={MAX_SNAPSHOT_RECORDS}",
         )
         check_runs_items = _normalize_check_runs(check_runs_doc)
+    reviews_doc = get(
+        f"{base_endpoint}/pulls/{reference.number}/reviews?per_page={MAX_SNAPSHOT_RECORDS}"
+    )
 
     # Live --pr fetches never derive reaction freshness from Git commit dates
     # or partially emulate the gate publisher's boundary/workflow-run state;
@@ -263,7 +276,7 @@ def fetch_pull_request_review_snapshot(
             pr_doc.get("requested_reviewers", [])
         ),
     }
-    return parse_pull_request_snapshot(snapshot_document, source=actual.url)
+    return parse_pull_request_snapshot(snapshot_document, source=actual.url), reviews_doc
 
 
 def submit_pull_request_review(
@@ -426,14 +439,17 @@ def _gh_api_post_json(
     endpoint: str,
     *,
     fields: tuple[tuple[str, str], ...],
+    method: str = "POST",
 ) -> Any:
+    if method not in {"POST", "PATCH"}:
+        raise InputError("unsupported bounded GitHub write method")
     command = [
         executable,
         "api",
         "--hostname",
         reference.host,
         "--method",
-        "POST",
+        method,
         "-H",
         "Accept: application/vnd.github+json",
         "-H",

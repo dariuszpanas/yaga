@@ -1,0 +1,17 @@
+# Replace the repository ID and add verified maintainer User IDs before use.
+# The empty maintainer list deliberately admits nobody automatically.
+triage-policy-version = 1
+host = "github.com"
+repository-id = 1
+maintainer-user-ids = []
+duplicate-candidates = 5
+
+# Optional, only for a verified installation-token comment publisher:
+# comment-author-id = 41898282
+
+# Optional automation exemption: verify this bot's immutable ID for your host,
+# keep the allowed paths narrow, and never use login alone as authentication.
+# [[trusted-bots]]
+# user-id = 49699333
+# login = "dependabot[bot]"
+# allowed-patterns = ["uv.lock", "pyproject.toml"]

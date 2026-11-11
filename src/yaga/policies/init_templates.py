@@ -20,6 +20,7 @@ from yaga.files import read_file_prefix
 from yaga.modes.policy import load_mode_policy
 from yaga.paths.policy import load_path_policy
 from yaga.policies.schemas import POLICY_SPECS, PolicyKind
+from yaga.pull_request_triage.policy import load_triage_policy
 from yaga.repository.plan import load_repository_check_plan
 from yaga.sizes.policy import load_size_policy
 from yaga.test_planning.policy import load_test_policy
@@ -298,6 +299,17 @@ def render_starter_toml(
             'publication = "review"\n'
         )
 
+    if kind is PolicyKind.TRIAGE:
+        return (
+            "# Replace the repository ID with your verified GitHub repository ID.\n"
+            "# No maintainer or automation is trusted until explicitly configured.\n"
+            f"triage-policy-version = {version}\n"
+            'host = "github.com"\n'
+            "repository-id = 1\n"
+            "maintainer-user-ids = []\n"
+            "duplicate-candidates = 5\n"
+        )
+
     if kind is PolicyKind.TEST:
         return (
             "# YAGA deterministic test qualification policy\n"
@@ -451,6 +463,8 @@ def _validate_generated_policy(kind: PolicyKind, path: Path, *, repository: Path
         load_agent_review_policy(path)
     elif kind is PolicyKind.TEST:
         load_test_policy(path)
+    elif kind is PolicyKind.TRIAGE:
+        load_triage_policy(path)
     else:
         raise AssertionError(f"unhandled PolicyKind: {kind!r}")
 

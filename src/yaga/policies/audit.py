@@ -18,6 +18,7 @@ from yaga.files import read_file_prefix
 from yaga.modes.policy import load_mode_policy
 from yaga.paths.policy import load_path_policy
 from yaga.policies.schemas import POLICY_SPECS, PolicyKind
+from yaga.pull_request_triage.policy import load_triage_policy
 from yaga.repository.plan import load_repository_check_plan
 from yaga.sizes.policy import load_size_policy
 from yaga.test_planning.policy import load_test_policy
@@ -28,6 +29,7 @@ MAX_SCANNED_DIRECTORIES = 256
 MAX_AUDIT_FILE_BYTES = 1024 * 1024
 
 _DISTINCTIVE_VERSION_KEYS: tuple[tuple[str, PolicyKind], ...] = (
+    ("triage-policy-version", PolicyKind.TRIAGE),
     ("plan-version", PolicyKind.REPO),
     ("branch-policy-version", PolicyKind.BRANCH),
     ("change-policy-version", PolicyKind.CHANGE),
@@ -40,6 +42,7 @@ _DISTINCTIVE_VERSION_KEYS: tuple[tuple[str, PolicyKind], ...] = (
 )
 
 _FILENAME_HINTS: dict[str, PolicyKind] = {
+    "triage-policy.toml": PolicyKind.TRIAGE,
     ".yaga.toml": PolicyKind.COMMIT,
     "pyproject.toml": PolicyKind.COMMIT,
     "branch-policy.toml": PolicyKind.BRANCH,
@@ -404,6 +407,9 @@ def _run_domain_loader(kind: PolicyKind, path: Path, *, repository: Path | None)
         return load_agent_review_policy(path).version
     if kind is PolicyKind.TEST:
         return load_test_policy(path).policy.test_policy_version
+    if kind is PolicyKind.TRIAGE:
+        load_triage_policy(path)
+        return 1
     raise AssertionError(f"unhandled PolicyKind: {kind!r}")
 
 

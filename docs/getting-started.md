@@ -186,7 +186,7 @@ yaga policy check --repo . --strict
 
 In an interactive terminal with no policy names or `--all`, `yaga policy init` opens a checkbox
 selector; in scripts or CI, pass explicit policy names or `--all` (plus `--skip-existing` or
-`--dry-run` as needed). See the [command reference](commands.md) for all 11 supported policy kinds.
+`--dry-run` as needed). See the [command reference](commands.md) for all 12 supported policy kinds.
 
 ## Check a commit
 

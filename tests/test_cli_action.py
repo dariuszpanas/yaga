@@ -43,6 +43,7 @@ def test_pr_review_live_mode_builds_exact_command_and_isolates_gh_token(tmp_path
             YAGA_INPUT_REPO="owner/repo",
             YAGA_INPUT_WAIT_SECONDS="300",
             YAGA_INPUT_SUBMIT_REVIEW="both",
+            YAGA_INPUT_TRIAGE_POLICY=".yaga/triage-policy.toml",
             YAGA_HAS_GITHUB_TOKEN="1",
             YAGA_GH_TOKEN="ghs_live_review_token",
         )
@@ -58,6 +59,7 @@ def test_pr_review_live_mode_builds_exact_command_and_isolates_gh_token(tmp_path
         "--repo=owner/repo",
         "--wait-seconds=300",
         "--submit-review=both",
+        "--triage-policy=.yaga/triage-policy.toml",
         "--format=github",
     ]
     assert child_env["GH_TOKEN"] == "ghs_live_review_token"
@@ -90,6 +92,7 @@ def test_pr_review_file_mode_rejects_live_inputs_and_strips_all_tokens(tmp_path:
         ("YAGA_INPUT_REPO", "owner/repo"),
         ("YAGA_INPUT_WAIT_SECONDS", "60"),
         ("YAGA_INPUT_SUBMIT_REVIEW", "approve"),
+        ("YAGA_INPUT_TRIAGE_POLICY", "trusted-triage.toml"),
         ("YAGA_HAS_GITHUB_TOKEN", "1"),
     ):
         with pytest.raises(InputError):
@@ -102,6 +105,79 @@ def test_pr_review_file_mode_rejects_live_inputs_and_strips_all_tokens(tmp_path:
                     **{forbidden_key: value},
                 )
             )
+
+
+@pytest.mark.parametrize("publish", ["", "false", "true"])
+def test_pr_triage_action_live_command_and_token_scope(tmp_path: Path, publish: str) -> None:
+    args, child_env, _ = cli_action.build_cli_invocation(
+        _base_env(
+            tmp_path,
+            YAGA_INPUT_CHECK="pr-triage",
+            YAGA_INPUT_POLICY="trusted.toml",
+            YAGA_INPUT_PR="23",
+            YAGA_INPUT_REPO="example/project",
+            YAGA_INPUT_PUBLISH_COMMENT=publish,
+            YAGA_GH_TOKEN="fake-test-token",
+            YAGA_HAS_GITHUB_TOKEN="1",
+        )
+    )
+    assert args == [
+        "pull-request",
+        "triage",
+        "check",
+        "--policy=trusted.toml",
+        "--pr=23",
+        "--repo=example/project",
+        *(["--publish-comment"] if publish == "true" else []),
+        "--format=github",
+    ]
+    assert child_env["GH_TOKEN"] == "fake-test-token"
+    assert "GITHUB_TOKEN" not in child_env
+
+
+@pytest.mark.parametrize("publish", ["True", "1", "yes", "--help"])
+def test_pr_triage_action_rejects_nonboolean_publication_input(
+    tmp_path: Path, publish: str
+) -> None:
+    with pytest.raises(InputError, match="true or false"):
+        cli_action.build_cli_invocation(
+            _base_env(
+                tmp_path,
+                YAGA_INPUT_CHECK="pr-triage",
+                YAGA_INPUT_POLICY="trusted.toml",
+                YAGA_INPUT_PR="23",
+                YAGA_INPUT_REPO="example/project",
+                YAGA_INPUT_PUBLISH_COMMENT=publish,
+                YAGA_GH_TOKEN="fake-test-token",
+            )
+        )
+
+
+def test_pr_triage_action_offline_is_tokenless_and_cannot_publish(tmp_path: Path) -> None:
+    env = _base_env(
+        tmp_path,
+        YAGA_INPUT_CHECK="pr-triage",
+        YAGA_INPUT_POLICY="trusted.toml",
+        YAGA_INPUT_FILE="snapshot.json",
+    )
+    args, child_env, _ = cli_action.build_cli_invocation(env)
+    assert args == [
+        "pull-request",
+        "triage",
+        "check",
+        "--policy=trusted.toml",
+        "--file=snapshot.json",
+        "--format=github",
+    ]
+    assert "GH_TOKEN" not in child_env and "GITHUB_TOKEN" not in child_env
+    for addition in (
+        {"YAGA_INPUT_PUBLISH_COMMENT": "true"},
+        {"YAGA_INPUT_REPO": "example/project"},
+        {"YAGA_GH_TOKEN": "fake-test-token"},
+        {"YAGA_INPUT_SUBMIT_REVIEW": "approve"},
+    ):
+        with pytest.raises(InputError):
+            cli_action.build_cli_invocation(dict(env, **addition))
 
 
 def test_pr_description_event_file_and_live_modes(tmp_path: Path) -> None:

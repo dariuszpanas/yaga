@@ -55,6 +55,15 @@ Agent review gate is the public review contract. Its current provider adapter re
   while a review is actively in progress on `head_sha` after a 30-second startup grace window),
   while offline `--file` snapshots may supply an explicit `head_committed_at` timestamp. Keep this
   CLI check outside repository plans and both Action import graphs.
+- Keep pull-request trust triage under `src/yaga/pull_request_triage/`, with explicit trusted
+  policy, immutable identities, complete bounded metadata, and current-head maintainer review
+  admission before automatic positive formal review publication. Never treat PR instructions,
+  labels, bot reviews, or quota authorization markers as maintainer approval. Revalidate live
+  state before writes and submit an explicit commit ID. Do not execute PR code in a privileged
+  metadata job. The feature is separate from the stdlib-only Agent review gate import graph.
+  An assistant using maintainer credentials must obtain explicit user authorization for that
+  exact external PR and head before creating an admission review; a bulk maintenance request
+  or green automated check does not provide that authorization.
 - `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine sources,
   fetch history, reduce a Git selection, or ignore a missing base.
 - Treat commit messages, Git output, revisions, paths, and displayed labels as untrusted. Bound
@@ -252,7 +261,7 @@ Agent review gate is the public review contract. Its current provider adapter re
   checkout via `"$YAGA_RUNTIME_PYTHON" -I -m yaga` under its separate tokenless
   `YAGA_COMMIT_ACTION_RUNTIME=1` entrypoint (importing commit and policy-schema modules but never
   Typer, commands, Codex policy, or GitHub REST/token code); and installed-CLI `check` modes
-  (`policy`, `pr-review`, `pr-description`, `repo`, `branch`, `change`, `workflow`,
+  (`policy`, `pr-review`, `pr-triage`, `pr-description`, `repo`, `branch`, `change`, `workflow`,
   `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) run through
   `src/yaga/cli_action.py` inside that hash-locked `--no-dev` `uv` virtual environment, rejecting
   unused inputs fail-closed and passing `GH_TOKEN` only when live `--pr` access is requested.
