@@ -75,11 +75,12 @@ schema version 1 includes the exact boundary, policy digest, classification, inv
 admission reason/review ID, exact finding count, and up to 256 findings. Text is terminal-sanitized.
 
 The duplicate scan compares the entire head Git tree with merge-commit trees from up to the
-configured number of most recently updated closed PRs. Unmerged closed PRs consume candidate
-slots. A match is exact; a nonmatch says nothing about older PRs, equivalent patches, partial
-copies, or rebases onto a different base. Set `duplicate-candidates = 0` to explicitly disable
-this finding. File contents, PR descriptions, diffs, and instruction text are never interpreted
-as commands or policy. This check does not perform semantic prompt-injection analysis.
+configured number of most recently updated closed PRs (excluding the target PR itself). Unmerged
+closed PRs consume candidate slots. A match is exact; a nonmatch says nothing about older PRs,
+equivalent patches, partial copies, or rebases onto a different base. Set
+`duplicate-candidates = 0` to explicitly disable this finding. File contents, PR descriptions,
+diffs, and instruction text are never interpreted as commands or policy. This check does not
+perform semantic prompt-injection analysis.
 
 Offline input is an explicit metadata snapshot, not a live authorization receipt. It has
 `version = 1`; host/repository/PR IDs and names; `state`, `draft`, head/base SHA and base ref;

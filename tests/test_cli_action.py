@@ -434,6 +434,29 @@ def test_branch_change_workflow_and_repo_modes_build_exact_commands(tmp_path: Pa
         ),
         (
             {
+                "YAGA_INPUT_CHECK": "pr-review",
+                "YAGA_INPUT_POLICY": "p.toml",
+                "YAGA_INPUT_PR": "12",
+                "YAGA_INPUT_SUBMIT_REVIEW": "both",
+                "YAGA_HAS_GITHUB_TOKEN": "1",
+                "YAGA_GH_TOKEN": "ghs_tok",
+            },
+            "requires input 'triage-policy'",
+        ),
+        (
+            {
+                "YAGA_INPUT_CHECK": "pr-review",
+                "YAGA_INPUT_POLICY": "p.toml",
+                "YAGA_INPUT_PR": "12",
+                "YAGA_INPUT_SUBMIT_REVIEW": "none",
+                "YAGA_INPUT_TRIAGE_POLICY": "trusted.toml",
+                "YAGA_HAS_GITHUB_TOKEN": "1",
+                "YAGA_GH_TOKEN": "ghs_tok",
+            },
+            "requires 'submit-review'",
+        ),
+        (
+            {
                 "YAGA_INPUT_CHECK": "workflow",
                 "YAGA_INPUT_WORKFLOW_PATHS": "--help",
             },

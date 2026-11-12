@@ -152,16 +152,21 @@ def _collect_inventory(client: TriageClient, policy: TriagePolicy) -> dict[str, 
                 {key: item.get(key) for key in ("filename", "previous_filename", "sha", "status")}
             )
     candidates = []
-    closed = []
+    selected_closed = []
     if policy.duplicate_candidates:
+        request_limit = policy.duplicate_candidates + 1
         closed = client.get(
-            f"{prefix}/pulls?state=closed&sort=updated&direction=desc&per_page={policy.duplicate_candidates}"
+            f"{prefix}/pulls?state=closed&sort=updated&direction=desc&per_page={request_limit}"
         )
-        if not isinstance(closed, list) or len(closed) > policy.duplicate_candidates:
+        if not isinstance(closed, list) or len(closed) > request_limit:
             raise InputError("invalid triage closed-PR candidate inventory")
+        seen_numbers: set[int] = set()
         for candidate in closed:
             candidate = _record(candidate, "closed PR")
             candidate_number = positive(candidate.get("number"), "closed PR number")
+            if candidate_number in seen_numbers:
+                raise InputError("duplicate triage closed PR candidate")
+            seen_numbers.add(candidate_number)
             candidate_url = candidate.get("html_url")
             if not isinstance(candidate_url, str):
                 raise InputError("triage closed PR has missing identity")
@@ -176,10 +181,17 @@ def _collect_inventory(client: TriageClient, policy: TriagePolicy) -> dict[str, 
                 raise InputError("triage closed PR has unknown merge state")
             if candidate["merged_at"] is not None:
                 timestamp(candidate["merged_at"])
+                sha(candidate.get("merge_commit_sha"), "merged commit")
+            if candidate_number == reference.number:
+                continue
+            if len(selected_closed) < policy.duplicate_candidates:
+                selected_closed.append(candidate)
+        for candidate in selected_closed:
+            if candidate["merged_at"] is not None:
                 merged_sha = sha(candidate.get("merge_commit_sha"), "merged commit")
                 candidates.append(
                     {
-                        "number": candidate_number,
+                        "number": candidate["number"],
                         "merge_commit_sha": merged_sha,
                         "tree_sha": _tree(client, merged_sha),
                     }
@@ -191,7 +203,7 @@ def _collect_inventory(client: TriageClient, policy: TriagePolicy) -> dict[str, 
         changed_files=count,
         candidates=candidates,
         candidate_limit=policy.duplicate_candidates,
-        candidates_examined=len(closed),
+        candidates_examined=len(selected_closed),
     )
     return document
 
@@ -205,15 +217,21 @@ def _finish_snapshot(
     for review in reviews:
         review = _record(review, "review")
         author = _record(review.get("user"), "review author")
+        commit_id = review.get("commit_id")
+        if isinstance(commit_id, str):
+            commit_id = commit_id.lower()
+        body = review.get("body")
+        if body is None:
+            body = ""
         normalized_reviews.append(
             {
                 "id": review.get("id"),
                 "user_id": author.get("id"),
                 "user_type": author.get("type"),
                 "state": review.get("state"),
-                "commit_id": review.get("commit_id"),
+                "commit_id": commit_id,
                 "submitted_at": review.get("submitted_at"),
-                "body": review.get("body"),
+                "body": body,
             }
         )
     document["reviews"] = normalized_reviews
@@ -341,6 +359,8 @@ def publish_comment(
     for comment in comments:
         comment = _record(comment, "comment")
         body = comment.get("body")
+        if body is None:
+            body = ""
         if not isinstance(body, str) or utf8_size(body) > 64 * 1024:
             raise InputError("invalid triage comment body")
         if MARKER in body:
@@ -349,7 +369,7 @@ def publish_comment(
                 MARKER + "\n"
             ):
                 raise InputError("triage comment marker ownership is ambiguous")
-            matches.append(comment)
+            matches.append({**comment, "body": body})
     if len(matches) > 1:
         raise InputError("multiple owned triage comments are ambiguous")
     current, report = revalidate(client, policy, expected)
