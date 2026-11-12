@@ -1258,6 +1258,7 @@ required = ["codex"]
         reactions=[],
         pr_overrides={"draft": True},
     )
+    draft_triage_path = _admit_test_publisher(tmp_path, draft_endpoints)
     draft_calls = _mock_gh_api(monkeypatch, draft_endpoints)
     draft_res = runner.invoke(
         app,
@@ -1269,6 +1270,8 @@ required = ["codex"]
             REFERENCE.url,
             "--submit-review",
             "both",
+            "--triage-policy",
+            str(draft_triage_path),
             "--format",
             "json",
         ],
@@ -1383,3 +1386,62 @@ def test_live_fetch_polls_past_startup_grace_while_copilot_in_requested_reviewer
     # requested_reviewers keeps polling alive until Copilot submits its review.
     assert slept == [15, 15, 15]
     assert json.loads(res.stdout)["status"] == "passed"
+
+
+@pytest.mark.parametrize("submit_mode", ["approve", "both"])
+def test_triage_policy_validated_before_live_gh_calls_or_polling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    submit_mode: str,
+) -> None:
+    policy_path = _write_policy(tmp_path)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(remote, "_find_gh", lambda: "gh")
+    monkeypatch.setattr(
+        remote,
+        "run_bounded_process",
+        lambda command, **options: calls.append(command) or pytest.fail("unexpected gh invocation"),
+    )
+
+    missing_flag = runner.invoke(
+        app,
+        [
+            *COMMAND,
+            "--policy",
+            str(policy_path),
+            "--pr",
+            REFERENCE.url,
+            "--submit-review",
+            submit_mode,
+            "--format",
+            "json",
+        ],
+    )
+    assert missing_flag.exit_code == 2
+    assert (
+        "requires an explicit trusted --triage-policy"
+        in json.loads(missing_flag.stderr)["error"]["message"]
+    )
+    assert calls == []
+
+    bad_triage = tmp_path / "bad-triage.toml"
+    bad_triage.write_text("triage-policy-version = 1\nunknown = true\n", encoding="utf-8")
+    for mode in ("request-changes", submit_mode):
+        invalid_policy = runner.invoke(
+            app,
+            [
+                *COMMAND,
+                "--policy",
+                str(policy_path),
+                "--pr",
+                REFERENCE.url,
+                "--submit-review",
+                mode,
+                "--triage-policy",
+                str(bad_triage),
+                "--format",
+                "json",
+            ],
+        )
+        assert invalid_policy.exit_code == 2
+        assert calls == []

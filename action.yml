@@ -132,8 +132,8 @@ inputs:
     default: ""
   github-token:
     description: >-
-      GitHub token for check=gate or live pr fetches in pr-review and
-      pr-description; rejected by offline checks
+      GitHub token for check=gate or live pr fetches in pr-review, pr-triage,
+      and pr-description; rejected by offline checks
     required: false
     default: ""
   gate:

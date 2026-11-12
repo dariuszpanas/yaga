@@ -285,6 +285,13 @@ def _build_arguments(
                 f"--file={file_val}",
                 "--format=github",
             ]
+        submit_mode = inputs["submit-review"].casefold()
+        if submit_mode in {"approve", "both"} and not inputs["triage-policy"]:
+            raise InputError(
+                "check 'pr-review' with positive submit-review requires input 'triage-policy'"
+            )
+        if inputs["triage-policy"] and submit_mode in {"", "none"}:
+            raise InputError("check 'pr-review' input 'triage-policy' requires 'submit-review'")
         command = [
             "pull-request",
             "review",

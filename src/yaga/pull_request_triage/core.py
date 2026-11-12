@@ -246,11 +246,9 @@ def parse_snapshot(value: object) -> TriageSnapshot:
             "PENDING",
         }:
             raise InputError("invalid triage review state")
-        if review["state"] == "PENDING" and review["submitted_at"] is None:
-            if review["commit_id"] is not None:
-                sha(review["commit_id"], "pending review commit")
-        else:
+        if review["commit_id"] is not None:
             sha(review["commit_id"], "review commit")
+        if not (review["state"] == "PENDING" and review["submitted_at"] is None):
             timestamp(review["submitted_at"])
     limit = document["candidate_limit"]
     examined = document["candidates_examined"]
@@ -268,7 +266,7 @@ def parse_snapshot(value: object) -> TriageSnapshot:
     for candidate in candidates:
         candidate = obj(candidate, {"number", "merge_commit_sha", "tree_sha"}, "merged candidate")
         number = positive(candidate["number"], "merged PR number")
-        if number in seen:
+        if number == document["number"] or number in seen:
             raise InputError("duplicate triage merged PR candidate")
         seen.add(number)
         sha(candidate["merge_commit_sha"], "merged commit")
@@ -323,7 +321,7 @@ def evaluate(policy: TriagePolicy, snapshot: TriageSnapshot) -> dict[str, Any]:
             if any(matches(pattern, filename) for pattern in policy.sensitive_patterns):
                 findings.append({"code": "triage.sensitive-path", "path": filename})
     for candidate in snapshot.candidates:
-        if candidate["tree_sha"] == snapshot.head_tree:
+        if candidate["number"] != snapshot.number and candidate["tree_sha"] == snapshot.head_tree:
             findings.append(
                 {
                     "code": "triage.merged-tree-match",

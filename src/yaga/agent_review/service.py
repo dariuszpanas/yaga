@@ -86,6 +86,11 @@ def check_pull_request_review_source(
         raise InputError("--submit-review must be none, approve, request-changes, or both")
     if submit_review is not ReviewSubmitMode.NONE and pull_request is None:
         raise InputError("--submit-review requires a live --pr source")
+    if (
+        submit_review in {ReviewSubmitMode.APPROVE, ReviewSubmitMode.BOTH}
+        and triage_policy_path is None
+    ):
+        raise InputError("APPROVE submission requires an explicit trusted --triage-policy")
     if triage_policy_path is not None and pull_request is None:
         raise InputError("--triage-policy requires a live --pr source")
     if triage_policy_path is not None and submit_review is ReviewSubmitMode.NONE:
@@ -97,6 +102,9 @@ def check_pull_request_review_source(
     )
     resolved_policy_path = policy_path.expanduser().resolve()
     policy = load_policy(resolved_policy_path)
+    admission_policy = (
+        load_triage_policy(triage_policy_path) if triage_policy_path is not None else None
+    )
     plan_digest = build_plan(policy).digest()
     submitted_review: SubmittedPullRequestReview | None = None
     admission = None
@@ -153,10 +161,9 @@ def check_pull_request_review_source(
         if desired_event is not None:
             if evaluation.snapshot.state != "open":
                 raise InputError("cannot submit a pull-request review on a closed pull request")
-            if desired_event == "APPROVE" and triage_policy_path is None:
+            if desired_event == "APPROVE" and admission_policy is None:
                 raise InputError("APPROVE submission requires an explicit trusted --triage-policy")
-            if triage_policy_path is not None:
-                admission_policy = load_triage_policy(triage_policy_path)
+            if admission_policy is not None:
                 client = TriageClient(reference)
                 triage_snapshot, fresh = collect_publication_snapshots(
                     client,
@@ -262,7 +269,8 @@ def review_report_document(checked: CheckedPullRequestReview) -> dict[str, Any]:
         document["triage"] = checked.admission
         if checked.admission["admission"]["decision"] != "allow":
             document["valid"] = False
-            document["status"] = "pending"
+            if aggregate.state is LensOutcome.PASSED:
+                document["status"] = "pending"
     return document
 
 

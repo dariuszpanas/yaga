@@ -784,3 +784,142 @@ def test_api_deadline_reserves_each_process_timeout_before_launch(monkeypatch):
     with pytest.raises(InputError, match="budget exhausted"):
         client.get("user")
     assert len(calls) == 1
+
+
+def test_duplicate_scan_excludes_target_pr_and_preserves_candidate_window(
+    tmp_path, policy, snapshot, api
+):
+    self_commit = "e" * 40
+    api.snapshot["state"] = "closed"
+    api.closed = [
+        {
+            "number": 23,
+            "state": "closed",
+            "html_url": URL,
+            "merged_at": "2026-11-11T10:02:00Z",
+            "merge_commit_sha": self_commit,
+        },
+        {
+            "number": 21,
+            "state": "closed",
+            "html_url": URL.replace("23", "21"),
+            "merged_at": "2026-11-11T10:01:00Z",
+            "merge_commit_sha": OLD,
+        },
+    ]
+    result = live(policy)
+    assert result.exit_code == 1, result.output
+    report = json.loads(result.stdout)
+    assert report["inventory"]["candidates_examined"] == 1
+    assert report["findings"] == [
+        {"code": "triage.merged-tree-match", "pull_request_number": 21, "merge_commit_sha": OLD}
+    ]
+    assert not any(endpoint.endswith(f"/git/commits/{self_commit}") for endpoint in api.reads)
+
+    # When only the target PR itself is closed, zero external candidates are examined.
+    api.reads.clear()
+    api.closed = api.closed[:1]
+    result = live(policy)
+    assert result.exit_code == 1, result.output
+    report = json.loads(result.stdout)
+    assert report["inventory"]["candidates_examined"] == 0
+    assert report["findings"] == []
+
+    # Offline snapshots containing a self-referential candidate fail closed.
+    snapshot["candidates"] = [{"number": 23, "merge_commit_sha": OLD, "tree_sha": TREE}]
+    snapshot["candidates_examined"] = 1
+    offline_result, _ = offline(tmp_path, policy, snapshot)
+    assert offline_result.exit_code == 2
+
+
+def test_live_null_bodies_uppercase_shas_and_gcd_review_commits_behave_safely(
+    tmp_path, policy, snapshot, api
+):
+    # Live GitHub REST reviews and issue comments can have body=None, uppercase commit_id,
+    # and historical reviews whose force-pushed commit was garbage-collected (commit_id=None).
+    api.comments = [{"id": 77, "user": {"id": 999}, "body": None}]
+    api.snapshot["reviews"] = [
+        {
+            "id": 1,
+            "user_id": 10,
+            "user_type": "User",
+            "state": "APPROVED",
+            "commit_id": HEAD.upper(),
+            "submitted_at": "2026-11-11T10:00:01Z",
+            "body": acknowledgment(),
+        },
+        {
+            "id": 2,
+            "user_id": 999,
+            "user_type": "User",
+            "state": "COMMENTED",
+            "commit_id": None,
+            "submitted_at": "2026-11-11T10:00:02Z",
+            "body": None,
+        },
+    ]
+    result = live(policy, "--publish-comment")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["admission"]["decision"] == "allow"
+
+    # A configured maintainer's later CHANGES_REQUESTED with a GC'd commit_id=None still holds.
+    api.snapshot["reviews"].append(
+        {
+            "id": 3,
+            "user_id": 10,
+            "user_type": "User",
+            "state": "CHANGES_REQUESTED",
+            "commit_id": None,
+            "submitted_at": "2026-11-11T10:00:03Z",
+            "body": None,
+        }
+    )
+    held = live(policy)
+    assert held.exit_code == 1, held.output
+    assert json.loads(held.stdout)["admission"]["reason"] == "maintainer-changes-requested"
+
+    # An APPROVED review with commit_id=None cannot admit even with an acknowledgment body.
+    snapshot["reviews"] = [dict(review(), commit_id=None)]
+    offline_held, offline_report = offline(tmp_path, policy, snapshot)
+    assert offline_held.exit_code == 1
+    assert offline_report["admission"]["decision"] == "hold"
+
+
+def test_failed_review_with_admission_hold_preserves_failed_status_on_submit_both(
+    tmp_path, policy, api
+):
+    review_policy = tmp_path / "review.toml"
+    review_policy.write_text('[agent-review]\nversion=1\nrequired=["codex"]\n')
+    api.snapshot["reviews"] = [
+        review(
+            user_id=CODEX_DEFAULT_BOT_USER_ID,
+            user_type="Bot",
+            state="CHANGES_REQUESTED",
+        )
+    ]
+    result = RUNNER.invoke(
+        app,
+        [
+            "pull-request",
+            "review",
+            "check",
+            "--policy",
+            str(review_policy),
+            "--pr",
+            URL,
+            "--submit-review",
+            "both",
+            "--triage-policy",
+            str(policy),
+            "--format",
+            "json",
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    doc = json.loads(result.stdout)
+    assert doc["valid"] is False
+    assert doc["status"] == "failed"
+    assert doc["blocking_failures"] == ["codex"]
+    assert doc["triage"]["admission"]["decision"] == "hold"
+    assert doc["submitted_review"]["state"] == "CHANGES_REQUESTED"
+    assert api.writes[-1][2]["event"] == "REQUEST_CHANGES"
