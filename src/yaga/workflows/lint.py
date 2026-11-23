@@ -10,7 +10,7 @@ import signal
 import tempfile
 import threading
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from types import FrameType
@@ -202,7 +202,7 @@ def _lint_in_temporary_workspace(
 
 
 @contextmanager
-def _cleanup_on_termination() -> Iterator[None]:
+def _cleanup_on_termination() -> Generator[None, None, None]:
     """Handle catchable POSIX termination and Windows console-break requests."""
     if threading.current_thread() is not threading.main_thread():
         yield
