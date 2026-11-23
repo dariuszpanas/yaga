@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import sys
 from pathlib import Path
 
 import pytest
@@ -61,15 +60,7 @@ def test_stdin_source_enforces_the_byte_limit(monkeypatch: pytest.MonkeyPatch) -
 def test_text_stdin_fallback_converts_encoding_failures_to_input_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class InvalidTextInput(io.StringIO):
-        @property
-        def buffer(self) -> None:
-            return None
-
-        def read(self, _size: int | None = -1, /) -> str:
-            return "\udcff"
-
-    monkeypatch.setattr(sys, "stdin", InvalidTextInput())
+    monkeypatch.setattr("sys.stdin", io.StringIO("\udcff"))
 
     with pytest.raises(InputError, match="UTF-8"):
         from_stdin()
