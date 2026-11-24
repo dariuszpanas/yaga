@@ -65,8 +65,8 @@ fn user_home(component: &OsStr) -> Option<PathBuf> {
         let mut buffer = vec![0u8; 1024];
         loop {
             let mut result = ptr::null_mut();
-            // Both reentrant routines write their record and its strings into the
-            // caller's storage. Only access the returned record after success.
+            // SAFETY: Both reentrant routines write their record and strings into
+            // the caller-owned storage; the returned record is read only on success.
             let status = unsafe {
                 if username.is_empty() {
                     libc::getpwuid_r(
@@ -95,11 +95,13 @@ fn user_home(component: &OsStr) -> Option<PathBuf> {
             if status != 0 || result.is_null() {
                 return None;
             }
-            // pw_dir is NUL-terminated and remains valid until buffer is dropped.
+            // SAFETY: status == 0 and result is non-null, pointing into `entry`,
+            // and pw_dir is a NUL-terminated C string inside `buffer`.
             let directory = unsafe { (*result).pw_dir };
             if directory.is_null() {
                 return None;
             }
+            // SAFETY: directory is non-null and NUL-terminated until `buffer` drops.
             let bytes = unsafe { CStr::from_ptr(directory) }.to_bytes();
             break PathBuf::from(OsStr::from_bytes(bytes));
         }
