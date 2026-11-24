@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import os
 import re
 import shutil
 import stat
-import struct
 import subprocess
 import tomllib
 from pathlib import Path
 
 if __package__:
-    from .release_images import check_pe_image, elf_program_headers, macos_deployment
+    from .release_images import check_musl_executable, check_pe_image, macos_deployment
 else:
-    from release_images import check_pe_image, elf_program_headers, macos_deployment
+    from release_images import check_musl_executable, check_pe_image, macos_deployment
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = tuple(
@@ -64,37 +62,6 @@ def verify_image(path: Path, target: str) -> None:
         raise ValueError(
             f"executable architecture or format does not match {target}: {error}"
         ) from error
-
-
-def check_musl_executable(path: Path, machine: int) -> None:
-    """Accept static executables, including musl PIE with a dynamic relocation table."""
-    with path.open("rb") as stream:
-        kind, entry, headers = elf_program_headers(stream, path, machine)
-        size = os.fstat(stream.fileno()).st_size
-        # A static PIE and a shared object can both be ET_DYN. A CLI needs a
-        # nonzero entry point backed by file bytes in an executable PT_LOAD.
-        if (
-            kind not in (2, 3)
-            or not entry
-            or not any(
-                segment == 1
-                and flags & 1
-                and start + length <= size
-                and length <= memory
-                and address <= entry < address + length
-                for segment, flags, start, address, _, length, memory, _ in headers
-            )
-        ):
-            raise ValueError("ELF image lacks an executable entry point")
-        for segment, _, start, _, _, length, _, _ in headers:
-            if segment == 3:  # PT_INTERP
-                raise ValueError("Linux executable requires a program interpreter")
-            if segment == 2:  # PT_DYNAMIC
-                if length > 65536 or length % 16 or start + length > size:
-                    raise ValueError("invalid ELF dynamic section")
-                stream.seek(start)
-                if any(tag == 1 for tag, _ in struct.iter_unpack("<qQ", stream.read(length))):
-                    raise ValueError("Linux executable requires shared libraries")
 
 
 def stage(binary: Path, target: str, destination: Path) -> None:

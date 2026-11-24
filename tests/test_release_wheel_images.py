@@ -134,6 +134,28 @@ def test_accepts_static_musl_and_fixed_address_glibc_executables(tmp_path: Path)
 
 
 @pytest.mark.parametrize(
+    ("tag", "arm"),
+    [("manylinux_2_28_x86_64", False), ("manylinux_2_28_aarch64", True)],
+)
+def test_accepts_static_pie_musl_and_rejects_shared_library_dynamic_table(
+    tmp_path: Path, tag: str, arm: bool
+) -> None:
+    from tests.test_standalone_images import static_elf
+
+    path = tmp_path / "yaga"
+    pie = bytearray(static_elf(arm, pie=True))
+    path.write_bytes(pie)
+    release_wheels.check_elf(path, tag, executable=True)
+
+    # Injecting DT_NEEDED (tag=1) turns the PT_DYNAMIC table into a shared-library dependency.
+    with_needed = bytearray(pie)
+    with_needed[176:184] = struct.pack("<q", 1)
+    path.write_bytes(with_needed)
+    with pytest.raises(ValueError, match="wrong ELF executable or shared-object role"):
+        release_wheels.check_elf(path, tag, executable=True)
+
+
+@pytest.mark.parametrize(
     ("name", "size"),
     [("other-1.2.3.dist-info/WHEEL", 60), ("yaga_cli-1.2.3.dist-info/WHEEL", 64 * 1024 + 1)],
 )
