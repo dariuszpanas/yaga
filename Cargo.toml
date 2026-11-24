@@ -1,0 +1,17 @@
+[workspace]
+resolver = "3"
+members = ["crates/yaga-core", "crates/yaga-cli"]
+default-members = ["crates/yaga-core", "crates/yaga-cli"]
+
+[workspace.package]
+version = "0.5.0"
+edition = "2024"
+license = "BSD-3-Clause"
+publish = false
+
+[workspace.dependencies]
+yaga-core = { path = "crates/yaga-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+regex = "1"
+toml = { version = "1.2", default-features = false, features = ["serde", "parse", "preserve_order"] }

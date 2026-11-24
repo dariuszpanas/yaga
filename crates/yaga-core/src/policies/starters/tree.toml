@@ -1,0 +1,10 @@
+# YAGA tracked-tree policy
+tree-policy-version = 1
+required-paths = []
+forbidden-patterns = [
+    "**/.DS_Store",
+    "**/.env",
+    "**/.env.*",
+    "**/*.pem",
+    "**/*.key",
+]

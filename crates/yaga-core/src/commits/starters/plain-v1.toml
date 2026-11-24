@@ -1,0 +1,9 @@
+# Ordinary message structure with explicit editable limits.
+config-version = 1
+
+[commit]
+message-format = "plain"
+header-max-length = 100
+description-ending = "allow"
+body-policy = "optional"
+merge-commits = "ignore"

@@ -1,2 +1,9 @@
 # Downloaded shell scripts must remain executable by POSIX shells from any checkout.
 docs/install.sh text eol=lf
+# These files are embedded verbatim in the standalone Rust binary.
+crates/yaga-core/src/commits/starters/*.toml text eol=lf
+crates/yaga-core/src/policies/starters/*.toml text eol=lf
+crates/yaga-core/src/policies/catalog.tsv text eol=lf
+crates/yaga-core/src/completion/* text eol=lf
+# Signed Git object and shell test fixtures must retain exact bytes across checkouts.
+crates/yaga-core/tests/fixtures/** -text

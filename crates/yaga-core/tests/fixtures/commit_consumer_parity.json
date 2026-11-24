@@ -1,0 +1,137 @@
+{
+  "reference": "django-ray main 0ebbe2660aa9dfdccefdcb1e8a99faf1ee5b57eb; commitlint 21.2.2",
+  "cases": [
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nshort body\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\n",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation:",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nvalidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation #123",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation:\tchecks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation:   checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\nhttps://example.com/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: https://example.com/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "valid": true
+    },
+    {
+      "message": "fix: Preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix: Preserve Bounded Lease Ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix: PreserveBoundedLeaseOwnership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix: PRESERVE BOUNDED LEASE OWNERSHIP\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership.\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership?\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership!\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix(worker)!: preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nBREAKING CHANGE: remove legacy ownership.\nValidation: checked.",
+      "valid": true
+    },
+    {
+      "message": "fixup! fix(worker): preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "Revert \"fix(worker): preserve bounded lease ownership\"\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "unknown: preserve bounded lease ownership\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix: \u00e9clair ownership recovery\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix: \u00c9clair ownership recovery\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": false
+    },
+    {
+      "message": "fix: \u01c5elta ownership recovery\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix: 123 ownership recovery\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix: `API` ownership recovery\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix: \"API\" ownership recovery\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix: \ud83e\udd16 Ownership recovery\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    },
+    {
+      "message": "fix: \u00dfeta ownership recovery\n\nKeep lease ownership attached to the active worker generation so stale\nworkers cannot publish a late result after replacement. This preserves\ndeterministic recovery across all supported execution backends.\n\nValidation: checks passed.",
+      "valid": true
+    }
+  ]
+}

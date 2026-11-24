@@ -1,0 +1,4 @@
+# YAGA committed blob-size policy
+size-policy-version = 1
+default-max-blob-bytes = 1048576
+# max-total-blob-bytes = 67108864

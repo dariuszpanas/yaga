@@ -1,0 +1,13 @@
+kind	title	default_path	version_key	current	description
+commit	Commit policy	.yaga.toml	config-version	1	Conventional Commit types, scopes, body rules, and PR title checks
+repo	Repository check plan	.yaga/checks/ci.toml	plan-version	2	Explicit repository check providers and committed-tree policy bindings
+branch	Branch name policy	.yaga/branch-policy.toml	branch-policy-version	1	Allowed branch-name patterns (feat/*, fix/*, docs/*, ...)
+change	Change coupling policy	.yaga/change-policy.toml	change-policy-version	1	Co-change rules (e.g. source edits require tests or docs)
+description	PR description policy	.yaga/description-policy.toml	description-policy-version	1	Pull-request body word floor, heading structure, and placeholder checks
+mode	Git file-mode policy	.yaga/mode-policy.toml	mode-policy-version	1	Allowed committed Git modes (regular 100644, executable scripts, ...)
+path	Portable path policy	.yaga/path-policy.toml	path-policy-version	1	Cross-platform path portability and case-collision protection
+size	Blob size policy	.yaga/size-policy.toml	size-policy-version	1	Maximum tracked blob bytes and path-specific size overrides
+tree	Tracked tree policy	.yaga/tree-policy.toml	tree-policy-version	1	Required repository files and forbidden committed path patterns
+agent-review	Agent review policy	.yaga/agent-review-policy.toml	version	1	Pull-request AI review lenses (codex, copilot, claude, custom)
+test	Test qualification policy	.yaga/test-policy.toml	test-policy-version	1	Deterministic changed-path test suite and profile selection
+triage	Pull-request trust triage	.yaga/triage-policy.toml	triage-policy-version	1	Explicit maintainer identities and current-head PR admission

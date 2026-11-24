@@ -1,0 +1,7 @@
+# YAGA changed-path coupling policy
+change-policy-version = 1
+
+[[rules]]
+name = "source-requires-tests"
+when-any = ["src/**"]
+require-any = ["tests/**", "docs/**"]

@@ -1,0 +1,39 @@
+[package]
+name = "yaga-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Standalone YAGA command line interface"
+
+[features]
+default = ["quality-http", "quality-bedrock"]
+# Previously installed self-updaters replay this obsolete feature.
+quality-models = []
+quality-bedrock = ["yaga-core/quality-bedrock"]
+quality-http = ["yaga-core/quality-http"]
+
+[[bin]]
+name = "yaga"
+path = "src/main.rs"
+
+[dependencies]
+fast-rich = { version = "=0.4.0", default-features = false }
+sysinfo = { version = "0.40", default-features = false, features = ["system"] }
+tempfile = "3.27"
+url = "2"
+toml.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+unicode-segmentation = "1.13"
+unicode-width = "0.2"
+clap = { version = "=4.6.7", features = ["derive"] }
+crossterm = { version = "0.29", default-features = false, features = ["events", "windows"] }
+yaga-core = { workspace = true, features = ["github-http"] }
+
+[target.'cfg(windows)'.dependencies]
+crossterm_winapi = "0.9"
+
+[dev-dependencies]
+sha2 = "0.10"

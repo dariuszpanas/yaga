@@ -1,0 +1,9 @@
+# YAGA pull-request description policy
+description-policy-version = 1
+min-words = 8
+max-length = 65536
+placeholders = ["TODO", "TBD"]
+require-checked-tasks = false
+typos = "skip"
+heading-min-level = 2
+heading-max-length = 120

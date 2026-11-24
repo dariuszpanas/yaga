@@ -1,0 +1,49 @@
+[package]
+name = "yaga-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "YAGA repository policy checks for Rust callers"
+
+[[example]]
+name = "gate-contract-driver"
+path = "tests/fixtures/gate_driver.rs"
+
+[features]
+# Compatibility for existing Cargo consumers. Local inference is retired.
+quality-models = []
+quality-bedrock = ["dep:aws-config", "dep:aws-sdk-bedrockruntime", "dep:tokio"]
+github-http = ["dep:ureq"]
+quality-http = ["dep:ureq"]
+
+[dependencies]
+aws-config = { version = "1.13", optional = true }
+aws-sdk-bedrockruntime = { version = "1.157", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "time"], optional = true }
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"], optional = true }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+ctrlc = { version = "3.5", features = ["termination"] }
+getrandom = "0.4"
+tar = { version = "0.4", default-features = false }
+soft-canonicalize = { version = "0.5.6", default-features = false, features = ["dunce"] }
+memchr = "2.8"
+regex.workspace = true
+unicode_names2 = "3"
+sha2 = "0.10"
+sha1 = "0.10"
+libyaml-safer = "=0.3.0"
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tempfile = "3.27"
+
+[target.'cfg(windows)'.dependencies]
+rustversion = "1"
+same-file = "1.0.6"
+win32job = "2.1.0"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+rustix = { version = "1.1", features = ["process", "fs"] }
