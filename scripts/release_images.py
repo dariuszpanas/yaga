@@ -59,6 +59,47 @@ def elf_program_headers(
     return kind, entry, list(struct.iter_unpack("<IIQQQQQQ", stream.read(count * entry_size)))
 
 
+def check_musl_executable_headers(
+    stream: BinaryIO,
+    kind: int,
+    entry: int,
+    headers: list[tuple[int, ...]],
+) -> None:
+    """Validate static and static-PIE musl ELF headers without shared-library dependencies."""
+    size = os.fstat(stream.fileno()).st_size
+    # A static PIE and a shared object can both be ET_DYN. A CLI needs a
+    # nonzero entry point backed by file bytes in an executable PT_LOAD.
+    if (
+        kind not in (2, 3)
+        or not entry
+        or not any(
+            segment == 1
+            and flags & 1
+            and start + length <= size
+            and length <= memory
+            and address <= entry < address + length
+            for segment, flags, start, address, _, length, memory, _ in headers
+        )
+    ):
+        raise ValueError("ELF image lacks an executable entry point")
+    for segment, _, start, _, _, length, _, _ in headers:
+        if segment == 3:  # PT_INTERP
+            raise ValueError("Linux executable requires a program interpreter")
+        if segment == 2:  # PT_DYNAMIC
+            if length > 65536 or length % 16 or start + length > size:
+                raise ValueError("invalid ELF dynamic section")
+            stream.seek(start)
+            if any(tag == 1 for tag, _ in struct.iter_unpack("<qQ", stream.read(length))):
+                raise ValueError("Linux executable requires shared libraries")
+
+
+def check_musl_executable(path: Path, machine: int) -> None:
+    """Accept static executables, including musl PIE with a dynamic relocation table."""
+    with path.open("rb") as stream:
+        kind, entry, headers = elf_program_headers(stream, path, machine)
+        check_musl_executable_headers(stream, kind, entry, headers)
+
+
 def macos_deployment(path: Path, arch: str, *, executable: bool) -> tuple[int, int, int]:
     """Validate a thin macOS image of the requested role and read its minimum OS."""
     cpu, subtype = {"x86_64": (0x01000007, 3), "arm64": (0x0100000C, 0)}[arch]

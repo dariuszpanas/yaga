@@ -16,9 +16,19 @@ from email.parser import Parser
 from pathlib import Path
 
 if __package__:
-    from .release_images import check_pe_image, elf_program_headers, macos_deployment
+    from .release_images import (
+        check_musl_executable_headers,
+        check_pe_image,
+        elf_program_headers,
+        macos_deployment,
+    )
 else:
-    from release_images import check_pe_image, elf_program_headers, macos_deployment
+    from release_images import (
+        check_musl_executable_headers,
+        check_pe_image,
+        elf_program_headers,
+        macos_deployment,
+    )
 
 # Platform tags accepted by pip/uv wheel selection rules.
 PLATFORMS = {
@@ -91,23 +101,29 @@ def check_pe(path: Path, tag: str, *, executable: bool = True) -> None:
 
 
 def check_elf(path: Path, tag: str, *, executable: bool = True) -> None:
-    """Verify ELF executable architecture and headers (static musl or dynamic PIE/EXEC)."""
+    """Verify ELF executable architecture and headers (static/static-PIE musl or dynamic)."""
     machine = {"manylinux_2_28_aarch64": 183, "manylinux_2_28_x86_64": 62}[tag]
     with path.open("rb") as stream:
-        kind, _, headers = elf_program_headers(stream, path, machine)
-    types = [header[0] for header in headers]
-    if 1 not in types:
-        raise ValueError(f"{path.name} has the wrong ELF executable or shared-object role")
-    if executable:
-        # Static musl executables have PT_LOAD (1) and no PT_INTERP (3) or PT_DYNAMIC (2).
-        # Dynamic glibc executables have PT_LOAD (1) and exactly one PT_INTERP (3).
-        static_musl = kind in (2, 3) and 2 not in types and 3 not in types
-        dynamic_exe = kind in (2, 3) and types.count(3) == 1
-        if not (static_musl or dynamic_exe):
+        kind, entry, headers = elf_program_headers(stream, path, machine)
+        types = [header[0] for header in headers]
+        if 1 not in types:
             raise ValueError(f"{path.name} has the wrong ELF executable or shared-object role")
-    else:
-        if kind != 3 or 3 in types:
-            raise ValueError(f"{path.name} has the wrong ELF executable or shared-object role")
+        if executable:
+            # Dynamic glibc executables have PT_LOAD (1) and exactly one PT_INTERP (3).
+            # Plain static musl executables have PT_LOAD (1) and no PT_INTERP (3) or PT_DYNAMIC (2).
+            if kind in (2, 3) and (types.count(3) == 1 or (2 not in types and 3 not in types)):
+                return
+            # Static-PIE musl executables (e.g. x86_64-unknown-linux-musl) carry PT_DYNAMIC (2)
+            # for self-relocations without PT_INTERP (3) or DT_NEEDED shared libraries.
+            try:
+                check_musl_executable_headers(stream, kind, entry, headers)
+            except ValueError as error:
+                raise ValueError(
+                    f"{path.name} has the wrong ELF executable or shared-object role"
+                ) from error
+        else:
+            if kind != 3 or 3 in types:
+                raise ValueError(f"{path.name} has the wrong ELF executable or shared-object role")
 
 
 def check_macos(path: Path, tag: str, *, executable: bool = True) -> None:

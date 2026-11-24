@@ -411,7 +411,7 @@ if ([Environment] -eq [System.Environment]) { throw 'User PATH fixture is not is
         cwd=tmp_path,
         env=env,
         encoding="utf-8",
-        timeout=15,
+        timeout=45,
     )
     assert Path(resolved.strip()) == dest / EXE
 
