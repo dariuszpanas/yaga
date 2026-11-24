@@ -192,7 +192,7 @@ inputs:
 outputs:
   exit-code:
     description: Check or gate exit code (0 pass, 1 findings or gate failure, 2 input or operational error)
-    value: ${{ steps.invalid_check.outputs.exit-code }}${{ steps.commit.outputs.exit-code }}${{ steps.gate.outputs.exit-code }}${{ steps.cli.outputs.exit-code }}
+    value: ${{ steps.invalid_check.outputs.exit-code }}${{ steps.native_runtime.outputs.exit-code }}${{ steps.commit.outputs.exit-code }}${{ steps.gate.outputs.exit-code }}${{ steps.cli.outputs.exit-code }}
   route:
     description: Closed prepare route for check=gate; skip, done, observe, owner, external, or approved
     value: ${{ steps.gate.outputs.route }}
@@ -318,61 +318,53 @@ runs:
         printf '%s\n' "$YAGA_MESSAGE" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
           {
-            printf '%s\n\n' '## `>_` YAGA Checks · `action`'
-            printf '%s\n' '**Status:** Error (exit `2`) · **Version:** `0.5.0` · **Summary:** YAGA input error: unsupported check mode'
+            printf '%s\n\n' '## `>_` YAGA Checks Â· `action`'
+            printf '%s\n' '**Status:** Error (exit `2`) Â· **Version:** `0.5.0` Â· **Summary:** YAGA input error: unsupported check mode'
           } >> "$GITHUB_STEP_SUMMARY"
         fi
         exit 2
 
-    - name: Set up pinned uv for YAGA runtime
-      if: inputs.check != 'gate'
-      uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      with:
-        enable-cache: false
-        version: "0.13.0"
-
-    - name: Prepare isolated YAGA runtime
-      id: uv_runtime
-      if: inputs.check != 'gate'
+    - name: Prepare trusted native YAGA runtime
+      id: native_runtime
       shell: bash
+      env:
+        YAGA_SETUP_ACTION_REF: ${{ github.action_ref }}
+        YAGA_SETUP_PRIVILEGED: ${{ (inputs.check == 'gate' || inputs.github-token != '' || github.event_name == 'pull_request_target' || github.event_name == 'workflow_run') && '1' || '0' }}
       run: |
         set -euo pipefail
-        unset PYTHONHOME GITHUB_TOKEN GH_TOKEN
-        YAGA_VENV="${RUNNER_TEMP}/yaga-action-venv"
-        mkdir -p "$YAGA_VENV"
-        if command -v cygpath >/dev/null 2>&1; then
-          YAGA_VENV_ENV="$(cygpath -w "$YAGA_VENV")"
-          YAGA_PROJECT_DIR="$(cygpath -w "$GITHUB_ACTION_PATH")"
-        else
-          YAGA_VENV_ENV="$YAGA_VENV"
-          YAGA_PROJECT_DIR="$GITHUB_ACTION_PATH"
+        unset GITHUB_TOKEN GH_TOKEN YAGA_GH_TOKEN NODE_OPTIONS NODE_PATH
+        cd -- "$RUNNER_TEMP"
+        # Ignore any Node shim in the consumer checkout, including a symlink to it.
+        YAGA_WORKSPACE="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+        YAGA_NODE=""
+        while IFS= read -r candidate; do
+          [[ -x "$candidate" ]] || continue
+          candidate="$(command -p realpath "$candidate")" || continue
+          case "$candidate" in
+            "$YAGA_WORKSPACE"|"$YAGA_WORKSPACE"/*) continue ;;
+          esac
+          YAGA_NODE="$candidate"
+          break
+        done < <(type -aP node || true; printf '%s\n' "$RUNNER_TEMP/../../externals/node24/bin/node" "$RUNNER_TEMP/../../externals/node24/bin/node.exe")
+        if [[ -z "$YAGA_NODE" ]]; then
+          printf 'exit-code=2\n' >> "$GITHUB_OUTPUT"
+          printf '%s\n' 'YAGA setup failed: a runner Node executable is required' >&2
+          exit 2
         fi
-        UV_PROJECT_ENVIRONMENT="$YAGA_VENV_ENV" \
-          uv sync --frozen --no-dev --no-editable \
-          --project "$YAGA_PROJECT_DIR" --python 3.12 --quiet
-        if [[ -x "$YAGA_VENV/bin/python" ]]; then
-          YAGA_PYTHON="$YAGA_VENV/bin/python"
-        else
-          YAGA_PYTHON="$YAGA_VENV/Scripts/python.exe"
-        fi
-        printf 'python=%s\n' "$YAGA_PYTHON" >> "$GITHUB_OUTPUT"
+        "$YAGA_NODE" "$GITHUB_ACTION_PATH/scripts/action-runtime.cjs"
 
     - name: Check pull request commit policy
       id: commit
       if: inputs.check == 'commit'
       shell: bash
       env:
-        PYTHONUTF8: "1"
-        YAGA_COMMIT_ACTION_RUNTIME: "1"
         YAGA_COMMIT_TRUSTED_CONFIG: ${{ inputs.trusted-config }}
-        YAGA_RUNTIME_PYTHON: ${{ steps.uv_runtime.outputs.python }}
+        YAGA_RUNTIME_BINARY: ${{ steps.native_runtime.outputs.binary }}
         YAGA_UNUSED_INPUTS: ${{ (inputs.github-token != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.triage-policy != '' || inputs.publish-comment != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '' || inputs.gate != '' || inputs.operation != '' || inputs.prerequisite-workflow != '' || inputs.lifecycle-workflow != '' || inputs.owner-id != '' || inputs.approval-marker != '' || inputs.request-timeout != '' || inputs.job-timeout-minutes != '' || inputs.agent-review-policy-file != '') && '1' || '0' }}
       run: |
         # yaga-commit-action-shell
         set -euo pipefail
         unset PYTHONHOME GITHUB_TOKEN GH_TOKEN
-        YAGA_SOURCE="$(cd -- "$GITHUB_ACTION_PATH/src" && pwd -P)"
-        test -f "$YAGA_SOURCE/yaga/commit_action_cli.py"
         YAGA_REPORT="$(mktemp)"
         YAGA_ERROR="$(mktemp)"
         trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
@@ -381,10 +373,7 @@ runs:
           YAGA_STATUS=2
         else
           set +e
-          "$YAGA_RUNTIME_PYTHON" -I -m yaga github pull-request check \
-            --event-file "${GITHUB_EVENT_PATH:-}" \
-            --repo "${GITHUB_WORKSPACE:-}" \
-            --format github > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+          "$YAGA_RUNTIME_BINARY" __action commit > "$YAGA_REPORT" 2> "$YAGA_ERROR"
           YAGA_STATUS=$?
           set -e
         fi
@@ -392,7 +381,7 @@ runs:
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-          if [[ -n "${YAGA_RUNTIME_PYTHON:-}" && -x "$YAGA_RUNTIME_PYTHON" ]]; then
+          if [[ -n "${YAGA_RUNTIME_BINARY:-}" && -x "$YAGA_RUNTIME_BINARY" ]]; then
             if command -v cygpath >/dev/null 2>&1; then
               YAGA_SUMMARY_REPORT="$(cygpath -w "$YAGA_REPORT")"
               YAGA_SUMMARY_ERROR="$(cygpath -w "$YAGA_ERROR")"
@@ -400,15 +389,15 @@ runs:
               YAGA_SUMMARY_REPORT="$YAGA_REPORT"
               YAGA_SUMMARY_ERROR="$YAGA_ERROR"
             fi
-            "$YAGA_RUNTIME_PYTHON" -I -m yaga.step_summary \
+            "$YAGA_RUNTIME_BINARY" __action summary \
               --mode commit \
               --status "$YAGA_STATUS" \
               --report "$YAGA_SUMMARY_REPORT" \
               --error "$YAGA_SUMMARY_ERROR" >> "$GITHUB_STEP_SUMMARY"
           else
             {
-              printf '%s\n\n' '## `>_` YAGA Checks · `commit`'
-              printf '**Status:** Error (exit `%s`) · **Version:** `0.5.0`\n\n' "$YAGA_STATUS"
+              printf '%s\n\n' '## `>_` YAGA Checks Â· `commit`'
+              printf '**Status:** Error (exit `%s`) Â· **Version:** `0.5.0`\n\n' "$YAGA_STATUS"
               printf '%s\n' '<pre>'
               { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
                 sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
@@ -424,7 +413,8 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        YAGA_ACTION_RUNTIME: "1"
+        YAGA_RUNTIME_BINARY: ${{ steps.native_runtime.outputs.binary }}
+        YAGA_SETUP_START_MS: ${{ steps.native_runtime.outputs.start-ms }}
         YAGA_GATE: ${{ inputs.gate != '' && inputs.gate || 'agent-review' }}
         YAGA_APPROVAL_MARKER: ${{ inputs.approval-marker }}
         YAGA_AGENT_REVIEW_POLICY_FILE: ${{ inputs.agent-review-policy-file }}
@@ -437,9 +427,9 @@ runs:
         YAGA_UNUSED_INPUTS: ${{ (inputs.trusted-config != '' || inputs.policy != '' || inputs.template != '' || inputs.file != '' || inputs.pr != '' || inputs.repo != '' || inputs.wait-seconds != '' || inputs.submit-review != '' || inputs.triage-policy != '' || inputs.publish-comment != '' || inputs.branch != '' || inputs.range != '' || inputs.revision != '' || inputs.commit != '' || inputs.config != '' || inputs.plan != '' || inputs.checks != '' || inputs.workflow-paths != '' || inputs.workflow-security-profile != '' || inputs.workflow-security-rules != '' || inputs.mode-policy != '' || inputs.path-policy != '' || inputs.size-policy != '' || inputs.tree-policy != '') && '1' || '0' }}
       run: |
         set -euo pipefail
-        unset PYTHONHOME
-        export PYTHONPATH="$GITHUB_ACTION_PATH/src"
-        export PYTHONSAFEPATH=1
+        unset YAGA_SAVED_GATE_TOKEN
+        YAGA_SAVED_GATE_TOKEN="${GITHUB_TOKEN:-}"
+        unset GITHUB_TOKEN GH_TOKEN
         YAGA_REPORT="$(mktemp)"
         YAGA_ERROR="$(mktemp)"
         trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
@@ -448,7 +438,7 @@ runs:
           YAGA_STATUS=2
         else
           set +e
-          python -P -S -m yaga gate "$YAGA_GATE" "$YAGA_OPERATION" > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+          GITHUB_TOKEN="$YAGA_SAVED_GATE_TOKEN" "$YAGA_RUNTIME_BINARY" __action gate > "$YAGA_REPORT" 2> "$YAGA_ERROR"
           YAGA_STATUS=$?
           set -e
         fi
@@ -462,8 +452,8 @@ runs:
             *) YAGA_SUMMARY_STATUS="Error" ;;
           esac
           {
-            printf '%s\n\n' '## `>_` YAGA Checks · `gate`'
-            printf '**Status:** %s (exit `%s`) · **Version:** `0.5.0`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
+            printf '%s\n\n' '## `>_` YAGA Checks Â· `gate`'
+            printf '**Status:** %s (exit `%s`) Â· **Version:** `0.5.0`\n\n' "$YAGA_SUMMARY_STATUS" "$YAGA_STATUS"
             printf '%s\n' '<pre>'
             { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
               sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
@@ -491,7 +481,7 @@ runs:
         inputs.check == 'tree'
       shell: bash
       env:
-        YAGA_RUNTIME_PYTHON: ${{ steps.uv_runtime.outputs.python }}
+        YAGA_RUNTIME_BINARY: ${{ steps.native_runtime.outputs.binary }}
         YAGA_INPUT_CHECK: ${{ inputs.check }}
         YAGA_INPUT_POLICY: ${{ inputs.policy }}
         YAGA_INPUT_TEMPLATE: ${{ inputs.template }}
@@ -521,6 +511,7 @@ runs:
         YAGA_GH_TOKEN: ${{ ((inputs.check == 'pr-review' || inputs.check == 'pr-triage' || inputs.check == 'pr-description') && inputs.pr != '') && inputs.github-token || '' }}
       run: |
         set -euo pipefail
+        unset YAGA_SAVED_GH_TOKEN
         YAGA_SAVED_GH_TOKEN="${YAGA_GH_TOKEN:-}"
         unset PYTHONHOME GITHUB_TOKEN GH_TOKEN YAGA_GH_TOKEN
         YAGA_REPORT="$(mktemp)"
@@ -528,14 +519,14 @@ runs:
         trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
         set +e
         YAGA_GH_TOKEN="$YAGA_SAVED_GH_TOKEN" \
-          "$YAGA_RUNTIME_PYTHON" -I -m yaga.cli_action > "$YAGA_REPORT" 2> "$YAGA_ERROR"
+          "$YAGA_RUNTIME_BINARY" __action cli > "$YAGA_REPORT" 2> "$YAGA_ERROR"
         YAGA_STATUS=$?
         set -e
         printf 'exit-code=%s\n' "$YAGA_STATUS" >> "$GITHUB_OUTPUT"
         cat "$YAGA_REPORT"
         cat "$YAGA_ERROR" >&2
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-          if [[ -n "${YAGA_RUNTIME_PYTHON:-}" && -x "$YAGA_RUNTIME_PYTHON" ]]; then
+          if [[ -n "${YAGA_RUNTIME_BINARY:-}" && -x "$YAGA_RUNTIME_BINARY" ]]; then
             if command -v cygpath >/dev/null 2>&1; then
               YAGA_SUMMARY_REPORT="$(cygpath -w "$YAGA_REPORT")"
               YAGA_SUMMARY_ERROR="$(cygpath -w "$YAGA_ERROR")"
@@ -543,15 +534,15 @@ runs:
               YAGA_SUMMARY_REPORT="$YAGA_REPORT"
               YAGA_SUMMARY_ERROR="$YAGA_ERROR"
             fi
-            "$YAGA_RUNTIME_PYTHON" -I -m yaga.step_summary \
+            "$YAGA_RUNTIME_BINARY" __action summary \
               --mode "$YAGA_INPUT_CHECK" \
               --status "$YAGA_STATUS" \
               --report "$YAGA_SUMMARY_REPORT" \
               --error "$YAGA_SUMMARY_ERROR" >> "$GITHUB_STEP_SUMMARY"
           else
             {
-              printf '## `>_` YAGA Checks · `%s`\n\n' "$YAGA_INPUT_CHECK"
-              printf '**Status:** Error (exit `%s`) · **Version:** `0.5.0`\n\n' "$YAGA_STATUS"
+              printf '## `>_` YAGA Checks Â· `%s`\n\n' "$YAGA_INPUT_CHECK"
+              printf '**Status:** Error (exit `%s`) Â· **Version:** `0.5.0`\n\n' "$YAGA_STATUS"
               printf '%s\n' '<pre>'
               { cat "$YAGA_REPORT" "$YAGA_ERROR" || true; } | head -c 65536 | \
                 sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'

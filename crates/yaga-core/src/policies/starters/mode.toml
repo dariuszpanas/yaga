@@ -1,0 +1,7 @@
+# YAGA committed Git file-mode policy
+mode-policy-version = 1
+default-allowed-modes = ["regular"]
+
+[[path-overrides]]
+pattern = "**/*.sh"
+allowed-modes = ["regular", "executable"]

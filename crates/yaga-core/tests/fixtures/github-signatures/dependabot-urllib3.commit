@@ -1,0 +1,37 @@
+tree f2c1d9ce71619e85e33c1f5cd9da6c076029fcaf
+parent 646a0a1d28b404fabb79776612be4721c11052ff
+author dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com> 1791682550 +0000
+committer GitHub <noreply@github.com> 1791682550 +0000
+gpgsig -----BEGIN PGP SIGNATURE-----
+ 
+ wsFcBAABCAAQBQJqyuf2CRC1aQ7uu5UhlAAAXfoQACsmAECRxSfuuW4QAMOtXNfU
+ sJvbUbK8AeTzrKuz3OeM8SkJWH5WZFYXiZM/oiZQUhrMg9C49wNCmpCW0HHc2ulS
+ 3YyZLHuqt0OpYM42CSWak5I4PF/KyXmVE/qm26xdUWdhu+/bn6rf2BrqcdLzefGS
+ YsBCwo9XrWjBa/JX1q67ODpJhRCW97oL+3myuSGGPYGJjPwLXr6JsTOfNHMLnOev
+ aAvHkZ3rW6NZXmRPsyq7txLMMBGGcduzoqKvHxRJdQqD049hHhgbo74YptT4G5f9
+ HaCqXLMOGxR4uXJDbRlj5s4ZTUijYysSk2M9eL4G8LAw8cG/FQQ40HAhh0Ln9BxZ
+ sXTAatQTDIKNuMpjzz0jC6vYhsjLbTa8i/FCAuX2iU+C9DZig7pTUS5gSrZQYB4/
+ pQ0FflFFf4p9HYvHncUkmVZLpK0CKGudq2Ir+1oAo64ITtOKUyNzdotMa56gicAj
+ JE/n1+woXlLoID8wn3nScW/Cu/9jr4GLSOWwWZYQyfxkK9EO67Kyg9VFrOeKTpqC
+ y8RIKJsOk4k7wZ6yRkmkjx5Ik/oXIf+SsQqnCJBVjzuKtcPmjuipb2Llc0TpxdML
+ xVrjCmecZ8RjUlm7cYpbEVQ7G4Vr5G8ILJQ8MALuKCICPphw5bV6mi2+xuVntj29
+ uIO13d4HFskh1mpu4pXy
+ =rWlz
+ -----END PGP SIGNATURE-----
+ 
+
+build(deps): bump urllib3 from 2.7.0 to 2.8.0
+
+Bumps [urllib3](https://github.com/urllib3/urllib3) from 2.7.0 to 2.8.0.
+- [Release notes](https://github.com/urllib3/urllib3/releases)
+- [Changelog](https://github.com/urllib3/urllib3/blob/main/CHANGES.rst)
+- [Commits](https://github.com/urllib3/urllib3/compare/2.7.0...2.8.0)
+
+---
+updated-dependencies:
+- dependency-name: urllib3
+  dependency-version: 2.8.0
+  dependency-type: indirect
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>

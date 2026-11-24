@@ -1,0 +1,15 @@
+# YAGA branch-name policy
+branch-policy-version = 1
+allowed-patterns = [
+    "main",
+    "feat/*",
+    "fix/*",
+    "docs/*",
+    "chore/*",
+    "refactor/*",
+    "test/*",
+    "ci/*",
+    "build/*",
+    "perf/*",
+    "dependabot/**",
+]

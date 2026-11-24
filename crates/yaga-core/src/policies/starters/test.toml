@@ -1,0 +1,18 @@
+# YAGA deterministic test qualification policy
+test-policy-version = 1
+unknown-paths = "full"
+
+[[suites]]
+id = "unit"
+binding = "pytest"
+
+[profiles.ci]
+mode = "selective"
+
+[profiles.full]
+mode = "full"
+
+[[rules]]
+id = "source-or-tests"
+when-any = ["src/**", "tests/**"]
+select = ["unit"]

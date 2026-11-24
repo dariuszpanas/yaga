@@ -1,0 +1,3 @@
+# YAGA cross-platform committed-path policy
+path-policy-version = 1
+profile = "windows-compatible-v1"

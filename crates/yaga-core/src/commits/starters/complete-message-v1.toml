@@ -1,0 +1,12 @@
+# Explain feature and fix changes in full commit messages.
+# Enable pull-request-message = "title-and-body" separately if your merge workflow uses it.
+config-version = 1
+
+[commit]
+type-case = "lower"
+header-max-length = 100
+description-ending = "allow"
+body-policy = "optional"
+body-policy-by-type = {feat = "required", fix = "required"}
+pull-request-message = "title-only"
+merge-commits = "ignore"

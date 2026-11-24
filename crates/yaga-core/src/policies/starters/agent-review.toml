@@ -1,0 +1,10 @@
+# YAGA pull-request agent review policy
+[agent-review]
+version = 1
+required = ["codex"]
+aggregation = "all-required"
+
+[agent-review.agents.codex]
+preset = "codex"
+outcome = "review"
+publication = "review"

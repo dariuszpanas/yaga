@@ -1,0 +1,7 @@
+# Replace the repository ID with your verified GitHub repository ID.
+# No maintainer or automation is trusted until explicitly configured.
+triage-policy-version = 1
+host = "github.com"
+repository-id = 1
+maintainer-user-ids = []
+duplicate-candidates = 5

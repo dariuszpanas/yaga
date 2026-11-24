@@ -1,0 +1,10 @@
+# Editable title-focused policy; YAGA still checks selected commits.
+config-version = 1
+
+[commit]
+type-case = "lower"
+header-max-length = 100
+description-ending = "allow"
+body-policy = "optional"
+pull-request-message = "title-only"
+merge-commits = "ignore"
