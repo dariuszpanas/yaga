@@ -2,9 +2,15 @@
 name = "yaga-cli"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-publish.workspace = true
-description = "Standalone YAGA command line interface"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://dariuszpanas.github.io/yaga/"
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
+description = "Standalone CLI for deterministic commit, pull-request, workflow, and repository policy checks"
 
 [features]
 default = ["quality-http", "quality-bedrock"]

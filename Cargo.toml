@@ -4,13 +4,17 @@ members = ["crates/yaga-core", "crates/yaga-cli"]
 default-members = ["crates/yaga-core", "crates/yaga-cli"]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
+rust-version = "1.99"
 license = "BSD-3-Clause"
-publish = false
+repository = "https://github.com/dariuszpanas/yaga"
+homepage = "https://dariuszpanas.github.io/yaga/"
+keywords = ["git", "conventional-commits", "cli", "policy", "github-actions"]
+categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
-yaga-core = { path = "crates/yaga-core" }
+yaga-core = { version = "0.6.0", path = "crates/yaga-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 regex = "1"

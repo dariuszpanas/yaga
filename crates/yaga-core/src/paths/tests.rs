@@ -133,13 +133,20 @@ fn portability_handles_collision_partners_and_preserves_exact_counts() {
 
 #[test]
 fn closed_schema_loaders_accept_repository_policies_and_reject_invalid_types() {
-    tree::TreePolicy::from_toml(include_bytes!("../../../../.yaga/tree-policy.toml")).unwrap();
-    modes::ModePolicy::from_toml(include_bytes!("../../../../.yaga/mode-policy.toml")).unwrap();
-    sizes::SizePolicy::from_toml(include_bytes!("../../../../.yaga/size-policy.toml")).unwrap();
-    changes::ChangePolicy::from_toml(include_bytes!("../../../../.yaga/change-policy.toml"))
-        .unwrap();
-    portability::PathPolicy::from_toml(include_bytes!("../../../../.yaga/path-policy.toml"))
-        .unwrap();
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if repo_root.join(".yaga").is_dir() {
+        let read = |rel: &str| std::fs::read(repo_root.join(rel)).expect(rel);
+        tree::TreePolicy::from_toml(&read(".yaga/tree-policy.toml")).unwrap();
+        modes::ModePolicy::from_toml(&read(".yaga/mode-policy.toml")).unwrap();
+        sizes::SizePolicy::from_toml(&read(".yaga/size-policy.toml")).unwrap();
+        changes::ChangePolicy::from_toml(&read(".yaga/change-policy.toml")).unwrap();
+        portability::PathPolicy::from_toml(&read(".yaga/path-policy.toml")).unwrap();
+    } else {
+        assert!(
+            !repo_root.join("Cargo.toml").is_file(),
+            "missing .yaga directory in workspace checkout"
+        );
+    }
     let bom = b"\xef\xbb\xbfmode-policy-version = 1\nrequired-version = '>=0.1.0'\ndefault-allowed-modes=['regular']\n";
     assert!(modes::ModePolicy::from_toml(bom).is_ok());
     for document in [

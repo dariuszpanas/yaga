@@ -8,7 +8,10 @@ fn root_help_and_version_render_typer_rich_layout() {
 
     let version = run(dir.path(), &["--version"]);
     assert_eq!(version.status.code(), Some(0));
-    assert_eq!(stdout_str(&version).trim(), "yaga 0.5.0");
+    assert_eq!(
+        stdout_str(&version).trim(),
+        format!("yaga {}", env!("CARGO_PKG_VERSION"))
+    );
     assert!(stderr_str(&version).is_empty());
 
     let help = run(dir.path(), &["--help"]);

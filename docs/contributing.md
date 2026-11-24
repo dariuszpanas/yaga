@@ -11,9 +11,10 @@ diagnostic, or Action boundary they affect.
 
 ## Development loop
 
-Use Python 3.12+ and uv 0.12.7+. The full gate also needs Git, GNU Make, Bash,
-a running Docker engine with Linux containers, and Typos CLI 1.49.0. On Windows, put
-Git for Windows Bash on PATH before the WSL launcher. `uv sync` installs Python dependencies only.
+Use Rust (1.99+ on Linux/macOS, 1.100+ on Windows), Python 3.12+, and uv 0.12.7+. The full gate
+also needs Git, GNU Make, Bash, a running Docker engine with Linux containers, and Typos CLI
+1.49.0. On Windows, put Git for Windows Bash on PATH before the WSL launcher. `uv sync` installs
+the Python development tools and builds the editable launcher wheel.
 
 
 ```bash
@@ -21,8 +22,9 @@ uv sync --group dev
 uv run make ci
 ```
 
-The full gate covers formatting, lint, type checks, tests, repository policies, workflow linting,
-documentation, and the package build. Its default changed-path range is only `HEAD^..HEAD`.
+The full gate covers `cargo fmt`, `cargo clippy`, `cargo test`, Python launcher formatting/lint/type
+checks and packaging tests, repository policies, workflow linting, documentation, and the
+zero-dependency wheel build. Its default changed-path range is only `HEAD^..HEAD`.
 For a complete PR, run from the head checkout with exact base/head SHAs already available in
 complete local history:
 
@@ -33,9 +35,8 @@ uv run make ci CHANGE_RANGE='<base-sha>...<head-sha>'
 
 The two-dot command checks all branch-only commit messages; the three-dot override checks paths
 against the unique merge base. No remote branch is inferred and no history is fetched. Workflow,
-formatting, and test checks still read the current checkout. The independent
-[minimum runtime qualification](minimum-runtime.md) checks the base wheel's lowest dependency
-resolution; it does not replace the locked gate.
+formatting, and test checks still read the current checkout. See
+[minimum runtime qualification](minimum-runtime.md) for the zero-dependency wheel launcher checks.
 
 The documentation-only loop is:
 
@@ -57,16 +58,18 @@ gates in separate named jobs:
   - `Commit Messages` (`commit-policy.yml`): `check: commit` against `[tool.yaga.commit]` and
     `check: pr-description` against `.yaga/description-policy.toml` (rechecked on PR title/body
     `edited` events without rerunning the full test matrix).
-  - `YAGA Checks (branch, change, repo)` (`ci.yml`): `check: branch`
-    (`.yaga/branch-policy.toml`), `check: change` (`.yaga/change-policy.toml`), and `check: repo`
-    (`.yaga/checks/ci.toml`, covering `mode`, `path`, `size`, `tree`, `workflow`,
-    `workflow-security`, `workflow-lint`, and `commit`).
+  - `YAGA Checks (branch, change, policy, repo)` (`ci.yml`): `check: branch`
+    (`.yaga/branch-policy.toml`), `check: change` (`.yaga/change-policy.toml`), `check: policy`,
+    and `check: repo` (`.yaga/checks/ci.toml`, covering `mode`, `path`, `size`, `tree`,
+    `workflow`, `workflow-security`, `workflow-lint`, and `commit`).
   - `Publish Pull Request Review` (`pr-review.yml`): trusted `check: pr-triage` against
     `.yaga/triage-policy.toml` posts admission findings and propagates holds, then
     `check: pr-review` evaluates `.yaga/agent-review-policy.toml` before formal publication.
 - **Repository engineering & fixture suites**:
-  - `Lint, Package Build & Docs`, `Python 3.12–3.15`, and `Minimum dependency security` in
-    `ci.yml`, aggregated into the single branch-ruleset gate `CI Prerequisites`.
+  - `Lint, Package Build & Docs`, `Rust CLI, tests, and wheel` (Ubuntu + Windows, plus
+    `cargo package --workspace --locked`), `macOS ARM64 Rust tests and wheel`, and
+    `Python 3.12–3.15` wheel verification in `ci.yml`, aggregated into the single branch-ruleset
+    gate `CI Prerequisites`.
   - `Action E2E Fixture (<scenario>)` (`commit-adoption-qualification.yml`): synthetic pass/fail
     fixture repositories testing `check: commit`.
 
@@ -87,8 +90,9 @@ structure separate from configurable policy, maintain stable diagnostic identifi
 focused tests for every new contract. Read [CONTRIBUTING.md](https://github.com/dariuszpanas/yaga/blob/main/CONTRIBUTING.md)
 before opening a pull request.
 
-When changing the dependency set, update both `pyproject.toml` and `uv.lock`. Before pushing,
-inspect the working and cached diffs and run the complete gate.
+When changing Rust or Python dependencies, keep `Cargo.toml`/`Cargo.lock` and
+`pyproject.toml`/`uv.lock` synchronized. Before pushing, inspect the working and cached diffs and
+run the complete gate.
 
 Record user-visible changes in [docs/changelog.md](changelog.md), the single release-history source
 linked from the root `CHANGELOG.md`. Follow its Keep a Changelog convention. Do not turn it into a

@@ -1,7 +1,9 @@
 # Get started
 
-Use the standalone `yaga` executable or install the `yaga-cli` Python package. Both read the same
-policy files and support the same report formats. The PyPI distribution named `yaga` is unrelated.
+Use the standalone `yaga` executable, install `yaga-cli` with Cargo from crates.io, or install
+the zero-dependency `yaga-cli` Python package from PyPI. All three ship the same Rust CLI, read
+the same policy files, and support the same report formats. The PyPI and crates.io packages named
+`yaga` are unrelated.
 
 ## Install as a global tool
 
@@ -61,6 +63,18 @@ fetches the named executable under the exact version. A loopback fixture may use
 `http://127.0.0.1:PORT`. Only an explicitly selected loopback origin permits HTTP. Installation
 trusts the selected origin for both the manifest and the binary.
 
+### Cargo (crates.io)
+
+With a Rust toolchain (MSRV 1.99+), install the standalone `yaga` executable from crates.io:
+
+```bash
+cargo install --locked yaga-cli
+yaga --version
+```
+
+Cargo installs `yaga` in its bin directory (by default `~/.cargo/bin`) with no Python dependency.
+Update later with `cargo install --locked yaga-cli` or remove it with `cargo uninstall yaga-cli`.
+
 ### Python with uv
 
 [Install uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
@@ -71,9 +85,9 @@ uv tool update-shell
 ```
 
 Open a new terminal after updating PATH. Use `uv tool dir --bin` to locate your tool directory.
-The Python CLI supports Python 3.12 through 3.15. The wheel includes the Rust workflow parser.
-Standard uv settings, including `UV_TOOL_DIR` and `UV_TOOL_BIN_DIR`, apply to
-Python installations.
+The Python launcher supports Python 3.12 through 3.15 with zero runtime dependencies and bundles
+the standalone Rust `yaga` executable. Standard uv settings, including `UV_TOOL_DIR` and
+`UV_TOOL_BIN_DIR`, apply to Python installations.
 
 ### pipx
 
@@ -237,8 +251,14 @@ on your `PATH` to use the installed command.
 
 ### Use yaga-core in a Rust project
 
-For a Rust project next to the reviewed `yaga/` checkout, add the following dependency to
-your project's `Cargo.toml`. Adjust the relative path if the checkouts have a different layout.
+Add `yaga-core` from crates.io to your project's `Cargo.toml`:
+
+```toml
+[dependencies]
+yaga-core = "0.6"
+```
+
+Or, against a local reviewed `yaga/` checkout next to your project, use a path dependency:
 
 ```toml
 [dependencies]
@@ -266,8 +286,9 @@ including local edits.
 
 ### Install the Python package from source
 
-Source and editable installs compile the CLI and Python extension with Cargo and rustc.
-Installing a matching release wheel includes both binaries and requires no Rust toolchain.
+Source and editable installs compile the standalone Rust `yaga` executable with Cargo and rustc
+and bundle it into the wheel. Installing a matching release wheel includes the prebuilt binary
+and requires no Rust toolchain.
 
 For a user-wide Python tool, run these commands from the YAGA checkout with uv 0.12.7
 or newer:

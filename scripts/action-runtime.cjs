@@ -11,8 +11,6 @@ const RUSTC_COMMIT = "0ef1bc386059596dada8fb65b50425aab2ea637a";
 const CARGO_COMMIT = "3acc79c0c841844675bc53a605922dbfc441e750";
 const MAX_ASSET = 100 * 1024 * 1024;
 const CARGO_SOURCES = ["Cargo.toml", "Cargo.lock", "crates"];
-// The standalone CLI embeds both platform installers at compile time.
-const INSTALLER_SOURCES = ["docs/install.sh", "docs/install.ps1"];
 const TRIPLES = ["aarch64", "x86_64"].flatMap(arch =>
   ["apple-darwin", "pc-windows-msvc", "unknown-linux-musl"].map(platform => arch + "-" + platform));
 const basename = triple => "yaga-" + triple + (triple.endsWith("msvc") ? ".exe" : "");
@@ -227,7 +225,7 @@ async function build(action, workspace, staging, dest, trusted) {
     const { git, options, sha } = trusted;
     // Read each committed blob directly. Avoid checkout filters, archive substitution and user tar drivers.
     const listing = checkedTool(git, ["--no-lazy-fetch", "-C", action, "ls-tree", "-rz", sha, "--",
-      ...CARGO_SOURCES, ...INSTALLER_SOURCES], options, "could not enumerate trusted Action sources");
+      ...CARGO_SOURCES], options, "could not enumerate trusted Action sources");
     const files = listing.split("\0").filter(Boolean).map(row => {
       const m = /^(100644|100755) blob ([0-9a-f]{40})\t((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+)$/.exec(row);
       if (!m || m[3].split("/").some(x => [".", "..", ".cargo", ".git"].includes(x))) throw Error("invalid trusted source entry");
@@ -258,11 +256,6 @@ async function build(action, workspace, staging, dest, trusted) {
     if (offset !== batch.stdout.length) throw Error("invalid trusted source trailer");
   } else {
     for (const name of CARGO_SOURCES) copySources(path.join(action, name), path.join(src, name));
-    directory(path.join(action, "docs"));
-    fs.mkdirSync(path.join(src, "docs"), { mode: 0o700 });
-    for (const name of INSTALLER_SOURCES) {
-      fs.writeFileSync(path.join(src, name), plain(path.join(action, name), 1024 * 1024), { flag: "wx", mode: 0o600 });
-    }
   }
   const options = { cwd: src, env, timeout: 300_000 };
   const rustup = tool("rustup", dirs, workspace);
