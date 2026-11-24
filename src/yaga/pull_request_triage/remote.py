@@ -28,6 +28,7 @@ from yaga.pull_request_triage.policy import TriagePolicy
 MARKER = "<!-- yaga-pull-request-triage:v1 -->"
 MAX_COMMENT_BYTES = 16 * 1024
 MAX_REQUESTS = 160
+MAX_FILES_PAGE_STDOUT_BYTES = 8 * 1024 * 1024
 
 
 class TriageClient:
@@ -48,6 +49,15 @@ class TriageClient:
     def get(self, endpoint: str) -> Any:
         self._admit()
         return review_remote._gh_api_json(self.executable, self.reference, endpoint)
+
+    def get_files_page(self, endpoint: str) -> Any:
+        self._admit()
+        return review_remote._gh_api_json(
+            self.executable,
+            self.reference,
+            endpoint,
+            stdout_limit=MAX_FILES_PAGE_STDOUT_BYTES,
+        )
 
     def write(self, endpoint: str, body: str, *, method: str) -> Any:
         self._admit()
@@ -144,7 +154,9 @@ def _collect_inventory(client: TriageClient, policy: TriagePolicy) -> dict[str, 
     prefix = f"repos/{reference.owner}/{reference.repository}"
     files = []
     for page in range(1, max(1, (count + 99) // 100) + 1):
-        items = client.get(f"{prefix}/pulls/{reference.number}/files?per_page=100&page={page}")
+        items = client.get_files_page(
+            f"{prefix}/pulls/{reference.number}/files?per_page=100&page={page}"
+        )
         if not isinstance(items, list) or len(items) > 100:
             raise InputError("invalid triage file page")
         for item in items:

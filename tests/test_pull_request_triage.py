@@ -233,12 +233,14 @@ class Api:
         self.tree_reads = 0
         self.mutate_tree_at = None
         self.reads = []
+        self.stdout_limits = []
         self.before_get = None
         self.check_conclusion = "success"
 
-    def get(self, executable, reference, endpoint):
+    def get(self, executable, reference, endpoint, *, stdout_limit=None):
         s = self.snapshot
         self.reads.append(endpoint)
+        self.stdout_limits.append((endpoint, stdout_limit))
         if self.before_get is not None:
             self.before_get(endpoint, s)
         if endpoint == "user":
@@ -597,9 +599,9 @@ def test_configured_comment_publisher_and_duplicate_marker_fail_closed(policy, a
     )
     original = api.get
 
-    def without_user(executable, reference, endpoint):
+    def without_user(executable, reference, endpoint, **kwargs):
         assert endpoint != "user"
-        return original(executable, reference, endpoint)
+        return original(executable, reference, endpoint, **kwargs)
 
     monkeypatch.setattr(remote, "_gh_api_json", without_user)
     assert live(policy, "--publish-comment").exit_code == 1
@@ -699,6 +701,12 @@ def test_maximum_inventory_keeps_joint_publication_within_request_budget(tmp_pat
     assert result.exit_code == 0, result.output
     assert api.tree_reads == 21
     assert sum("/files?" in endpoint for endpoint in api.reads) == 30
+    assert all(
+        limit == triage_remote.MAX_FILES_PAGE_STDOUT_BYTES
+        for endpoint, limit in api.stdout_limits
+        if "/files?" in endpoint
+    )
+    assert all(limit is None for endpoint, limit in api.stdout_limits if "/files?" not in endpoint)
     assert len(api.reads) + len(api.writes) < 160
     assert api.writes[-1][2]["commit_id"] == HEAD
 
