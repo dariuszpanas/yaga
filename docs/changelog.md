@@ -2,10 +2,19 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-24
+
 ### Added
 
-- Add checksum-verified standalone installers for Linux, macOS and Windows on x86-64 and ARM64.
-  Native installations run without Python. The existing Python tool installation remains available.
+- Publish the standalone `yaga-cli` CLI (`cargo install --locked yaga-cli`) and the `yaga-core`
+  Rust library crate to crates.io so teams can install YAGA with Cargo or embed YAGA's policy
+  engines directly in Rust projects without Python. See [Get started](getting-started.md).
+
+- Add checksum-verified standalone installers (`install.sh` and `install.ps1`) for Linux
+  (`x86_64` and `aarch64` static musl), macOS (`x86_64` and `arm64`), and Windows (`x86_64` and
+  `aarch64`) with `yaga-native-sha256.txt` manifest verification, ownership receipts, and native
+  `yaga self update`. Native installations run without Python; the Python tool installation
+  remains available.
 
 - Add bounded `pull-request triage check` and root Action `check: pr-triage` with explicit
   versioned trust policy, immutable author/repository classification, sensitive-path and exact
@@ -13,7 +22,24 @@
   requires a configured maintainer's current-head approval with an explicit acknowledgment of
   the exact head/base/repository/PR/policy boundary. See [Pull-request trust triage](pull-request-triage.md).
 
+- Add a source-free pinned native GitHub Action distribution workflow (`Stage pinned native Action`)
+  and `scripts/action-runtime.cjs` staging all six verified platform executables with
+  `manifest.sha256` and qualifying every target on matching runners. See
+  [GitHub Actions](github-actions.md#native-distribution).
+
 ### Changed
+
+- Rewrite YAGA end-to-end in Rust (`crates/yaga-core` and `crates/yaga-cli`) while preserving
+  the framed CLI help panels, options tables, color precedence (`NO_COLOR` and `FORCE_COLOR`),
+  stable exit codes (`0` pass, `1` finding, `2` operational error), versioned JSON schemas, plain
+  text reports, and escaped GitHub workflow annotations across all commands.
+
+- Replace the Python policy engine and PyO3 extension with a zero-dependency `uv`-style
+  `py3-none-<platform>` Python launcher (`dependencies = []`) that bundles the standalone Rust
+  `yaga` executable for all six release targets (`uv tool install yaga-cli`, `pipx`, and `pip`).
+
+- Run the unified root GitHub Action (`action.yml`) directly through the standalone Rust binary
+  across `commit`, CLI checks, and `gate` modes without requiring Python or `uv`.
 
 - `commit quality` now requires an explicitly chosen API provider. Use OpenAI, Anthropic,
   Gemini, Amazon Bedrock, or a user-managed OpenAI-compatible server such as Ollama.
@@ -25,6 +51,29 @@
   Read-only review checks and negative-only publication remain compatible. The trusted dogfood
   publisher posts triage first and stops on hold; this does not revoke existing reviews or
   provide an authoritative current-head merge status.
+
+- Raise pull-request triage limits (`3,000` files, `160` requests, `8 MiB` snapshot/report, and
+  `8 MiB` `/pulls/{n}/files` `gh` stdout budget) and repository committed-size bounds so large
+  refactoring pull requests evaluate cleanly.
+
+### Removed
+
+- Remove internal Python policy modules (`yaga.*`), the PyO3 extension (`crates/yaga-python`),
+  and third-party Python runtime dependencies (`typer`, `rich`, `pydantic`, `pyyaml`, and
+  optional local Hugging Face/PyTorch extras). The supported Python surface is the `yaga` /
+  `python -m yaga` launcher and `yaga.find_yaga_bin()`.
+
+### Fixed
+
+- Handle macOS XNU `killpg` `EPERM` on zombie-only process groups and canonicalize `/var`
+  symlinked temporary paths so bounded Git and actionlint subprocesses clean up reliably on macOS.
+
+- Preserve `YAGA_WHEEL_PLATFORM` overrides during Cargo wheel builds, resolve Windows 8.3 short
+  paths in wheel verification, and preserve LF endings on Git signature fixtures across Windows
+  checkouts.
+
+- Fix UTF-8 separator rendering (`·`) in `action.yml` step-summary fallbacks and keep embedded
+  Action version literals checked against release metadata.
 
 ## [0.5.0] - 2026-11-03
 

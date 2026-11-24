@@ -304,7 +304,7 @@ fn windows_handoff(plan: &Plan, exe: &Path, native_digest: Option<&str>) -> Resu
             .join("Modules");
         cmd.env("PSModulePath", modules).env(
             "YAGA_UPDATE_INSTALLER",
-            include_str!("../../../docs/install.ps1"),
+            include_str!("../assets/install.ps1"),
         );
     }
     cmd.creation_flags(CREATE_NO_WINDOW)

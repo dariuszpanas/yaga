@@ -1,5 +1,6 @@
 # Downloaded shell scripts must remain executable by POSIX shells from any checkout.
 docs/install.sh text eol=lf
+crates/yaga-cli/assets/install.sh text eol=lf
 # These files are embedded verbatim in the standalone Rust binary.
 crates/yaga-core/src/commits/starters/*.toml text eol=lf
 crates/yaga-core/src/policies/starters/*.toml text eol=lf

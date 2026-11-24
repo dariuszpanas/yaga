@@ -52,8 +52,8 @@ the checksums and executable bytes on checkouts that use automatic line-ending c
 The runner fetches that Action revision with its ordinary repository access. Bundled runners
 need no Cargo installation, Python environment, release API access or additional token. The
 staging workflow has read-only repository permissions and never changes a branch or release tag.
-The source repository's own 128 KiB per-file default and 9 MiB total source-tree limit remain
-appropriate for the development branch.
+The source repository's own committed-size policy (`.yaga/size-policy.toml`) keeps the
+development branch free of committed release binaries.
 
 An unpublished source checkout without a bundle builds the selected Action's Rust sources with
 the pinned Rust 1.100.0 toolchain and `Cargo.lock`. This path requires Node, rustup, a native
@@ -185,7 +185,7 @@ normal checks. No token or API access is needed, and no keys are downloaded duri
 
 Without `trusted-config`, the existing `pull_request`/PR-head policy mode is unchanged.
 The `exit-code` output exposes 0 for success, 1 for policy findings, and 2 for invalid input.
-The `commit` runtime stays isolated from CLI/Typer modules and has no token input, write permissions, API calls,
+The `commit` runtime stays isolated from interactive CLI commands and has no token input, write permissions, API calls,
 or review-publisher integration. Hosted synthetic positive/negative controls supplement the
 consumer's real-event qualification; they do not authorize a production cutover.
 

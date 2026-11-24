@@ -30,6 +30,8 @@ def test_release_accepts_exact_version_and_date() -> None:
         "0.1.0",
         "## [Unreleased]\n\n## [0.1.0] - 2026-09-13\n",
         runtime_version="0.1.0",
+        core_dependency_version="0.1.0",
+        action_versions={"0.1.0"},
     )
 
 
@@ -41,6 +43,33 @@ def test_release_rejects_mismatched_runtime_version() -> None:
             "## [Unreleased]\n\n## [0.1.0] - 2026-09-13\n",
             runtime_version="0.0.9",
         )
+
+
+def test_release_rejects_mismatched_core_dependency_or_action_version() -> None:
+    with pytest.raises(ValueError, match="yaga-core dependency version"):
+        validate_release(
+            "v0.6.0",
+            "0.6.0",
+            "## [Unreleased]\n\n## [0.6.0] - 2026-11-24\n",
+            runtime_version="0.6.0",
+            core_dependency_version="0.5.0",
+        )
+    with pytest.raises(ValueError, match=r"action\.yml version"):
+        validate_release(
+            "v0.6.0",
+            "0.6.0",
+            "## [Unreleased]\n\n## [0.6.0] - 2026-11-24\n",
+            runtime_version="0.6.0",
+            core_dependency_version="0.6.0",
+            action_versions={"0.5.0", "0.6.0"},
+        )
+
+
+def test_crate_license_copies_match_repository_license() -> None:
+    root = Path(__file__).resolve().parents[1]
+    expected = (root / "LICENSE").read_text(encoding="utf-8")
+    for crate in ("crates/yaga-core/LICENSE", "crates/yaga-cli/LICENSE"):
+        assert (root / crate).read_text(encoding="utf-8") == expected, crate
 
 
 @pytest.mark.parametrize(
@@ -79,6 +108,23 @@ def test_release_workflow_isolates_upload_from_source_and_manual_runs() -> None:
     assert any(
         'make ci BUILD_ARGS="--output-dir dist"' in step.get("run", "") for step in build["steps"]
     )
+    assert any(
+        "cargo package --workspace --locked" in step.get("run", "") for step in build["steps"]
+    )
+    crates = workflow["jobs"]["publish-crates"]
+    assert crates["needs"] == ["build", "native-assets", "python-assets"]
+    assert crates["if"] == publish["if"]
+    assert crates["permissions"] == {"contents": "read", "id-token": "write"}
+    assert crates["environment"]["name"] == "crates-io"
+    assert crates["steps"][0]["uses"].startswith("actions/checkout@")
+    assert crates["steps"][0]["with"]["persist-credentials"] == "false"
+    assert any(
+        step.get("uses", "").startswith("rust-lang/crates-io-auth-action@")
+        for step in crates["steps"]
+    )
+    assert any(
+        "cargo publish --workspace --locked" in step.get("run", "") for step in crates["steps"]
+    )
 
 
 def test_release_notes_select_only_the_requested_version() -> None:
@@ -100,7 +146,9 @@ Old changes.
 """
     assert release_notes("0.1.2", changelog) == (
         "### Fixed\n\n- Preserve package artifacts.\n\n"
-        "[PyPI](https://pypi.org/project/yaga-cli/0.1.2/)\n"
+        "[PyPI](https://pypi.org/project/yaga-cli/0.1.2/) · "
+        "[crates.io (`yaga-cli`)](https://crates.io/crates/yaga-cli/0.1.2) · "
+        "[crates.io (`yaga-core`)](https://crates.io/crates/yaga-core/0.1.2)\n"
     )
 
 
@@ -115,7 +163,7 @@ def test_github_release_requires_successful_publish_and_separate_permissions() -
         (root / ".github/workflows/release.yml").read_text("utf-8"), yaml.BaseLoader
     )
     announce = workflow["jobs"]["github-release"]
-    assert announce["needs"] == ["build", "publish"]
+    assert announce["needs"] == ["build", "publish", "publish-crates"]
     assert announce["if"] == workflow["jobs"]["publish"]["if"]
     assert "always()" not in announce["if"]
     assert announce["permissions"] == {"contents": "write"}

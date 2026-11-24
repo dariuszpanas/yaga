@@ -54,7 +54,7 @@ pub(super) fn update(exe: &Path, digest: &str, dry_run: bool) -> Result<(), Stri
         cmd.current_dir("/")
             .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
             .arg("-s");
-        let script = include_str!("../../../../docs/install.sh").replace("\r\n", "\n");
+        let script = include_str!("../../assets/install.sh").replace("\r\n", "\n");
         let output = run_bounded(
             cmd,
             Some(script.into_bytes()),

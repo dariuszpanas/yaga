@@ -286,6 +286,13 @@ def test_python_only_historical_release_uses_prior_manager(
     assert log.read_text().strip() == "--no-config tool install --python 3.12 yaga-cli==0.4.0"
 
 
+def test_crate_bundled_installers_match_docs_installers() -> None:
+    for name in ("install.sh", "install.ps1"):
+        assert (ROOT / "crates/yaga-cli/assets" / name).read_bytes() == (
+            ROOT / "docs" / name
+        ).read_bytes(), name
+
+
 def test_release_matrix_matches_the_installer_asset_set(tmp_path: Path) -> None:
     workflow = yaml.load((ROOT / ".github/workflows/release.yml").read_bytes(), yaml.BaseLoader)
     rows = workflow["jobs"]["native-binaries"]["strategy"]["matrix"]["include"]

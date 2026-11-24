@@ -54,6 +54,8 @@ jobs:
         run: cargo install typos-cli --version 1.49.0 --locked
       - name: Run the full gate and retain its validated distributions
         run: uv run --frozen make ci BUILD_ARGS="--output-dir dist"
+      - name: Verify crates.io workspace packages
+        run: cargo package --workspace --locked
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: source-distribution
@@ -221,9 +223,48 @@ jobs:
           path: dist/
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
+  publish-crates:
+    name: Publish to crates.io
+    needs: [build, native-assets, python-assets]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/yaga-cli
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RUSTUP_TOOLCHAIN: "1.99.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - name: Select crates.io authentication mode
+        id: auth-mode
+        env:
+          HAS_FALLBACK_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+        run: |
+          if [ "$HAS_FALLBACK_TOKEN" = "true" ]; then
+            printf 'use-oidc=false\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'use-oidc=true\n' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Authenticate with crates.io via OIDC
+        id: auth
+        if: steps.auth-mode.outputs.use-oidc == 'true'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      - name: Publish workspace crates to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+        run: cargo publish --workspace --locked
+
   github-release:
     name: Create GitHub Release
-    needs: [build, publish]
+    needs: [build, publish, publish-crates]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 5

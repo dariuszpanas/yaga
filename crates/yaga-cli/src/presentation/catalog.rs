@@ -159,9 +159,22 @@ mod tests {
 
     #[test]
     fn guide_matches_native_command_registry() {
+        let workspace_docs =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/commands.md");
+        if !workspace_docs.is_file() {
+            // Packaged crates.io tarballs do not bundle the repository docs tree.
+            assert!(
+                !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../Cargo.toml")
+                    .is_file(),
+                "missing docs/commands.md in workspace checkout"
+            );
+            return;
+        }
         let mut expected = BTreeSet::new();
         checkers(&crate::Cli::command(), "", &mut expected);
-        let documented = include_str!("../../../../docs/commands.md")
+        let documented = std::fs::read_to_string(&workspace_docs)
+            .expect("read docs/commands.md")
             .lines()
             .filter_map(|line| {
                 line.strip_prefix("| [`yaga ")?

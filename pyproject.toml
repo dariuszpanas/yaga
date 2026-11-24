@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "yaga-cli"
-version = "0.5.0"
+version = "0.6.0"
 description = "Configurable developer workflow checks for local use and GitHub Actions"
 readme = "README.md"
 license = "BSD-3-Clause"

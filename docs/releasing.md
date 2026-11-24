@@ -1,8 +1,10 @@
 # Releasing YAGA
 
 The release workflow is `.github/workflows/release.yml`. It validates the selected source,
-runs the full local gate on GitHub's Linux runner, and retains the exact wheel and source
-distribution inspected by the package build gate. Publishing uses those artifacts without rebuilding.
+runs the full local gate on GitHub's Linux runner, packages and verifies the Rust workspace
+crates for crates.io (`cargo package --workspace --locked`), builds and tests all six native
+executables and zero-dependency platform Python wheels, and retains the verified distributions
+for tag-triggered publishing.
 
 ## Standalone release assets
 
@@ -36,7 +38,16 @@ Each platform installs its finished wheel with `--no-deps` into an isolated envi
 that `yaga.find_yaga_bin()` resolves inside the environment, and runs the console script and
 `python -m yaga` from outside the checkout. The assembler checks all six platform wheels and the
 source archive (verifying executable architecture, binary role, and macOS deployment target) before
-handing them to the tag-only publishing jobs.
+handing them to the tag-only publishing jobs. See [minimum runtime qualification](minimum-runtime.md)
+for the zero-dependency wheel verification contract.
+
+## Crates.io release gate
+
+The `build` job runs `cargo package --workspace --locked` to assemble and compile both
+`yaga-core` and `yaga-cli` from their unpacked `.crate` archives (including each crate's README,
+`LICENSE`, and bundled installer assets). On tag pushes, the isolated `publish-crates` job runs
+`cargo publish --workspace --locked`, publishing `yaga-core` first, waiting for the crates.io
+index, and then publishing `yaga-cli`.
 
 ## One-time PyPI setup
 
@@ -56,15 +67,43 @@ allowing release tags. Protect `v*` tags against unauthorized creation, updates,
 No PyPI API token or repository secret is needed. Only the upload job receives `id-token: write`;
 it checks out no source and runs no build scripts. Keep that separation when editing the workflow.
 
+## One-time crates.io setup
+
+Create a GitHub `crates-io` environment with required maintainer approval and deployment rules
+allowing `v*` release tags.
+
+- **First-ever publish of `yaga-core` and `yaga-cli`**: crates.io requires crates to exist before
+  OIDC Trusted Publishing can be attached to them. Add a short-lived `CARGO_REGISTRY_TOKEN`
+  secret (scoped to `publish-new` / `publish-update`) to the `crates-io` GitHub environment for
+  the initial release tag. When `secrets.CARGO_REGISTRY_TOKEN` is set, `publish-crates` skips
+  OIDC token exchange and publishes directly with that token.
+- **Subsequent releases (OIDC Trusted Publishing)**: once `yaga-core` and `yaga-cli` exist on
+  crates.io, delete the `CARGO_REGISTRY_TOKEN` secret from the `crates-io` environment and
+  configure [crates.io Trusted Publishing](https://crates.io/docs/trusted-publishing) on **both**
+  `yaga-core` and `yaga-cli` with these values:
+
+| Field | Value |
+| --- | --- |
+| Repository owner | `dariuszpanas` |
+| Repository name | `yaga` |
+| Workflow filename | `release.yml` |
+| Environment | `crates-io` |
+
+With no `CARGO_REGISTRY_TOKEN` secret present, `publish-crates` authenticates automatically using
+the pinned `rust-lang/crates-io-auth-action` OIDC exchange (which revokes its temporary token
+when the job exits).
+
 ## Rehearse without publishing
 
 Once the workflow is merged, select **Actions → Release → Run workflow** on the default branch.
-The manual route runs validation and uploads the assembled `python-release` artifact to the workflow run.
-It never runs the PyPI upload or GitHub Release jobs. It also retains the selected changelog
-section as a separate `release-notes` artifact. Manual runs on other branches are skipped.
+The manual route runs validation, `cargo package --workspace --locked`, and all six native target
+builds, uploading the assembled `python-release`, `native-release`, and `release-notes` artifacts
+to the workflow run. It never runs PyPI, crates.io, or GitHub Release publishing jobs. Manual runs
+on other branches are skipped.
 
-Download the artifact to inspect the wheel and source distribution. A rehearsal is build evidence,
-not proof that PyPI's publisher/environment setup works: OIDC authorization happens on publication.
+Download the artifacts to inspect the wheels, source distribution, standalone binaries, and
+`yaga-native-sha256.txt` manifest. A rehearsal is build evidence, not proof that PyPI or
+crates.io OIDC authorization works: trusted-publisher exchange happens on tag publication.
 
 Inspect the description embedded in the wheel, rendered with `readme_renderer.markdown`, in a
 browser. The build gate checks the Markdown content type, absolute HTTPS links, and preserved
@@ -72,49 +111,56 @@ public logo markup; it deliberately does not make network requests. Before publi
 image and link URLs anonymously, including documentation fragments and the package's project
 URLs. The logo must load from the public documentation site. Repository and example links need
 the source repository to be public; authenticated maintainer access does not prove they work for
-package users. Twine's metadata check does not prove remote images or links are reachable.
+package users.
 
 ## Publish a version
 
-1. Update the workspace version in `Cargo.toml`, `Cargo.lock`, `pyproject.toml`, `VERSION` in `src/yaga/version_requirement.py`, and user-facing version
-   references. Tests require the Action runtime version to match package metadata. Convert the candidate changelog
-   heading into `## [0.1.0] - YYYY-MM-DD`, using the actual release date, and retain `Unreleased`
-   above it. The Beta classifier is a maturity label; version `0.1.0` is a normal PyPI version,
-   not the PEP 440 prerelease `0.1.0b1`. Use `YAGA 0.1.0` as the GitHub Release title;
-   keep the maturity label in package metadata rather than appending `(Beta)` to the title.
-2. Run [minimum runtime qualification](minimum-runtime.md) and audit the exact recorded
-   dependency pins with no skipped distributions or known advisories. Also audit the release
-   lock; functional smoke and locked-dependency success do not qualify the lowest set.
-   The minimum-runtime helper includes this audit automatically; CI requires it on both Linux
-   and Windows with Python 3.12.
-3. Merge the release changes and require all hosted CI lanes to pass for the exact commit,
-   including Windows. Resolve dependency PR failures before choosing the candidate.
-4. After publication is explicitly authorized, create and push the matching `v0.1.0` tag at that
-   verified commit. Use the corresponding version for later releases.
-5. The workflow requires the tagged commit to be on the default branch, checks that the tag matches
-   package metadata and a dated changelog entry, and reruns `uv run make ci`. Separate Linux and
-   Windows jobs then download the retained wheel, install its lowest base dependencies, run the
-   installed smoke, and audit every resolved pin. These two audits and all six native target builds must pass before the `pypi` environment
-   approval and upload can run. The publisher uses the validated distributions without rebuilding.
-   The platform-specific minimum-runtime receipts are retained as separate Actions artifacts for
-   seven days, including failure evidence when available. Manual rehearsals require the same audit.
-6. Verify the PyPI project files and install `yaga-cli==0.1.0` from PyPI in a clean tool environment.
-   Confirm `yaga --help` and the automatically created GitHub Release. Its wheel and source
-   archive must be the same artifacts published to PyPI. To publish or update the **YAGA Checks**
-   GitHub Marketplace Action listing, edit that GitHub Release in the web UI and confirm
-   **Publish this Action to the GitHub Marketplace**. Repeat the lowest-resolved installed
-   smoke and audit its actual dependency pins from the public package; retain both reports.
+1. Update the version across `Cargo.toml` (`[workspace.package].version` and
+   `[workspace.dependencies].yaga-core`), `Cargo.lock`, `pyproject.toml`, `uv.lock`, and the
+   version literals in `action.yml`. `scripts/check_release.py` rejects mismatches across package
+   metadata, Cargo workspace/dependency versions, `action.yml`, and the dated changelog heading.
+   Convert the candidate changelog heading into `## [X.Y.Z] - YYYY-MM-DD`, using the actual
+   release date, and retain `## [Unreleased]` above it. The Beta classifier is a maturity label;
+   use a normal semantic version such as `0.6.0` (not `0.6.0b1`) and `YAGA 0.6.0` as the GitHub
+   Release title.
+2. Merge the release changes to `main` and require all hosted CI lanes to pass for the exact
+   commit (including `YAGA Checks`, `Lint, Package Build & Docs`, Ubuntu/Windows native Rust
+   qualification with `cargo package --workspace --locked`, macOS ARM64 wheel verification, and
+   the Python 3.12–3.15 wheel matrix).
+3. Optionally run a manual **Release** rehearsal on `main` and inspect `python-release`,
+   `native-release`, and `release-notes`.
+4. After publication is explicitly authorized, create and push the matching `vX.Y.Z` tag at that
+   verified default-branch commit.
+5. The workflow verifies the tagged commit is an ancestor of `main`, checks tag/version/changelog
+   alignment, runs `uv run --frozen make ci BUILD_ARGS="--output-dir dist"` and
+   `cargo package --workspace --locked`, builds and verifies all six native binaries and wheels,
+   and then pauses at the `pypi` and `crates-io` environment approvals before publishing to PyPI
+   and crates.io. Only after both package registries succeed does `github-release` create the
+   GitHub Release with the retained wheels, source archive, standalone executables, and
+   `yaga-native-sha256.txt` manifest.
+6. Verify the published artifacts across all channels:
+   - PyPI: install `yaga-cli==X.Y.Z` in a clean `uv tool` environment and run `yaga --version`.
+   - crates.io: verify `yaga-core` and `yaga-cli` pages and `cargo install --locked yaga-cli --version X.Y.Z`.
+   - GitHub Release: confirm all six standalone executables, `yaga-native-sha256.txt`, wheels,
+     and source archive are attached. To publish or update the **YAGA Checks** GitHub Marketplace
+     Action listing, edit that GitHub Release in the web UI and confirm **Publish this Action to
+     the GitHub Marketplace**.
+   - Pinned native Action (optional): run **Stage pinned native Action** with the successful
+     Release run ID, reviewed source SHA, and `yaga-native-sha256.txt` digest as documented in
+     [GitHub Actions native distribution](github-actions.md#native-distribution).
 
 This workflow accepts final `vMAJOR.MINOR.PATCH` tags and does not publish TestPyPI packages.
-After PyPI publication succeeds, a separate job creates the GitHub Release from the validated
-changelog section and original distributions. Only that job has `contents: write`; it checks out
-no source and has no OIDC permission. The PyPI job retains its isolated `id-token: write` permission.
-Read the Docs configuration is independent of package upload.
+After PyPI and crates.io publication succeed, a separate job creates the GitHub Release from the
+validated changelog section and original distributions. Only `github-release` has
+`contents: write`; it checks out no source and has no OIDC permission. `publish` and
+`publish-crates` retain their isolated `id-token: write` permissions in their separate GitHub
+environments.
 
-If only the GitHub Release job fails, repair or rerun that job without republishing to PyPI.
-If a release entry already exists after a partial failure, inspect its draft state and assets and
-complete it using the retained artifacts; the workflow deliberately refuses to overwrite an entry.
+If only `github-release` fails, repair or rerun that job without republishing to PyPI or
+crates.io. If a release entry already exists after a partial failure, inspect its draft state and
+assets and complete it using the retained artifacts; the workflow deliberately refuses to
+overwrite an entry.
 
 If validation fails, fix the source and choose a new verified candidate before publishing. If an
-upload is interrupted, inspect PyPI before rerunning: package versions/files cannot be overwritten,
-and the workflow deliberately does not suppress existing-file errors.
+upload is interrupted, inspect PyPI and crates.io before rerunning: published versions cannot be
+overwritten, and the workflow deliberately does not suppress existing-version errors.

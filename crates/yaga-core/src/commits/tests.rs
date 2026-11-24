@@ -256,19 +256,26 @@ fn resource_and_merge_checks_precede_exemptions() {
 #[test]
 fn existing_standalone_and_pyproject_policies_use_the_same_checker() {
     use std::path::Path;
-    let config = parse_config(
-        include_bytes!("../../../../pyproject.toml"),
-        Path::new("pyproject.toml"),
-    )
-    .unwrap();
-    assert!(
-        config
-            .policy
-            .allowed_types
-            .unwrap()
-            .contains(&"feat".into())
-    );
-    assert_eq!(config.typos, TyposPolicy::Check);
+    let pyproject = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../pyproject.toml");
+    if pyproject.is_file() {
+        let bytes = std::fs::read(&pyproject).expect("read pyproject.toml");
+        let config = parse_config(&bytes, Path::new("pyproject.toml")).unwrap();
+        assert!(
+            config
+                .policy
+                .allowed_types
+                .unwrap()
+                .contains(&"feat".into())
+        );
+        assert_eq!(config.typos, TyposPolicy::Check);
+    } else {
+        assert!(
+            !Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../Cargo.toml")
+                .is_file(),
+            "missing pyproject.toml in workspace checkout"
+        );
+    }
     let parsed = parse_config(b"\xef\xbb\xbfconfig-version=1\nrequired-version='>=0.5.0'\n[commit]\nallowed-types=['fix']\nscope-policy-by-type={fix='required'}\nfooter-values={QA=['pass','fail']}\n", Path::new(".yaga.toml")).unwrap();
     let result = check_message("fix: x\n\nQA: pending", &parsed.policy, false, false);
     assert_eq!(

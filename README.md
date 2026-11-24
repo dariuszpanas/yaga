@@ -43,10 +43,10 @@ irm https://dariuszpanas.github.io/yaga/install.ps1 | iex
 ```
 
 The installer verifies the release checksum for your operating system and CPU. Native releases
-run without Python or Cargo. The same CLI and policy files are available through the Python 3.12+
-`yaga-cli` distribution (`uv tool install --python 3.12 yaga-cli`). From a reviewed checkout,
-you can [install the CLI with Cargo](https://dariuszpanas.github.io/yaga/getting-started.html#install-the-rust-cli-with-cargo)
-or [use the same TOML policy in a Rust project](https://dariuszpanas.github.io/yaga/getting-started.html#use-yaga-core-in-a-rust-project).
+run without Python or Cargo. You can also install the standalone CLI from crates.io
+(`cargo install --locked yaga-cli`), install the zero-dependency `yaga-cli` Python 3.12+ launcher
+(`uv tool install --python 3.12 yaga-cli`), [build from a checkout with Cargo](https://dariuszpanas.github.io/yaga/getting-started.html#install-the-rust-cli-with-cargo),
+or [use `yaga-core` in a Rust project](https://dariuszpanas.github.io/yaga/getting-started.html#use-yaga-core-in-a-rust-project).
 
 ```bash
 yaga policy init --repo .

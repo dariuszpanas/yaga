@@ -34,7 +34,7 @@ case "$status" in
 esac
 ```
 
-Missing required options or invalid option values can be Typer usage errors even with
+Missing required options or invalid option values can be CLI usage errors even with
 `--format json`; `error.txt` is not guaranteed to contain JSON. Parse it as JSON only after
 checking that it is a valid error document. Human-readable output is for people; supported GitHub
 output escapes and bounds workflow annotations. Do not treat every nonzero result as a policy
