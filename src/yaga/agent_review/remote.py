@@ -27,7 +27,7 @@ from yaga.git.runtime import run_bounded_process
 
 MAX_PULL_REQUEST_NUMBER = 2**63 - 1
 MAX_REFERENCE_CHARACTERS = 1024
-MAX_GH_STDOUT_BYTES = 8 * 1024 * 1024
+MAX_GH_STDOUT_BYTES = 512 * 1024
 MAX_GH_STDERR_BYTES = 64 * 1024
 GH_TIMEOUT_SECONDS = 30
 POLL_INTERVAL_SECONDS = 15
@@ -391,6 +391,8 @@ def _gh_api_json(
     executable: str,
     reference: PullRequestReference,
     endpoint: str,
+    *,
+    stdout_limit: int = MAX_GH_STDOUT_BYTES,
 ) -> Any:
     try:
         result = run_bounded_process(
@@ -405,7 +407,7 @@ def _gh_api_json(
                 "X-GitHub-Api-Version: 2022-11-28",
                 endpoint,
             ],
-            stdout_limit=MAX_GH_STDOUT_BYTES,
+            stdout_limit=stdout_limit,
             stderr_limit=MAX_GH_STDERR_BYTES,
             timeout_seconds=GH_TIMEOUT_SECONDS,
             environment=_gh_environment(),
@@ -421,7 +423,7 @@ def _gh_api_json(
             "gh could not fetch the pull-request review state; check gh authentication, "
             "repository access, PR existence, and network connectivity"
         )
-    if len(result.stdout) > MAX_GH_STDOUT_BYTES:
+    if len(result.stdout) > stdout_limit:
         raise InputError("gh exceeded the bounded pull-request review JSON limit")
     try:
         return json.loads(

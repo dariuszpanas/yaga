@@ -188,7 +188,7 @@ stdlib-only `check: gate` and tokenless commit Action import graphs.
 | Review body | 64 KiB; only the exact acceptance marker is interpreted |
 | Duplicate candidates | 0–20 closed PRs, default 5 |
 | API operations | 160 requests, 300 seconds total admission budget |
-| Each `gh` process | 30 seconds, 8 MiB stdout, 64 KiB stderr |
+| Each `gh` process | 30 seconds, 512 KiB stdout (8 MiB for PR file-list pages), 64 KiB stderr |
 | Offline snapshot / JSON report | 8 MiB each; 256 retained findings |
 | Published comment | 16 KiB; existing comment body at most 64 KiB |
 
