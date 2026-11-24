@@ -30,11 +30,25 @@ and checks; YAGA does not require adopting the entire CLI at once.
 
 ### Local CLI (`yaga-cli`)
 
-YAGA requires Python 3.12 or newer. Install the **`yaga-cli`** distribution from PyPI (its command
-is **`yaga`**; the PyPI distribution named `yaga` is an unrelated project):
+Install the standalone `yaga` executable on Linux or macOS:
 
 ```bash
-uv tool install --python 3.12 yaga-cli
+curl -fsSL https://dariuszpanas.github.io/yaga/install.sh | sh
+```
+
+On Windows, run this command in PowerShell:
+
+```powershell
+irm https://dariuszpanas.github.io/yaga/install.ps1 | iex
+```
+
+The installer verifies the release checksum for your operating system and CPU. Native releases
+run without Python or Cargo. The same CLI and policy files are available through the Python 3.12+
+`yaga-cli` distribution (`uv tool install --python 3.12 yaga-cli`). From a reviewed checkout,
+you can [install the CLI with Cargo](https://dariuszpanas.github.io/yaga/getting-started.html#install-the-rust-cli-with-cargo)
+or [use the same TOML policy in a Rust project](https://dariuszpanas.github.io/yaga/getting-started.html#use-yaga-core-in-a-rust-project).
+
+```bash
 yaga policy init --repo .
 yaga policy check --repo .
 yaga commit check
@@ -43,7 +57,7 @@ yaga commit check
 Use `yaga policy init --repo .` interactively (or pass policy names or `--all`) to scaffold starter
 policies under `.yaga/`, or `yaga config init --repo .` for a standalone `.yaga.toml` commit policy.
 See [Get started](https://dariuszpanas.github.io/yaga/getting-started.html) for convenience
-installers, `pipx`, virtual environments, and `pre-commit` setup. The core CLI is tested on
+installers, `pipx`, virtual environments, and `pre-commit` setup. The Python package is tested on
 Python 3.12 through 3.15.
 
 ### GitHub Action (`YAGA Checks`)
@@ -80,7 +94,7 @@ policy, repository plans, and trusted `check: pr-review` verdict workflows.
 Beyond deterministic repository checks, YAGA offers:
 
 - [Pull-request review checks, plans, and receipts](https://dariuszpanas.github.io/yaga/agent-review-gate.html) — evaluate head-bound Codex, Copilot, Claude, or custom bot reviews from snapshots or live `gh` state and optionally submit commit-bound pull-request reviews.
-- [Model-backed commit advice](https://dariuszpanas.github.io/yaga/commit-quality.html) — optional Hugging Face or Amazon Bedrock prose feedback with separate model dependencies.
+- [Commit-message feedback](https://dariuszpanas.github.io/yaga/commit-quality.html) — request an advisory review from OpenAI, Anthropic, Gemini, Amazon Bedrock, or your own OpenAI-compatible server.
 - [GitHub status-gate adapter](https://dariuszpanas.github.io/yaga/github-review-adapter.html) — experimental multi-stage Codex lifecycle publisher for trusted workflows.
 
 ## Project status

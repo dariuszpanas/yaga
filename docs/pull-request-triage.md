@@ -174,8 +174,9 @@ authorization in the repository's agent instructions before an assistant creates
 Use trusted default-branch code and policy in privileged metadata jobs. Never checkout, install,
 import, or execute fork/PR code, or load PR-provided artifacts/cache as authorization. Give reads
 only read permissions; add `issues: write` for comments or `pull-requests: write` for reviews.
-Run untrusted tests separately without those credentials. The triage package remains outside the
-stdlib-only `check: gate` and tokenless commit Action import graphs.
+Run untrusted tests separately without those credentials. The native Action routes triage,
+gate and tokenless commit checks through their respective dispatchers. The Python gate and
+commit compatibility adapters keep their imports independent of the triage package.
 
 ## Bounds
 

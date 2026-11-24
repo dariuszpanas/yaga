@@ -1,6 +1,11 @@
 change-policy-version = 1
 
 [[rules]]
-name = "python-source-needs-tests"
+name = "rust-source-needs-tests"
+when-any = ["crates/*/src/**/*.rs"]
+require-any = ["crates/*/tests/**/*.rs", "crates/*/src/**/*test*.rs"]
+
+[[rules]]
+name = "python-launcher-needs-tests"
 when-any = ["src/**/*.py"]
 require-any = ["tests/**/*.py"]

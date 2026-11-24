@@ -5,8 +5,8 @@ policy when its body changes in CI. YAGA checks required content, word and chara
 heading structure, text hygiene, unfinished placeholders, optional task completion, spelling, and
 an explicitly selected Markdown template.
 
-These commands are available in YAGA 0.4.0 and later. Install or upgrade the `yaga-cli`
-distribution before using them.
+These CLI commands were introduced in YAGA 0.4.0. For local use, follow the
+[installation guide](getting-started.md).
 
 ```bash
 yaga pull-request description check \
@@ -293,7 +293,10 @@ This is a quality check over the supplied event and files. Its policy is as trus
 and checkout supplying it. Commit-policy author exemptions, including the Dependabot option, do
 not exempt descriptions. The existing `github pull-request check` still checks titles and commits;
 its `title-and-body` option checks a proposed commit message, not this description policy. The
-description checker is installed-only and is not part of either composite Action or `repo check`.
+description check runs separately from `repo check`. In the composite Action, use
+`check: pr-description` with an explicit `policy` and optional `template`. By default the Action
+reads `GITHUB_EVENT_PATH`. Set `file` to check a Markdown file or `pr` to fetch the current
+description. See [GitHub Actions](github-actions.md).
 
 ## Reports and limits
 

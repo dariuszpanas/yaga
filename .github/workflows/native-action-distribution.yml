@@ -1,0 +1,111 @@
+name: Stage pinned native Action
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-run:
+        description: Successful trusted Release workflow run containing native-release
+        required: true
+        type: string
+      source-sha:
+        description: Reviewed full default-branch source commit used by that Release run
+        required: true
+        type: string
+      manifest-sha256:
+        description: Independently reviewed SHA-256 of yaga-native-sha256.txt for all six assets
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  stage:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      source-files-sha256: ${{ steps.assemble.outputs.source-files-sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind the approved release artifact to trusted source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.release-run }}
+          SOURCE: ${{ inputs.source-sha }}
+          DIGEST: ${{ inputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$RUN" =~ ^[1-9][0-9]{0,18}$ && "$SOURCE" =~ ^[0-9a-f]{40}$ && "$DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          git merge-base --is-ancestor "$SOURCE" "$GITHUB_SHA"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN" |
+            jq -e --arg src "$SOURCE" --arg repo "$GITHUB_REPOSITORY" '
+              .status == "completed" and .conclusion == "success"
+              and (.event == "workflow_dispatch" or .event == "push")
+              and .path == ".github/workflows/release.yml"
+              and .head_sha == $src and .head_repository.full_name == $repo' >/dev/null
+          unset GH_TOKEN
+          git -c core.hooksPath=/dev/null checkout --quiet --detach "$SOURCE"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.release-run }}
+          name: native-release
+          path: ${{ runner.temp }}/yaga-native-release
+      - name: Stage the verified Action from the exact release source
+        id: assemble
+        shell: bash
+        env:
+          DIGEST: ${{ inputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          node scripts/action-runtime.cjs distribution "$RUNNER_TEMP/yaga-native-release" "$RUNNER_TEMP/yaga-action-dist" "$DIGEST"
+          source_files=$(sha256sum action.yml LICENSE scripts/action-runtime.cjs | sha256sum)
+          printf 'source-files-sha256=%s\n' "${source_files%% *}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
+        with:
+          name: native-action-distribution
+          path: ${{ runner.temp }}/yaga-action-dist/
+          include-hidden-files: true # Retain the generated action-native/.gitattributes.
+          if-no-files-found: error
+
+  verify:
+    name: Run staged Action on ${{ matrix.target }}
+    needs: stage
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, target: x86_64-unknown-linux-musl}
+          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl}
+          - {os: macos-15-intel, target: x86_64-apple-darwin}
+          - {os: macos-15, target: aarch64-apple-darwin}
+          - {os: windows-latest, target: x86_64-pc-windows-msvc}
+          - {os: windows-11-arm, target: aarch64-pc-windows-msvc}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.stage.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/staged-action
+      - name: Check native image selection and tokenless policy outcomes
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          SOURCE: ${{ inputs.source-sha }}
+          MANIFEST: ${{ inputs.manifest-sha256 }}
+          SOURCE_FILES: ${{ needs.stage.outputs.source-files-sha256 }}
+        run: node scripts/check_action_distribution.cjs "$RUNNER_TEMP/staged-action" "$TARGET" "$SOURCE" "$MANIFEST" "$SOURCE_FILES"

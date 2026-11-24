@@ -4,6 +4,40 @@ The release workflow is `.github/workflows/release.yml`. It validates the select
 runs the full local gate on GitHub's Linux runner, and retains the exact wheel and source
 distribution inspected by the package build gate. Publishing uses those artifacts without rebuilding.
 
+## Standalone release assets
+
+The release workflow builds one executable per architecture (x86-64 and ARM64) for Linux musl,
+macOS and Windows MSVC. Each build runs the actual executable on a matching runner, checks the
+architecture and version, and retains its original bytes. Linux images must have no ELF interpreter
+or dynamic library dependency. Windows releases use Rust 1.100 to resume a suspended child
+through its primary thread handle after assigning the child to its job object. Other targets
+use Rust 1.99. The assembler checks all six files and writes
+`yaga-native-sha256.txt`. The `native-release` rehearsal artifact is also the exact bundle attached
+as individual GitHub Release assets after the tag is published.
+
+The manifest is ASCII with LF endings. Its header is `yaga-native-v1 X.Y.Z`. Each following
+line contains a lowercase SHA-256 digest, two spaces, and the exact filename
+`yaga-<Rust target>` (`.exe` on Windows), sorted by filename. A mirror must preserve filenames
+and bytes. To verify an unpacked bundle independently, retain the manifest outside the bundle
+directory, run `python scripts/native_release.py manifest DIRECTORY` and compare both manifests.
+Tools that need stronger provenance can pin the verified manifest digest in their own trusted
+source. Release-host checksums alone trust the release publisher.
+
+## Python wheel release gate
+
+The same six runner architectures package each verified standalone `yaga` executable into a
+zero-dependency `py3-none-<platform>` wheel (just like `uv`):
+
+- Linux (`x86_64` and `aarch64`): wraps the verified static musl binary under `manylinux_2_28_*`.
+- macOS (`x86_64` and `arm64`): wraps the thin Mach-O binary targeting macOS 11.0+.
+- Windows (`amd64` and `arm64`): wraps the native MSVC PE executable.
+
+Each platform installs its finished wheel with `--no-deps` into an isolated environment, checks
+that `yaga.find_yaga_bin()` resolves inside the environment, and runs the console script and
+`python -m yaga` from outside the checkout. The assembler checks all six platform wheels and the
+source archive (verifying executable architecture, binary role, and macOS deployment target) before
+handing them to the tag-only publishing jobs.
+
 ## One-time PyPI setup
 
 Configure a [PyPI trusted publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/)
@@ -25,7 +59,7 @@ it checks out no source and runs no build scripts. Keep that separation when edi
 ## Rehearse without publishing
 
 Once the workflow is merged, select **Actions → Release → Run workflow** on the default branch.
-The manual route runs validation and uploads the `distributions` artifact to the workflow run.
+The manual route runs validation and uploads the assembled `python-release` artifact to the workflow run.
 It never runs the PyPI upload or GitHub Release jobs. It also retains the selected changelog
 section as a separate `release-notes` artifact. Manual runs on other branches are skipped.
 
@@ -42,7 +76,7 @@ package users. Twine's metadata check does not prove remote images or links are 
 
 ## Publish a version
 
-1. Update `pyproject.toml`, `VERSION` in `src/yaga/version_requirement.py`, and user-facing version
+1. Update the workspace version in `Cargo.toml`, `Cargo.lock`, `pyproject.toml`, `VERSION` in `src/yaga/version_requirement.py`, and user-facing version
    references. Tests require the Action runtime version to match package metadata. Convert the candidate changelog
    heading into `## [0.1.0] - YYYY-MM-DD`, using the actual release date, and retain `Unreleased`
    above it. The Beta classifier is a maturity label; version `0.1.0` is a normal PyPI version,
@@ -60,7 +94,7 @@ package users. Twine's metadata check does not prove remote images or links are 
 5. The workflow requires the tagged commit to be on the default branch, checks that the tag matches
    package metadata and a dated changelog entry, and reruns `uv run make ci`. Separate Linux and
    Windows jobs then download the retained wheel, install its lowest base dependencies, run the
-   installed smoke, and audit every resolved pin. Both jobs must pass before the `pypi` environment
+   installed smoke, and audit every resolved pin. These two audits and all six native target builds must pass before the `pypi` environment
    approval and upload can run. The publisher uses the validated distributions without rebuilding.
    The platform-specific minimum-runtime receipts are retained as separate Actions artifacts for
    seven days, including failure evidence when available. Manual rehearsals require the same audit.

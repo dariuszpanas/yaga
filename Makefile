@@ -1,4 +1,5 @@
 .PHONY: actionlint build check docs docs-serve test ci
+.PHONY: native-ci native-wheel
 
 DOCS_ADDR ?= localhost:9000
 BUILD_ARGS ?=
@@ -18,6 +19,8 @@ build:
 	uv run python scripts/check_build.py $(BUILD_ARGS)
 
 check:
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets --locked -- -D warnings
 	uv lock --check
 	uv run ruff check .
 	uv run ruff format --check .
@@ -26,9 +29,15 @@ check:
 	uv run yaga policy check --strict
 	uv run yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD
 	uv run yaga change check --policy .yaga/change-policy.toml --range "$(CHANGE_RANGE)"
-	bash -n scripts/composite_smoke_python
 
 test:
+	cargo test --workspace --locked
 	uv run pytest
 
 ci: check test build docs
+
+native-ci:
+	uv run --locked --python 3.12 python scripts/check_native.py
+
+native-wheel:
+	uv run --locked --python 3.12 uv build --wheel --no-build-isolation

@@ -11,8 +11,8 @@ Useful reports include:
   message;
 - terminal escape/control injection, unbounded message/config/Git output, or JSON contract
   confusion in `commit check`;
-- the write-capable root Action importing Typer, site packages, commit-policy modules, or any
-  dependency installed at runtime;
+- the write-capable root Action accepting an unverified executable or building with sources,
+  configuration, or tools controlled by the pull request;
 - the read-only commit runtime accepting a token, GitHub API or Git-fetch path, caller-selected
   revision, synthetic merge checkout, shallow history, unbound event/repository identity, or
   unescaped workflow command;
@@ -44,27 +44,26 @@ pending message file does not reveal commit parents, so it cannot enforce merge 
 check a proposed merge message as an ordinary message even when actual merge commits are ignored.
 Repositories must retain CI range checks for authoritative commit and merge policy.
 
-The installed CLI depends on locked `typer`, `pydantic`, and `pydantic-versions` packages. In
-the unified root Action (`action.yml`), write-capable `check: gate` does not: its fixed
-`YAGA_ACTION_RUNTIME=1` path runs with Python site packages disabled (`python -P -S`) and enters
-only the standard-library Action/gate import graph. Both frontends call the same gate dispatcher.
-The GitHub token stays in `GITHUB_TOKEN`; no gate command accepts it as an argument or
-configuration value.
+The root Action runs a native executable staged outside the consumer workspace. Setup verifies
+the bundled executable against the manifest digest pinned in the Action commit. An unpublished
+Action without a bundle builds its trusted Rust source with the pinned toolchain, locked
+dependencies, and isolated Cargo state. A privileged local Action must use the runner's exact
+default-branch commit. Setup receives no GitHub token. See the
+[Action runtime and distribution contract](docs/github-actions.md#execution-runtimes-and-trust-split).
 
-Non-gate Action modes (`check != 'gate'`) sync YAGA's hash-locked `--no-dev` runtime into a
-temporary virtual environment outside the checkout with `GITHUB_TOKEN` and `GH_TOKEN` unset.
-Default `check: commit` executes `"$YAGA_RUNTIME_PYTHON" -I -m yaga` under its separate
-`YAGA_COMMIT_ACTION_RUNTIME=1` selector and enters only bounded commit/policy/event/reporting
-modules without Typer or CLI command imports. Installed-CLI `check` modes (including `policy`)
-execute through `cli_action.py`, reject unused inputs fail-closed, and pass `GH_TOKEN` only when
-live `pr` fetches are requested in `pr-review` or `pr-description`.
-The runtime has no token input, GitHub API client, Git fetch behavior, or write code path; the
-reference workflow grants only `contents: read`. It binds a strict `pull_request` event to the
-runner repository ID/name and refs, requires the worktree at the exact event head, rejects shallow
-or missing history, and emits at most 50 escaped annotations. Its configuration comes from the
-unprivileged PR head, so this result is a reviewable quality signal rather than tamper-proof merge
-security. Normal consumers pin the Action code; YAGA's local dogfood workflow deliberately executes
-the PR copy without granting write permissions or secrets.
+The native gate receives its token through `GITHUB_TOKEN` for the selected Agent review
+operation. CLI check modes reject unused inputs and pass `GH_TOKEN` only to explicitly selected
+live `pr-review`, `pr-triage`, and `pr-description` checks. The portable Python package retains
+its isolated standard-library gate and tokenless commit entry points.
+
+The default commit Action runs without credentials, API calls, or Git fetches. The reference
+workflow grants only `contents: read`. The checker binds the event to the runner repository ID,
+name and refs, requires the exact event head in ordinary `pull_request` mode, rejects shallow or
+missing history, and emits at most 50 escaped annotations. In this mode the configuration comes
+from the unprivileged PR head, so the result is a reviewable quality signal. The explicit
+`trusted-config` mode reads policy from a bounded blob at the verified default-branch commit.
+Consumers pin the Action code. YAGA's local dogfood workflow executes the PR copy with read-only
+permissions and no secrets.
 
 ## Agent review gate boundary
 

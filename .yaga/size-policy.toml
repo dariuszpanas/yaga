@@ -1,6 +1,6 @@
 size-policy-version = 1
 default-max-blob-bytes = 4194304
-# Keep generous headroom for large refactors, lockfiles, and branding assets.
+# Keep generous headroom for the Rust workspace, lockfiles, and branding assets.
 max-total-blob-bytes = 134217728
 
 [[path-limits]]

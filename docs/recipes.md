@@ -154,9 +154,9 @@ yaga workflow lint .github/workflows examples --format github
 ```
 
 `workflow check` enforces immutable references, `workflow security` enforces the selected trust
-profile, and `workflow lint` runs pinned actionlint in a hardened network-disabled container. The
-lint provider needs Docker; the other two are pure Python. A passing provider never replaces the
-others.
+profile, and `workflow lint` runs pinned actionlint in a hardened network-disabled container.
+The standalone CLI runs all three. Only lint requires a Docker CLI and a daemon that can run
+Linux containers.
 
 ## Diagnose without changing policy
 
