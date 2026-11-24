@@ -16,15 +16,13 @@ for a Cargo path dependency and a runnable branch-policy example.
 
 Run `cargo doc --locked -p yaga-core --open` for the Rust modules and their public signatures.
 
-The Rust library and standalone CLI accept TOML 1.1, including TOML 1.0 configuration files. Python installations use the running interpreter’s TOML parser, which supports 1.0 on CPython 3.12–3.14 and 1.1 starting with 3.15. Malformed TOML can produce different parser messages and reported columns.
+The Rust library and standalone CLI accept TOML 1.1, including TOML 1.0 configuration files.
 
 ## Python package
 
-Platform wheels install the Rust CLI and the CPython stable-ABI extension together. Both `yaga` and `python -m yaga` run the packaged executable for ordinary commands, including Git ranges and project configuration discovery. Python applications can keep using the existing import paths. The stable ABI starts at CPython 3.12.
+Platform wheels (`py3-none-<platform>`) bundle the standalone `yaga` Rust executable alongside a zero-dependency Python launcher (`src/yaga/`). Both `yaga` and `python -m yaga` locate and execute the bundled Rust binary directly, and `yaga.find_yaga_bin()` returns its path.
 
-Source and editable installations build the Rust executable and extension with Cargo and rustc. Run `uv run make native-wheel` to write a platform wheel in `dist/`. Editable installations load live Python sources and keep the compiled files in the installation. Reinstall after changing Rust sources. The wheel uses the running Python installation to locate its manager for self-updates. Rust validates the update arguments and proves uv ownership before requesting a dry run or upgrade. Python preserves the interpreter's process streams and the Windows launcher handoff. The wheel also preserves the active shell's completion protocol. Interpreter-specific Unicode and TOML inputs use the running Python version's semantics.
-
-The local Linux wheel targets the build host's Linux ABI. The local Windows wheel targets Windows x64. The Python package uses the running interpreter's Unicode rules for commit and description checks.
+Source and editable installations build the standalone Rust executable with Cargo and `rustc`. Run `uv run make native-wheel` to write a platform wheel in `dist/`. Reinstall after changing Rust sources. For `uv tool install yaga-cli` installations, the launcher handles `yaga self update` by verifying `uv` tool ownership and delegating to `uv tool upgrade yaga-cli`.
 
 ## Native installation management
 
@@ -37,13 +35,11 @@ records the outcome in the log it prints.
 For development, [install the Rust CLI with Cargo](../docs/getting-started.md#install-the-rust-cli-with-cargo).
 Update the checkout to the intended revision before running `yaga self update`. Cargo
 installs rebuild with their recorded features, build profile and target. Update a manually
-copied binary through its original source. Python tool installations use their existing uv
+copied binary through its original source. Python tool installations use their existing `uv`
 update flow.
 
-## Checking compatibility
+## Qualification and testing
 
-The differential suite compares the current CLI and wheel with the pre-Rust command installed in a separate Python environment. Set `YAGA_TEST_REFERENCE_PYTHON` to use a prepared reference installation.
-
-Run `uv run make ci` for the existing Python, repository and build checks. Run `uv run make native-ci` for Rust formatting, lint, tests, isolated wheel installation and the Python suite against the installed extension. That suite also compares standalone CLI output with the original Python implementation and exercises privileged gate operations against an in-memory provider. Run both from the repository root. `native-ci` needs Cargo, Rustfmt, Clippy, CPython 3.12, uv, Git, Node.js and Docker. CI also installs Rust 1.100.0 to exercise the unpublished Action's source build.
+Run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, and `cargo test --workspace --locked` to verify the Rust library and CLI directly. Run `uv run make ci` for full repository, wheel packaging, documentation, and launcher checks (`scripts/check_native.py` qualifies the Rust workspace, an independent `yaga-core` consumer crate, isolated `py3-none` wheel installation, and the packaging/installer test suite).
 
 The standalone CLI includes commit, branch, change, repository, tree, workflow and pull-request checks. It also supports test planning and receipt evaluation, review gates, policy initialization and shell completion. Use `yaga --help` and the corresponding subcommand help to inspect the options. The composite Action invokes the Rust executable for commit checks, other providers and trusted gate operations. Only the gate and explicitly live provider operations receive the credentials they require.

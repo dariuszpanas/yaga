@@ -33,7 +33,11 @@ Action execution belong solely in Rust (`crates/yaga-core` and `crates/yaga-cli`
 - **Exit codes & outputs**: Keep stable exit codes (`0` pass, `1` policy finding or gate
   failure, `2` input/config/operational error), versioned JSON schemas, plain text reports, and
   escaped GitHub workflow annotations across all commands.
-- **No unsafe Rust**: Keep `#![deny(unsafe_code)]` in `crates/yaga-core`.
+- **Minimal, audited `unsafe` Rust**: Keep `#![deny(unsafe_code)]` at the crate root of
+  `crates/yaga-core` and prohibit `unsafe` everywhere in policy, parsing, and evaluation logic.
+  Narrow `#[allow(unsafe_code)]` exceptions with explicit `// SAFETY:` comments are permitted
+  only at irreducible OS-FFI boundaries (`git/unix.rs` `pre_exec`/`setsid`, `git/windows.rs`
+  Win32 Job Object and thread handles, and `fs/user_path.rs` POSIX `getpwuid_r`/`getpwnam_r`).
 - **Untrusted input bounds**: Treat commit messages, PR bodies, Git output, revisions, paths,
   YAML/TOML inputs, and displayed labels as untrusted. Bound inputs, output, matcher work
   (`10,000,000` units), and timeouts; invoke external tools (`git`, `gh`, `typos`, `docker`,
