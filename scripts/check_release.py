@@ -1,4 +1,4 @@
-"""Validate a production tag against package metadata and dated release notes."""
+"""Validate a production tag against package metadata, Cargo workspace version, and release notes."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def validate_release(
     if tag != f"v{version}":
         raise ValueError("release tag does not match the package version")
     if runtime_version is not None and runtime_version != version:
-        raise ValueError("runtime VERSION constant does not match the package version")
+        raise ValueError("runtime Cargo workspace version does not match the package version")
     dates = re.findall(
         rf"^## \[{re.escape(version)}\] - (\d{{4}}-\d{{2}}-\d{{2}})$", changelog, re.M
     )
@@ -31,12 +31,12 @@ def validate_release(
     datetime.date.fromisoformat(dates[0])
 
 
-def _read_runtime_version(root: Path) -> str:
-    source = (root / "src/yaga/version_requirement.py").read_text(encoding="utf-8")
-    matches = re.findall(r'^VERSION\s*=\s*"([^"]+)"$', source, re.M)
-    if len(matches) != 1:
-        raise ValueError("src/yaga/version_requirement.py must define exactly one VERSION string")
-    return matches[0]
+def _read_cargo_version(root: Path) -> str:
+    cargo = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
+    version = cargo.get("workspace", {}).get("package", {}).get("version")
+    if not isinstance(version, str) or not version:
+        raise ValueError("Cargo.toml must define [workspace.package].version")
+    return version
 
 
 def release_notes(version: str, changelog: str) -> str:
@@ -64,7 +64,7 @@ def main() -> None:
         args.tag or f"v{project['version']}",
         project["version"],
         changelog,
-        runtime_version=_read_runtime_version(root),
+        runtime_version=_read_cargo_version(root),
     )
     if args.notes_file is not None:
         args.notes_file.write_text(release_notes(project["version"], changelog), encoding="utf-8")

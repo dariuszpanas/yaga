@@ -1,6 +1,7 @@
 [build-system]
 requires = ["hatchling==1.33.0"]
-build-backend = "hatchling.build"
+build-backend = "hatch_build"
+backend-path = ["."]
 
 [project]
 name = "yaga-cli"
@@ -32,35 +33,16 @@ classifiers = [
     "Programming Language :: Python :: 3.15",
     "Topic :: Software Development :: Quality Assurance",
 ]
-# Keep the transitive renderer dependency above the known lexer advisory floors.
-dependencies = [
-    "pydantic>=2.14.2,<3",
-    "pydantic-versions>=1.0.4,<2",
-    "pygments>=2.20.0,<3",
-    "pyyaml>=6.0.3,<7",
-    "typer>=0.27.2,<1",
-]
+# The Python distribution is a zero-dependency launcher for the bundled Rust binary.
+dependencies = []
 
 [project.optional-dependencies]
-quality = [
-    "certifi>=2026.10.19",
-    "torch>=2.13,<3",
-    "transformers>=5.10,<6",
-]
-quality-bedrock = [
-    "boto3>=1.37,<2",
-]
+# Retained as empty compatibility extras for existing install commands.
+quality = []
+quality-bedrock = []
 
 [tool.uv]
 required-version = ">=0.12.7"
-
-[tool.uv.sources]
-torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
 
 [project.urls]
 Documentation = "https://dariuszpanas.github.io/yaga/"
@@ -69,23 +51,44 @@ Repository = "https://github.com/dariuszpanas/yaga"
 Issues = "https://github.com/dariuszpanas/yaga/issues"
 
 [project.scripts]
-yaga = "yaga.cli:main"
+yaga = "yaga.entrypoint:main"
 
 [dependency-groups]
 dev = [
     "hatchling==1.33.0",
-    "pip-audit==2.10.1",
+    "packaging>=24",
     "pre-commit>=4.6.2,<5",
     "pytest>=8.3",
     "pytest-xdist>=3.6",
+    "pyyaml>=6.0.3,<7",
     "readme-renderer[md]>=46.0",
     "ruff>=0.14.13",
     "ty>=0.0.12",
     "zensical>=0.0.20",
 ]
 
+[tool.hatch.build.targets.sdist]
+# Hatchling may drop VCS exclusions when the checkout itself lives under an ignored
+# directory. Select distributable source roots and apply generated-file rules locally.
+only-include = [
+    ".gitattributes", ".github", ".gitignore", ".pre-commit-hooks.yaml", ".yaga",
+    "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md", "Cargo.lock", "Cargo.toml",
+    "LICENSE", "Makefile", "README.md", "SECURITY.md", "_typos.toml", "action.yml",
+    "crates", "docs", "examples", "hatch_build.py", "overrides", "pyproject.toml", "scripts", "src",
+    "tests", "uv.lock", "zensical.toml",
+]
+ignore-vcs = true
+exclude = [
+    ".artifacts/", ".cache/", ".coverage", ".pytest_cache/", ".ruff_cache/", ".venv/",
+    "__pycache__/", "*.egg-info/", "*.py[cod]", "dist/", "htmlcov/", "site/", "/target/",
+]
+skip-excluded-dirs = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/yaga"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "scripts/native_wheel.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

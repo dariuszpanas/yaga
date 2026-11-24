@@ -41,7 +41,9 @@ ROOT = Path(__file__).resolve().parents[1]
         ("typos-author-pr-policy", 1),
     ],
 )
-def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -> None:
+def test_composite_control_shell(
+    tmp_path: Path, scenario: str, expected: int, native_action_binary: Path
+) -> None:
     if (
         scenario.startswith("typos-")
         and scenario
@@ -62,7 +64,6 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
     workspace = tmp_path / "workspace"
     workspace.mkdir(parents=True)
     shutil.copyfile(ROOT / "action.yml", workspace / "action.yml")
-    shutil.copytree(ROOT / "src", workspace / "src", ignore=shutil.ignore_patterns("__pycache__"))
     output = tmp_path / "output"
     environment = dict(
         os.environ,
@@ -71,8 +72,7 @@ def test_composite_control_shell(tmp_path: Path, scenario: str, expected: int) -
         GITHUB_OUTPUT=output.as_posix(),
         GITHUB_ACTION_PATH=workspace.as_posix(),
         YAGA_COMMIT_TRUSTED_CONFIG=".yaga.toml",
-        YAGA_COMMIT_ACTION_RUNTIME="1",
-        YAGA_RUNTIME_PYTHON=Path(sys.executable).as_posix(),
+        YAGA_RUNTIME_BINARY=native_action_binary.as_posix(),
         YAGA_UNUSED_INPUTS="0",
         PYTHONUTF8="1",
     )

@@ -6,6 +6,22 @@ import pytest
 import yaml
 
 from scripts.check_release import release_notes, validate_release
+from scripts.native_release import TARGETS, verify_image
+from scripts.release_wheels import PLATFORMS
+from tests.test_macos_release_wheels import MACOS_11, legacy
+from tests.test_macos_release_wheels import image as mach_image
+
+
+def test_standalone_executable_must_fit_the_action_distribution(tmp_path: Path) -> None:
+    image = tmp_path / "yaga"
+    with image.open("wb") as stream:
+        stream.write(mach_image(legacy(MACOS_11), kind=2))
+        stream.truncate(100 * 1024**2)
+    verify_image(image, "aarch64-apple-darwin")
+    with image.open("ab") as stream:
+        stream.write(b"\0")
+    with pytest.raises(ValueError, match="100 MiB Action distribution limit"):
+        verify_image(image, "aarch64-apple-darwin")
 
 
 def test_release_accepts_exact_version_and_date() -> None:
@@ -18,7 +34,7 @@ def test_release_accepts_exact_version_and_date() -> None:
 
 
 def test_release_rejects_mismatched_runtime_version() -> None:
-    with pytest.raises(ValueError, match="runtime VERSION constant"):
+    with pytest.raises(ValueError, match="Cargo workspace version"):
         validate_release(
             "v0.1.0",
             "0.1.0",
@@ -51,7 +67,7 @@ def test_release_workflow_isolates_upload_from_source_and_manual_runs() -> None:
     assert set(workflow["on"]) == {"push", "workflow_dispatch"}
     assert workflow["permissions"] == {"contents": "read"}
     publish = workflow["jobs"]["publish"]
-    assert publish["needs"] == ["build", "minimum-runtime"]
+    assert publish["needs"] == ["build", "native-assets", "python-assets"]
     assert publish["if"] == "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
     assert publish["permissions"] == {"id-token": "write"}
     assert publish["environment"]["name"] == "pypi"
@@ -63,63 +79,6 @@ def test_release_workflow_isolates_upload_from_source_and_manual_runs() -> None:
     assert any(
         'make ci BUILD_ARGS="--output-dir dist"' in step.get("run", "") for step in build["steps"]
     )
-
-
-@pytest.mark.parametrize("filename", ["ci.yml", "release.yml"])
-def test_minimum_security_matrix_is_complete_and_preserves_evidence(filename: str) -> None:
-    root = Path(__file__).resolve().parents[1]
-    workflow = yaml.load(
-        (root / ".github/workflows" / filename).read_text("utf-8"), yaml.BaseLoader
-    )
-    audit = workflow["jobs"]["minimum-runtime"]
-    assert workflow["permissions"] == {"contents": "read"}
-    assert audit.get("permissions", workflow["permissions"]) == {"contents": "read"}
-    assert audit["strategy"]["matrix"] == {"os": ["ubuntu-latest", "windows-latest"]}
-    assert audit["strategy"]["fail-fast"] == "false"
-    assert audit["runs-on"] == "${{ matrix.os }}"
-    assert "if" not in audit and "continue-on-error" not in audit
-    assert all("continue-on-error" not in step for step in audit["steps"])
-    assert all("if" not in step for step in audit["steps"][:-1])
-    checkout = audit["steps"][0]
-    assert checkout["uses"].startswith("actions/checkout@")
-    assert checkout["with"]["persist-credentials"] == "false"
-    expected_ref = (
-        "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        if filename == "ci.yml"
-        else "${{ github.sha }}"
-    )
-    assert checkout["with"]["ref"] == expected_ref
-    commands = [step["run"] for step in audit["steps"] if "run" in step]
-    assert "uv sync --frozen --group dev --python 3.12" in commands
-    assert len(commands) == 2
-    qualification = audit["steps"][-2]
-    assert qualification["shell"] == "bash"
-    assert "uv run --frozen --python 3.12 python scripts/check_minimum_runtime.py" in commands[-1]
-    assert '--report "$YAGA_MINIMUM_REPORT"' in commands[-1]
-    assert qualification["env"]["YAGA_MINIMUM_REPORT"] == "${{ runner.temp }}/minimum-runtime.json"
-    evidence = audit["steps"][-1]
-    assert evidence["if"] == "always()"
-    assert evidence["uses"].startswith("actions/upload-artifact@")
-    assert evidence["with"]["path"] == "${{ runner.temp }}/minimum-runtime.json"
-    assert evidence["with"]["if-no-files-found"] == "error"
-    assert "${{ matrix.os }}" in evidence["with"]["name"]
-    assert evidence["with"]["name"] != "distributions"
-    if filename == "release.yml":
-        assert audit["needs"] == "build"
-        download = audit["steps"][1]
-        assert download["uses"].startswith("actions/download-artifact@")
-        assert download["with"] == {"name": "distributions", "path": "dist/"}
-        assert "--wheel dist/*.whl" in qualification["run"]
-        assert "uv build" not in "\n".join(commands)
-    else:
-        gate = workflow["jobs"]["gate"]
-        assert gate["needs"] == ["yaga-checks", "lint-and-build", "test", "minimum-runtime"]
-        assert gate["if"] == "always()"
-        assert "continue-on-error" not in gate
-        step = gate["steps"][0]
-        assert step["env"]["MINIMUM_RUNTIME_RESULT"] == "${{ needs.minimum-runtime.result }}"
-        assert '[[ "$MINIMUM_RUNTIME_RESULT" == success ]]' in step["run"]
-        assert "set -euo pipefail" in step["run"]
 
 
 def test_release_notes_select_only_the_requested_version() -> None:
@@ -162,11 +121,12 @@ def test_github_release_requires_successful_publish_and_separate_permissions() -
     assert announce["permissions"] == {"contents": "write"}
     assert all("checkout@" not in step.get("uses", "") for step in announce["steps"])
     downloads = [step["with"]["name"] for step in announce["steps"] if "uses" in step]
-    assert downloads == ["distributions", "release-notes"]
+    assert downloads == ["python-release", "release-notes", "native-release"]
     command = announce["steps"][-1]
     assert command["env"]["GH_TOKEN"] == "${{ github.token }}"
     assert "--verify-tag" in command["run"]
     assert "dist/*.whl dist/*.tar.gz" in command["run"]
+    assert "native/yaga-*" in command["run"]
     assert "--notes-file release-notes/release-notes.md" in command["run"]
     assert "${{" not in command["run"]
     notes = [
@@ -176,3 +136,22 @@ def test_github_release_requires_successful_publish_and_separate_permissions() -
     ]
     assert len(notes) == 1
     assert notes[0]["with"]["path"] == "release-notes.md"
+
+
+def test_native_python_release_requires_all_verified_wheels() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.load((root / ".github/workflows/release.yml").read_bytes(), yaml.BaseLoader)
+    jobs = workflow["jobs"]
+    source = next(
+        s["with"]
+        for s in jobs["build"]["steps"]
+        if s.get("with", {}).get("name") == "source-distribution"
+    )
+    assert source["path"] == "dist/*.tar.gz"
+    assert any(
+        s.get("with", {}).get("name") == "source-distribution"
+        for s in jobs["python-assets"]["steps"]
+    )
+    assert set(PLATFORMS) == set(TARGETS)
+    assert jobs["python-assets"]["needs"] == ["build", "native-binaries"]
+    assert jobs["publish"]["steps"][0]["with"]["name"] == "python-release"

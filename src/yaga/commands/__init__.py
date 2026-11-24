@@ -1,1 +1,0 @@
-"""Installed CLI command groups."""

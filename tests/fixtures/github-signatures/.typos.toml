@@ -1,3 +1,0 @@
-# These exact cryptographic bytes are not prose and must not be corrected.
-[files]
-extend-exclude = ["*.asc", "*.commit"]
