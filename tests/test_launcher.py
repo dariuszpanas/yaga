@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 import yaga
+from scripts import native_wheel
 from yaga import entrypoint, self_update
 
 
@@ -122,3 +126,45 @@ def test_self_update_verifies_uv_tool_ownership(
         "yaga-cli",
     )
     assert result.log is None
+
+
+def test_native_wheel_hook_honors_platform_override_for_source_builds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built = tmp_path / "yaga"
+    built.write_bytes(b"binary")
+    cargo_json = json.dumps(
+        {
+            "reason": "compiler-artifact",
+            "target": {"name": "yaga"},
+            "executable": str(built),
+        }
+    )
+
+    monkeypatch.delenv("YAGA_PREBUILT_BINARY", raising=False)
+    monkeypatch.setenv("YAGA_CARGO_TARGET", "x86_64-unknown-linux-musl")
+    monkeypatch.setenv("YAGA_WHEEL_PLATFORM", "manylinux_2_28_x86_64")
+    monkeypatch.setattr(native_wheel.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        native_wheel.subprocess,
+        "check_output",
+        lambda *args, **kwargs: "x86_64-unknown-linux-gnu\n",
+    )
+
+    seen_cmd: list[str] = []
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        seen_cmd.extend(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=f"{cargo_json}\n", stderr="")
+
+    monkeypatch.setattr(native_wheel.subprocess, "run", fake_run)
+
+    hook = object.__new__(native_wheel.NativeWheelHook)
+    monkeypatch.setattr(native_wheel.NativeWheelHook, "root", property(lambda self: str(tmp_path)))
+    build_data: dict[str, Any] = {"force_include": {}}
+    hook.initialize("standard", build_data)
+
+    assert "--target" in seen_cmd and "x86_64-unknown-linux-musl" in seen_cmd
+    assert build_data["tag"] == "py3-none-manylinux_2_28_x86_64"
+    assert build_data["pure_python"] is False
+    assert build_data["force_include"] == {str(built): "yaga/_bin/yaga"}
