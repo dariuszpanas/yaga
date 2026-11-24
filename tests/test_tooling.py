@@ -276,11 +276,11 @@ def test_toolchain_supply_chain_inputs_are_exactly_pinned() -> None:
     size_policy = tomllib.loads((ROOT / ".yaga" / "size-policy.toml").read_text(encoding="utf-8"))
     assert size_policy == {
         "size-policy-version": 1,
-        "default-max-blob-bytes": 131072,
-        "max-total-blob-bytes": 8388608,
+        "default-max-blob-bytes": 4194304,
+        "max-total-blob-bytes": 134217728,
         "path-limits": [
-            {"pattern": "uv.lock", "max-blob-bytes": 1048576},
-            {"pattern": "docs/assets/branding/*.png", "max-blob-bytes": 2097152},
+            {"pattern": "uv.lock", "max-blob-bytes": 8388608},
+            {"pattern": "docs/assets/branding/*.png", "max-blob-bytes": 8388608},
         ],
     }
     description_policy = tomllib.loads(

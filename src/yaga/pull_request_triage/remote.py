@@ -27,6 +27,7 @@ from yaga.pull_request_triage.policy import TriagePolicy
 
 MARKER = "<!-- yaga-pull-request-triage:v1 -->"
 MAX_COMMENT_BYTES = 16 * 1024
+MAX_REQUESTS = 160
 
 
 class TriageClient:
@@ -38,7 +39,7 @@ class TriageClient:
 
     def _admit(self) -> None:
         if (
-            self.requests >= 64
+            self.requests >= MAX_REQUESTS
             or time.monotonic() + review_remote.GH_TIMEOUT_SECONDS > self.deadline
         ):
             raise InputError("triage API request or deadline budget exhausted")
@@ -93,7 +94,7 @@ def _metadata(client: TriageClient) -> tuple[dict[str, Any], int]:
         raise InputError("triage base repository does not match explicit repository")
     changed = pr.get("changed_files")
     if type(changed) is not int or not 0 <= changed <= MAX_FILES:
-        raise InputError("triage file inventory exceeds its 500-file bound")
+        raise InputError(f"triage file inventory exceeds its {MAX_FILES}-file bound")
     result = {
         "version": 1,
         "host": reference.host,

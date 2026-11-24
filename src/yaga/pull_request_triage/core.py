@@ -13,10 +13,10 @@ from yaga.errors import InputError
 from yaga.path_patterns import _compile_components, match_compiled, validate_pattern
 from yaga.pull_request_triage.policy import TriagePolicy
 
-MAX_FILES = 500
+MAX_FILES = 3000
 MAX_REVIEWS = 99
 MAX_FINDINGS = 256
-MAX_SNAPSHOT_BYTES = 1024 * 1024
+MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
 _SHA = re.compile(r"[0-9a-f]{40}")
 _LOGIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9\[\]-]{0,99}")
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")
@@ -440,7 +440,7 @@ def evaluate(policy: TriagePolicy, snapshot: TriageSnapshot) -> dict[str, Any]:
 
 def decode_snapshot(raw: bytes) -> TriageSnapshot:
     if len(raw) > MAX_SNAPSHOT_BYTES:
-        raise InputError("triage snapshot exceeds 1 MiB")
+        raise InputError("triage snapshot exceeds 8 MiB")
 
     def unique(pairs):
         result = {}

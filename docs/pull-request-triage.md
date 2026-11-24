@@ -183,13 +183,13 @@ stdlib-only `check: gate` and tokenless commit Action import graphs.
 | --- | --- |
 | Policy | 64 KiB, schema v1, at most 32 maintainer IDs and 32 bots |
 | Path patterns | 1–64 per list, cumulative matching work capped |
-| Changed files | 500 complete records; filename at most 4096 UTF-8 bytes/64 segments |
+| Changed files | 3000 complete records; filename at most 4096 UTF-8 bytes/64 segments |
 | Reviews/comments | At most 99 each; a full 100-record page fails closed |
 | Review body | 64 KiB; only the exact acceptance marker is interpreted |
 | Duplicate candidates | 0–20 closed PRs, default 5 |
-| API operations | 64 requests, 300 seconds total admission budget |
-| Each `gh` process | 30 seconds, 512 KiB stdout, 64 KiB stderr |
-| Offline snapshot / JSON report | 1 MiB each; 256 retained findings |
+| API operations | 160 requests, 300 seconds total admission budget |
+| Each `gh` process | 30 seconds, 8 MiB stdout, 64 KiB stderr |
+| Offline snapshot / JSON report | 8 MiB each; 256 retained findings |
 | Published comment | 16 KiB; existing comment body at most 64 KiB |
 
 These are deliberate fail-closed operating limits. Large or ambiguous PRs require a separate
