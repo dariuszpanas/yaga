@@ -51,7 +51,7 @@ def render_triage(report: dict[str, Any], output_format: str) -> str:
     if output_format == "json":
         result = json.dumps(report, ensure_ascii=True, indent=2)
         if len(result.encode()) > MAX_SNAPSHOT_BYTES:
-            raise InputError("triage report exceeds 1 MiB")
+            raise InputError("triage report exceeds 8 MiB")
         return result
     admission = report["admission"]
     line = f"PR triage: {admission['decision']} ({admission['reason']}); {report['finding_count']} findings."

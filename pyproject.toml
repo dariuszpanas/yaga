@@ -151,4 +151,4 @@ typos = "check"
 dependabot-pull-requests = "skip"
 merge-commits = "reject"
 ignored-headers = []
-max-commits = 64
+max-commits = 1000

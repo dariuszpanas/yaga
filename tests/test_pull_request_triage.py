@@ -550,7 +550,7 @@ def test_complete_paginated_files_and_exact_merged_tree_finding(policy, api):
 @pytest.mark.parametrize(
     "mutation",
     [
-        lambda a: a.snapshot.update(changed_files=501),
+        lambda a: a.snapshot.update(changed_files=3001),
         lambda a: a.snapshot.update(reviews=[review()] * 100),
         lambda a: setattr(a, "closed", [{"number": 1, "state": "closed", "merged_at": None}]),
         lambda a: setattr(a, "comments", [{"id": i, "body": "plain"} for i in range(100)]),
@@ -640,11 +640,11 @@ def test_api_request_limit_rejects_next_request_without_launch(monkeypatch):
     monkeypatch.setattr(remote, "_gh_api_json", lambda *args: calls.append(args) or {})
     monkeypatch.setattr(triage_remote.time, "monotonic", lambda: 0)
     client = triage_remote.TriageClient(remote.parse_pull_request_reference(URL))
-    for _ in range(64):
+    for _ in range(160):
         client.get("user")
     with pytest.raises(InputError, match="budget exhausted"):
         client.get("user")
-    assert len(calls) == 64
+    assert len(calls) == 160
 
 
 @pytest.mark.parametrize("state", ["DISMISSED", "CHANGES_REQUESTED"])
@@ -680,9 +680,9 @@ def test_final_publication_reads_shared_reviews_after_all_immutable_work(tmp_pat
 
 def test_maximum_inventory_keeps_joint_publication_within_request_budget(tmp_path, policy, api):
     policy.write_text(POLICY_TEXT.replace("duplicate-candidates = 1", "duplicate-candidates = 20"))
-    api.snapshot.update(author_id=10, author_login="maintainer", changed_files=500)
+    api.snapshot.update(author_id=10, author_login="maintainer", changed_files=3000)
     api.snapshot["files"] = [
-        dict(api.snapshot["files"][0], filename=f"source/{number}.py") for number in range(500)
+        dict(api.snapshot["files"][0], filename=f"source/{number}.py") for number in range(3000)
     ]
     api.snapshot["reviews"] = [review(user_id=CODEX_DEFAULT_BOT_USER_ID, user_type="Bot")]
     api.closed = [
@@ -698,8 +698,8 @@ def test_maximum_inventory_keeps_joint_publication_within_request_budget(tmp_pat
     result = review_command(tmp_path, policy, api, check_runs=True)
     assert result.exit_code == 0, result.output
     assert api.tree_reads == 21
-    assert sum("/files?" in endpoint for endpoint in api.reads) == 5
-    assert len(api.reads) + len(api.writes) < 64
+    assert sum("/files?" in endpoint for endpoint in api.reads) == 30
+    assert len(api.reads) + len(api.writes) < 160
     assert api.writes[-1][2]["commit_id"] == HEAD
 
 
