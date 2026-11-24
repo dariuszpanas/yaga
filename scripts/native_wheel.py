@@ -58,7 +58,7 @@ class NativeWheelHook(BuildHookInterface):
             if not (shutil.which("cargo") and shutil.which("rustc")):
                 raise RuntimeError("Building YAGA from source requires Cargo and rustc.")
             host = subprocess.check_output(["rustc", "--print", "host-tuple"], text=True).strip()
-            tag_platform = wheel_platform(
+            tag_platform = os.environ.get("YAGA_WHEEL_PLATFORM") or wheel_platform(
                 host, sysconfig.get_platform(), runtime_platform.machine()
             )
             if tag_platform.startswith("macosx_"):
