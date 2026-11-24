@@ -17,9 +17,10 @@ an explicit provider selection or a named plan and keeps provider failures disti
 ## Actions trust split
 
 Pull-request CI runs without trusted write credentials and can only save quota or report quality
-findings. Write-capable gate operations run from trusted default-branch workflows. In the root Action, both `check: commit` and `check: gate` use standard-library-only bootstraps,
-installed-CLI modes isolate their hash-locked `--no-dev` virtual environment outside the checkout,
-and no mode accepts a GitHub token as an argument, output, or log value.
+findings. Write-capable gate operations run from trusted default-branch workflows. The root Action verifies its bundled
+native executable or builds the pinned, locked Action source with a fresh tokenless Cargo environment.
+Only the gate and the explicitly selected live PR modes receive credentials. The runtime prepares
+commit policy from the exact trusted Git object for target-event checks.
 
 Consumers must pin the Action to an audited full commit SHA. Review the example workflows and
 [SECURITY.md](https://github.com/dariuszpanas/yaga/blob/main/SECURITY.md) before deployment.

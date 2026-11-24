@@ -21,10 +21,11 @@ permissions, operation-specific protected approval marker where applicable, and 
 provenance as the composite Action. The GitHub token remains environment-only and is never accepted
 as a CLI argument.
 
-The installed CLI uses Typer. The write-capable composite Action intentionally installs nothing and
-runs with Python site packages disabled. A fixed standard-library bootstrap accepts the same
-`gate agent-review <operation>` command path and calls the same dispatcher, keeping the trusted
-Action import graph dependency-free and network-free.
+The standalone CLI and platform wheels run the native gate. With `check: gate`, the composite
+Action verifies its bundled native executable or builds the pinned Action source with its locked
+Rust dependencies. Setup runs without the GitHub token. The gate receives the token when it runs
+the selected operation. Python callers can also use the separate standard-library gate entry
+point from source. See [Action runtimes and trust boundaries](github-actions.md#execution-runtimes-and-trust-split).
 
 ## Agent review Action: why the workflow is split
 
@@ -117,8 +118,8 @@ permissions and provider-side access controls remain necessary.
 
 ## Action interface
 
-Select `check: gate` on the unified root [GitHub Action](github-actions.md); any CLI or commit
-input fails closed before `python` starts.
+Select `check: gate` on the unified root [GitHub Action](github-actions.md). If a CLI or commit
+input is also set, the Action returns exit code 2 before it invokes the native gate.
 
 | Input | Contract |
 | --- | --- |

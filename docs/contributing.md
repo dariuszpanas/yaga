@@ -69,8 +69,6 @@ gates in separate named jobs:
     `ci.yml`, aggregated into the single branch-ruleset gate `CI Prerequisites`.
   - `Action E2E Fixture (<scenario>)` (`commit-adoption-qualification.yml`): synthetic pass/fail
     fixture repositories testing `check: commit`.
-  - `Hugging Face commit quality` (`commit-quality.yml`): online and offline `commit quality`
-    cache verification.
 
 ## Change and review rules
 

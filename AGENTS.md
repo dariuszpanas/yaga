@@ -1,341 +1,92 @@
 # YAGA repository agent guidance
 
-Read `CONTRIBUTING.md` before changing code or opening a pull request. Start with `git status
---short`, `git branch --show-current`, and `git log -1 --oneline`; preserve unrelated work, stage
-explicit paths, and inspect both working and cached diffs. Feature branches use `feat/<topic>` and
-fixes use `fix/<topic>`.
+Read `CONTRIBUTING.md` before changing code or opening a pull request. Start with
+`git status --short`, `git branch --show-current`, and `git log -1 --oneline`; preserve
+unrelated work, stage explicit paths, and inspect both working and cached diffs. Feature
+branches use `feat/<topic>` and fixes use `fix/<topic>`.
 
-YAGA is an extensible CLI for checks that work locally and in CI. Keep the Conventional Commit
-checker under `src/yaga/commits/`, installed Typer commands under `src/yaga/commands/`, and the
-Agent review gate is the public review contract. Its current provider adapter remains under
-`src/yaga/agent_review/github/` as the current GitHub provider adapter; expose operations through
-`yaga gate agent-review` and keep the composite Action as a supported adapter.
+## Rust-first architecture
 
-## Preserve the CLI contract
+YAGA is a fast, standalone Rust CLI and library (`crates/yaga-core` + `crates/yaga-cli`)
+distributed as:
 
-- Keep pull-request description checks installed-only under `src/yaga/descriptions/`, with one
-  explicit versioned policy and file/stdin/event/PR source plus an optional explicit Markdown template.
-  Keep the checker pure, Markdown support deliberate, and Typos execution bounded and isolated.
-  Require meaningful content and unique ordered template headings; preserve schema-v1 reports,
-  exact finding counts, 256 stored diagnostics, 64 KiB policy/body/template and 1 MiB event limits.
-  Keep `heading-min-level` defaulted to 2 and `heading-max-length` to 120, with strict integer
-  ranges 1–6 and 1–256. Apply these rules to top-level ATX and Setext headings, reject raw HTML
-  heading tags outside comments/code/escaped literals, and reject conflicting templates.
-  Preserve the `description.heading-*` and `description.html-heading` diagnostic boundaries;
-  structural checks are neither a complete Markdown renderer nor an HTML sanitizer.
-  Keep text hygiene source-located and code/comment/escape-aware. Diagnose invisible format
-  controls, prose tabs, high-confidence literal newline escapes, and unmatched backticks without
-  rejecting ordinary Unicode joining/emoji sequences or guessing arbitrary emphasis. Reject
-  unsupported control characters and bare CR before normalization; preserve LF/CRLF input.
-  Keep file/stdin/event sources offline. Only explicit `--pr` may fetch the current body through
-  the installed authenticated `gh` CLI: require a canonical HTTPS URL or a positive number plus
-  `--repo [HOST/]OWNER/REPO`, reject mixed sources and URL/repository ambiguity, and never infer
-  checkout or environment selection. Use shell-free bounded process execution, verify returned
-  PR identity and strict JSON, preserve the 64 KiB decoded-body limit, and never expose raw process
-  output or credentials. Keep the 30-second, 512 KiB stdout, and 64 KiB stderr bounds. Fetches may
-  check open/closed/merged PRs, without retrieving historical descriptions or writing to GitHub.
-  Never discover templates or policy, access Git history, or inherit commit-author exemptions.
-  Keep this provider outside repository plans and both Action import graphs.
-- Keep pull-request review checks (`yaga pull-request review check`) installed-only under
-  `src/yaga/agent_review/`, with one explicit versioned policy (`--policy`) and either an offline
-  snapshot file (`--file`) or an explicit live pull request (`--pr`) fetched through the installed
-  authenticated `gh` CLI. Require a canonical HTTPS URL or a positive number plus
-  `--repo [HOST/]OWNER/REPO`, reject mixed sources and URL/repository ambiguity, and never infer
-  checkout or environment selection. Use shell-free bounded process execution with 30-second,
-  512 KiB stdout, and 64 KiB stderr bounds, verify returned PR identity and strict JSON, and never
-  expose raw process output or credentials. Live `--pr` fetches are read-only by default (unless
-  explicit `--submit-review approve|request-changes|both` is requested on an open PR), set
-  `head_committed_at = None`, and never derive reaction freshness from Git commit dates or
-  partially emulate `yaga-codex-authorization:v2` / `Review Policy Boundary` workflow-run
-  correlation (which belongs exclusively to the `yaga gate agent-review` publisher under
-  `src/yaga/agent_review/github/`): live `--pr` checks require head-bound review, summary, or
-  check-run evidence (`commit_id == head_sha`, `Reviewed commit`, `codex-review-state:v1`, or
-  configured `check-runs` on `commits/{head_sha}/check-runs`) to pass and honor bounded
-  `delay-seconds` (`0..300`) plus bounded `wait-seconds` / `--wait-seconds` (`0..600`, polling only
-  while a review is actively in progress on `head_sha` after a 30-second startup grace window),
-  while offline `--file` snapshots may supply an explicit `head_committed_at` timestamp. Keep this
-  CLI check outside repository plans and both Action import graphs.
-- Keep pull-request trust triage under `src/yaga/pull_request_triage/`, with explicit trusted
-  policy, immutable identities, complete bounded metadata, and current-head maintainer review
-  admission before automatic positive formal review publication. Never treat PR instructions,
-  labels, bot reviews, or quota authorization markers as maintainer approval. Revalidate live
-  state before writes and submit an explicit commit ID. Do not execute PR code in a privileged
-  metadata job. The feature is separate from the stdlib-only Agent review gate import graph.
-  An assistant using maintainer credentials must obtain explicit user authorization for that
-  exact external PR and head before creating an admission review; a bulk maintenance request
-  or green automated check does not provide that authorization.
-- `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine sources,
-  fetch history, reduce a Git selection, or ignore a missing base.
-- Treat commit messages, Git output, revisions, paths, and displayed labels as untrusted. Bound
-  inputs and output, invoke Git without a shell, reject option-like/split revisions, and sanitize
-  terminal text.
-- Load exactly one nearest `.yaga.toml` or `pyproject.toml`, or one explicit `--config`; reject
-  unknown keys, invalid types, duplicate normalized tokens, and unsupported schema versions.
-- Keep parser structure separate from configurable policy. Stable diagnostic codes, exit codes
-  0/1/2, and the versioned JSON document are public pre-release contracts.
-- Keep `dependabot-pull-requests` in configuration schema v1 with closed values `check` and `skip`
-  and the default `check`. The opt-in skip belongs only to `github pull-request check` and the
-  read-only commit Action after complete event, runner-context, checkout, configuration, and range
-  validation. Require an exact strictly parsed PR author login `dependabot[bot]`, type `Bot`, and
-  bounded positive ID. Never infer trusted bot identity from Git author/committer data, messages,
-  titles, branches, actors, or footers. Narrow this already eligible quality exemption per commit
-  using bounded exact author/committer metadata compatibility. Keep the schema-v1 boolean
-  `dependabot-require-github-signature` defaulted to `true`: additionally verify each skipped
-  commit's exact object bytes offline against the pinned GitHub signing key using a trusted
-  bounded `gpgv` process and private keyring. Missing, failed, unsupported, or over-budget
-  verification runs normal checks. `false` retains the forgeable per-commit metadata filter only.
-  Ordinary human additions and human rebases must be checked, and mixed PR titles/proposed
-  messages must be checked. The shared GitHub key is not exclusive Dependabot identity; never
-  use a Signed-off-by footer as proof, query a live badge, fetch keys, or import REST/token code.
-  The separate `skip-pull-request-authors` list remains a broad independent explicit exemption;
-  do not turn this option into generic bot identity configuration. Preserve the complete selected
-  SHA set and stable `Dependabot pull request` skip reason; ordinary commit/repository checks and
-  every other provider keep running.
-- Keep `scope-policy-by-type` as an empty-default schema-v1 mapping with at most 128 safe,
-  case-insensitively unique type keys and closed presence-policy values. Overrides replace the
-  global scope policy for full commits and PR titles; `scope-case` and `allowed-scopes` remain
-  independent. Reject keys outside configured allowed types and impossible allowed-scope
-  reachability. Treat header-minimum validation as a conservative structural bound rather than an
-  exact satisfiability proof, and preserve `scope.required` and `scope.forbidden`.
-- Keep `breaking-markers` in configuration schema v1 with closed values `either` and `paired` and
-  the default `either`. `paired` requires both the header `!` and a recognized final breaking
-  footer, or neither; exactly one reports `breaking.marker-pair`. Apply it to complete commits but
-  never to pull-request titles checked through the header-only boundary.
-- Keep `body-min-words` in configuration schema v1 as a zero-default integer from zero through
-  100000. Count only Unicode-whitespace-delimited prose-body tokens containing a Unicode
-  alphanumeric character, exclude recognized final footers, and do not make an optional absent
-  body required. Reject a nonzero minimum when body policy is forbidden, and preserve
-  `body.word-count` in every report.
-- Keep `required-footer-tokens` and `forbidden-footer-tokens` in schema v1 as empty-default,
-  full-commit-only presence checks. Match exact tokens case-insensitively in `Token: value` and
-  `Token #value`, allow repeats, and never imply that `Signed-off-by` proves identity, DCO
-  compliance, or a signature. Preserve the one-to-128-character ASCII token grammar, 128-entry
-  combined bound, duplicate/overlap and breaking-token rejection, paragraph-boundary start,
-  multiline suffix parsing, and bounded `footer.required`/`footer.forbidden` diagnostics. PR
-  titles remain header-only.
-- Keep `workflow check`, `workflow security`, and `workflow lint` on the same default and explicit
-  path-selection contract. They respectively own immutable-reference policy, a narrow pure-Python
-  trust policy, and pinned actionlint syntax checks. Freeze the documented `recommended-v1`
-  security rules and keep them as the no-option default. `recommended-v2` is the explicit opt-in
-  superset that also requires every direct runner-resolved `actions/checkout` step to set exactly
-  one literal `with.persist-credentials: false`; wrapper Actions remain outside that rule. Match the
-  runner's remote-reference segmentation conservatively and reject ambiguous scalar tags or input
-  environment-name collisions. `recommended-v3` is the explicit v2 superset that adds
-  `permissions.pull_request_write`: whenever any `pull_request` trigger exists, reject exact
-  `pull-requests: write` and `statuses: write` values at workflow and job scope. Mixed-event and
-  conditionally guarded writer jobs fail; split trusted writers into `pull_request_target` or
-  `workflow_run` publishers. This rule does not cover other scopes, alternate tokens, reusable
-  permission inheritance, or expressions. Future defaults require a new profile. Do not merge the
-  providers' diagnostics or imply that one replaces another. Immutable-reference policy includes
-  `uses`, job-container images, and service-container images; container images require literal
-  lowercase SHA-256 digests, except for GitHub's quoted-empty disabled service image.
-- Keep privileged checkout analysis fail-closed without emulating GitHub expressions: on
-  `pull_request_target` or `workflow_run`, dynamic `actions/checkout` `ref` or `repository` inputs
-  fail, as does any `allow-unsafe-pr-checkout` value other than literal `false`.
-- Keep `repo check` installed-only and explicitly driven by either arguments or one named,
-  versioned plan. Require a unique provider set; run `commit`, `workflow`, `workflow-security`,
-  `workflow-lint`, `mode`, `path`, `size`, and `tree` in canonical order; share one bounded workflow
-  load and pure-Python parse; and keep child reports separate. Require one exact runtime
-  `--revision` whenever a committed-tree provider is selected, resolve its commit/tree identity
-  once, and retain independent provider enumeration and parsing. Never infer `HEAD` or reuse the
-  commit provider source. Do not add an implicit `all`, silently skip unavailable Docker, or weaken
-  exit precedence: provider errors require exit 2 even alongside findings.
-- Keep repository check plans opt-in, closed, portable, and bounded. They may select only providers,
-  workflow paths, a workflow-security profile or exact rule set, and in plan v2 one exact policy
-  path for each selected committed-tree provider. Keep plan v1 frozen to its original four
-  providers and keys. Commit source/configuration, committed-tree revision, and output format remain
-  runtime options. Reject unknown keys/versions, duplicate selections, unsafe paths, selection-flag
-  mixing, missing or unused policy paths, and inconsistent provider arguments. Resolve plan paths
-  physically under the runtime repository rather than beside the plan; symlinks and junctions may
-  not escape it. Never add plan discovery, includes, environment interpolation, expressions,
-  commands, or secrets. A PR-controlled plan is quality policy only and never trusted security
-  authority.
-- Keep `.pre-commit-hooks.yaml` as one direct Python `commit-msg` adapter to
-  `yaga commit check --file`. Do not add a wrapper, filters, policy arguments, or hook-only
-  dependencies; local hooks are bypassable and cannot enforce merge parent policy.
-- Keep `change check` installed-only and require an explicit versioned policy plus exact `A..B` or
-  `A...B` range. Schema v1 is closed to bounded named `when-any`/`require-any` rules and
-  case-sensitive repository-relative POSIX patterns with literals, `*`, and component-level `**`.
-  Never infer working-tree, staged, event, branch, or remote state; never fetch. Require non-shallow
-  history without legacy graft overlays, an unambiguous three-dot merge base, bounded NUL-delimited
-  Git paths, visible gitlink changes, disabled rename/external-diff/textconv behavior,
-  unique-pattern caching, and the shared 10,000,000-unit matcher-work ceiling. Keep it out of both
-  Action import graphs.
-- Keep test planning installed-only under `src/yaga/test_planning/`. `test policy check` requires
-  one explicit file and no Git access. `test plan` requires explicit policy, profile, and exactly
-  one range or revision; revision-only planning requires a full profile. Never discover policy,
-  infer HEAD/event/branch/worktree state, fetch, or execute bindings. Keep the pure planner free
-  of I/O and collect Git sources through the shared bounded runtime and neutral changed-path
-  reader. Require complete range history, one three-dot merge base, and exact endpoint/comparison/
-  execution identities; allow shallow revision-only plans with the selected commit/tree present.
-  Reject graft overlays before and after collection. Preserve version-one semantic/envelope
-  contracts, exact policy-byte SHA-256, optional binding identity, canonical plan digests, complete
-  JSON within 4 MiB, at most 256 human reasons with exact omitted counts, and exits 0/2 only.
-  Planning never claims tests passed and stays outside repository plans and both Action graphs.
-  Keep executor handoff pure and installed-only: a complete fixed registry maps every suite exactly
-  once, preserves all variants and required capabilities, and binds executor-definition hashes.
-  Require non-null matching binding identity and independent expected policy/commit/tree identities.
-  Preserve version-one registry/handoff documents, complete 4 MiB bounded output, prerequisite
-  order, and one dispatch per suite even for a matrix. No commands or receipt evaluation enter this
-  API. Consumer adapters own real capability checks, execution, cancellation, acceptance, and cleanup.
-  Shadow jobs remain advisory and cannot change or cancel required CI. Measure first; set the
-  feedback-time adoption threshold before activation, after real pilot observations.
-- Keep `branch check` installed-only and require an explicit versioned policy plus exact short
-  branch name. Never inspect Git, infer checkout or event state, discover policy, normalize full
-  refs/remotes, or read environment in the domain layer. Schema v1 is a bounded ordered list of
-  unique case-sensitive `allowed-patterns` over the portable ASCII name grammar, with component-
-  local `*` and whole-component `**`. Validate names independently, report only `branch.syntax` or
-  `branch.allowed`, preserve the first matching pattern, and keep the 244-byte portability cap.
-  CI may pass guarded `github.head_ref` or branch-only `github.ref_name` through a quoted environment
-  variable. Keep the provider out of both Action import graphs.
-- Keep `tree check` installed-only and require an explicit versioned policy plus exact commit-ish;
-  only `--repo` may default to `.`. Never infer HEAD, discover policy, fetch, parse events, read
-  tracked file contents, inspect worktree/index/untracked state, or recurse into gitlinks. Schema v1 is
-  bounded exact `required-paths` plus anchored case-sensitive `forbidden-patterns`, with
-  component-local `*` and whole-component `**`; reject required/forbidden overlap and preserve
-  first-pattern attribution, the shared 10,000,000-unit matcher-work ceiling, `tree.required`, and
-  `tree.forbidden`. Resolve one commit and tree, then use shell-free bounded NUL-delimited
-  full-tree `ls-tree` with an absolute external Git, global `--no-lazy-fetch`, a minimal
-  no-prompt/no-replacement environment, 30-second timeout, 64 MiB output, and 50,000 canonical
-  UTF-8 path bounds. Validate Git against the outermost enclosing repository even when `--repo`
-  names a worktree subdirectory, including bounded `.git`, linked-worktree `commondir`, and external
-  object-directory resolution plus cycle-safe local alternate chains capped at 128 directories;
-  unsupported older Git clients fail closed. Shallow repositories are allowed when the selected
-  objects exist; reject legacy graft overlays before resolution and recheck after enumeration. Keep
-  the provider out of both Action graphs and repository-plan v1 until explicitly added.
-- Keep `size check` installed-only and require an explicit versioned policy plus exact commit-ish;
-  only `--repo` may default to `.`. Never infer HEAD, discover policy, fetch, parse events, inspect
-  worktree/index/untracked state, or recurse into gitlinks. Schema v1 uses a required nonnegative
-  default blob limit, optional total limit, and at most 128 ordered first-match path overrides with
-  the canonical anchored literal/component-`*`/whole-component-`**` grammar and one shared
-  10,000,000-unit work ceiling. Keep every individual and aggregate byte count at or below the
-  2^53 - 1 portable-integer limit. Resolve one commit and tree, then strictly parse bounded
-  recursive full-tree `ls-tree` object metadata. Count regular, executable, and symlink blob bytes; exclude
-  gitlinks; count duplicate OIDs per path; treat LFS pointers as stored pointer bytes; preserve
-  `size.blob` then `size.total` ordering, 50,000-entry and 64 MiB caps, and shallow support only when
-  all selected objects exist. Reject legacy graft overlays before resolution and recheck after
-  enumeration. Keep it out of both Action graphs and repository-plan v1.
-- Keep `path check` installed-only and require an explicit versioned policy plus exact commit-ish;
-  only `--repo` may default to `.`. Never infer HEAD, discover policy, fetch, parse events, inspect
-  the worktree/index/untracked state, read tracked content, or recurse into gitlinks. Schema v1
-  requires exactly one of the frozen `windows-compatible-v1` profile or a nonempty unique exact
-  rule list. Preserve the closed `windows-characters`, `windows-trailing`, `windows-reserved`, and
-  `ascii-case-collision` rules, ASCII-only case normalization, and stable `path.windows-character`,
-  `path.windows-trailing`, `path.windows-reserved`, and `path.ascii-case-collision` diagnostics.
-  Do not add ignore patterns or imply compatibility with every Windows or filesystem configuration.
-  Resolve one commit and tree, then strictly parse bounded recursive full-tree NUL-delimited names.
-  Preserve policy-relevant Git path characters until checking, but reject malformed UTF-8, absolute
-  or structurally invalid paths, duplicate leaves, and inconsistent leaf topology. Keep the
-  4,096-byte, 64-component, 50,000-entry, 64 MiB, 30-second, 10,000,000-work-unit, 256-stored-
-  diagnostic, and exact-count boundaries. Reject legacy graft overlays before resolution and
-  recheck after enumeration. Shallow repositories are allowed when selected objects exist. Keep
-  the provider out of both Action graphs and repository-plan v1.
-- Keep `mode check` installed-only and require an explicit versioned policy plus exact commit-ish;
-  only `--repo` may default to `.`. Never infer HEAD, discover policy, fetch, parse events, inspect
-  the worktree/index/untracked state, read tracked content or symlink targets, or recurse into
-  gitlinks. Schema v1 requires a nonempty unique `default-allowed-modes` list and permits at most
-  128 ordered, first-match `path-overrides` with unique case-sensitive patterns and nonempty unique
-  `allowed-modes`. Preserve the closed canonical modes `regular` (`100644`), `executable`
-  (`100755`), `symlink` (`120000`), and `gitlink` (`160000`), the anchored
-  literal/component-`*`/whole-component-`**` grammar, the shared 10,000,000-unit match-work
-  ceiling, and stable `mode.disallowed` findings. Resolve one commit and tree, then strictly parse
-  bounded recursive full-tree NUL-delimited mode, type, object-ID, and path records. Preserve
-  structurally valid names that another provider may diagnose, but reject malformed UTF-8,
-  absolute or structurally invalid paths, duplicates, inconsistent topology, and incompatible
-  mode/type pairs. Keep the 4,096-byte, 64-component, 50,000-entry, 64 MiB, 30-second, and
-  256-stored-diagnostic boundaries. Reject legacy graft overlays before resolution and recheck
-  after enumeration; shallow repositories are allowed when selected objects exist. Allowing a
-  mode does not validate shebangs, ACLs, ownership, symlink targets, `.gitmodules`, submodule
-  provenance, or object availability. Keep the provider out of both Action graphs and
-  repository-plan v1.
-- The installed CLI and policy loaders use the locked `typer`, `pydantic`, and `pydantic-versions`
-  dependencies, with versioned TOML schema families centralized under `src/yaga/policies/`
-  (`yaga policy init` with an interactive checkbox selector, `--all`, `--skip-existing`, and
-  `--dry-run`; `yaga policy check` with `--strict` deprecation checks and `required-version`
-  enforcement) and BOM-preserving shell completion in `src/yaga/completion.py` (never calling
-  `Set-ExecutionPolicy`). The unified root `action.yml` exposes `check` (defaulting to `commit`)
-  across three isolated execution branches: `check: gate` may not import Typer, CLI command
-  modules, commit-policy modules, Rich, Click, Pydantic, or site packages and preserves the fixed
-  dependency-free `YAGA_ACTION_RUNTIME=1` (`python -P -S`) bootstrap and shared gate dispatcher;
-  `check: commit` runs on the shared hash-locked `--no-dev` `uv` virtual environment outside the
-  checkout via `"$YAGA_RUNTIME_PYTHON" -I -m yaga` under its separate tokenless
-  `YAGA_COMMIT_ACTION_RUNTIME=1` entrypoint (importing commit and policy-schema modules but never
-  Typer, commands, Codex policy, or GitHub REST/token code); and installed-CLI `check` modes
-  (`policy`, `pr-review`, `pr-triage`, `pr-description`, `repo`, `branch`, `change`, `workflow`,
-  `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) run through
-  `src/yaga/cli_action.py` inside that hash-locked `--no-dev` `uv` virtual environment, rejecting
-  unused inputs fail-closed and passing `GH_TOKEN` only when live `--pr` access is requested.
+1. **Standalone native executables** (`docs/install.sh`, `docs/install.ps1`, Cargo, and GitHub
+   Releases) with zero Python dependency.
+2. **Zero-dependency Python platform wheels (`py3-none-<platform>`)** under `src/yaga/` — a thin
+   `uv`-style binary launcher (`__init__.py`, `__main__.py`, `entrypoint.py`, `self_update.py`,
+   `_update_worker.py`) that locates and executes the bundled `yaga` Rust binary via
+   `os.execve` (POSIX) or `subprocess.call` (Windows) and delegates `yaga self update` for
+   `uv tool install yaga-cli` installations.
+3. **Unified GitHub Action (`action.yml`)** driven by `scripts/action-runtime.cjs` and the
+   standalone native Rust binary (`$YAGA_RUNTIME_BINARY __action commit|gate|cli|summary`).
 
-## Preserve the trust boundary
+Do **not** reintroduce a PyO3 extension (`crates/yaga-python`), a Python-side duplicate policy
+engine, Typer/Pydantic/pydantic-versions runtime dependencies, or Rust-to-Python callback
+bridges. All policy parsing, validation, Git inspection, reporting, CLI presentation, and
+Action execution belong solely in Rust (`crates/yaga-core` and `crates/yaga-cli`).
 
-- Treat events, inputs, API responses, comments, reviews, reactions, statuses, and run metadata as
-  untrusted until strictly parsed and bounded.
-- Keep the write-capable `YAGA_ACTION_RUNTIME=1` (`check: gate`) import graph 100% stdlib
-  dependency-free (`python -P -S`), keep `YAGA_COMMIT_ACTION_RUNTIME=1` (`check: commit`) isolated
-  to the tokenless hash-locked `--no-dev` `uv` environment without Typer/CLI/REST imports, and
-  never expose `github-token` in arguments, output, status, logs, or exceptions.
-- Keep PR CI unprivileged. Write-capable YAGA operations run only from trusted default-branch
-  `pull_request_target` or `workflow_run` workflows and never consume PR code, artifacts, or cache.
-- Treat PR CI as a quota-saving heuristic, not a security authority. Merge security also relies on
-  maintainer approval, required review, and audited write-capable workflows/integrations.
-- Require the native lifecycle check, then validate live state and status capacity before lifecycle
-  pending writes. Request and terminal paths revalidate live state after any queue/environment wait
-  and immediately around their write.
-- Keep external authorization split: cancel stale per-PR `authorize-external` waits, record only a
-  non-triggering protected approval marker, then let the separately PR-serialized request worker run
-  with `cancel-in-progress: false`. Only the literal protected `agent-review-approval` route may
-  authorize a non-owner PR.
-- Require repository variable `YAGA_AGENT_OWNER_ID`. The environment must have that owner as sole
-  required reviewer, prevent self-review, disable admin bypass, store no secrets, and provide
-  `YAGA_AGENT_APPROVAL_MARKER=agent-review-approval:v1`. Verify plan support and canary behavior.
-- Require the exact current-boundary Actions-owned YAGA request before every accepted eyes reaction
-  or outcome, including `opened`, with evidence strictly later than the request. Visible unsolicited
-  connector activity fails closed without a duplicate request, and `observe` requires that request.
-- Fail closed on malformed, incomplete, ambiguous, stale, displaced, or over-budget evidence.
-- Bound pagination, responses, request bodies, event files, descriptions, polling, and all
-  attacker-controlled strings.
-- Treat 100 comments, reviews, or reactions as incomplete and require a new PR. Require a new commit
-  before 100 total visible statuses across all contexts or the per-SHA/context status ceiling.
-- Reserve `Agent Review` and `CI Gate` for classic statuses; workflow/job/check names must differ.
-  Audit every `statuses: write` and `pull-requests: write` path because the beta uses the shared
-  Actions identity for both statuses and PR conversation comments.
-- Preserve both authenticated `CI` and `YAGA Review Policy` completion wakes, deterministic
-  later-completion election before writes (CI wins timestamp ties), the two-minute CI-first prepare
-  wait, and exact workflow-path/event entry guards. Lifecycle completions on the `main` base branch
-  must run, while post-merge `push` completions skip every publisher job before YAGA runs.
-- Disable automatic reviews before enabling the v2 publisher. Prove the owner request and
-  protected-external approval plus request paths before normal contributor traffic. Freeze new PRs,
-  reach zero open PRs, and drain existing Codex tasks before activation; all evidence correlation
-  also requires preventing overlapping direct or integration-triggered reviews and trusted success
-  lineage for every older YAGA request.
-- External approval authorizes only the exact YAGA request and never reuses unsolicited evidence.
-- Ordinary metadata edits use non-required `Review Policy Metadata`; real lifecycle events use
-  required `Review Policy Boundary`. The beta assumes GitHub delivers those configured events.
-- Never promise zero post-close writes: close can race the last live read and a comment/status POST.
-  YAGA cannot stop direct human/app agent-review requests from consuming provider quota.
+## Preserve the CLI and policy contracts
 
-## Make reviewable changes
+- **CLI look and feel**: `crates/yaga-cli` uses Clap and `fast-rich` (`crates/yaga-cli/src/presentation/`)
+  to preserve Typer/Rich-style framed help panels, options tables, color precedence (`NO_COLOR`,
+  `FORCE_COLOR`), and framed usage error diagnostics (exit `2`).
+- **Exit codes & outputs**: Keep stable exit codes (`0` pass, `1` policy finding or gate
+  failure, `2` input/config/operational error), versioned JSON schemas, plain text reports, and
+  escaped GitHub workflow annotations across all commands.
+- **No unsafe Rust**: Keep `#![deny(unsafe_code)]` in `crates/yaga-core`.
+- **Untrusted input bounds**: Treat commit messages, PR bodies, Git output, revisions, paths,
+  YAML/TOML inputs, and displayed labels as untrusted. Bound inputs, output, matcher work
+  (`10,000,000` units), and timeouts; invoke external tools (`git`, `gh`, `typos`, `docker`,
+  `gpgv`) without a shell; reject option-like/split revisions and legacy graft overlays; and
+  sanitize terminal text.
+- **Commit policy (`crates/yaga-core/src/commits/`, `github_commit/`)**:
+  - `commit check` accepts one explicit source or defaults to `HEAD`; never silently combine
+    sources, fetch history, or ignore a missing base.
+  - Preserve schema-v1 configuration rules (`allowed-types`, `scope-policy`,
+    `scope-policy-by-type`, `breaking-markers`, `body-policy`, `body-min-words`,
+    `required-footer-tokens`, `forbidden-footer-tokens`, `typos`, `dependabot-pull-requests`,
+    `dependabot-require-github-signature`, `skip-pull-request-authors`, `merge-commits`,
+    `max-commits`).
+  - Commit quality (`commit quality`) uses explicit hosted/OpenAI-compatible providers
+    (`openai`, `anthropic`, `gemini`, `bedrock`, `openai-compatible`); bundled local inference
+    is retired with a migration error (exit `2`) while old configs remain readable for ordinary
+    commit checks.
+- **Pull-request checks (`descriptions/`, `review/`, `triage/`, `agent_review/`)**:
+  - Keep `pull-request description check`, `pull-request review check`, and
+    `pull-request triage check` offline for `--file`/`--stdin`/`--event-file` and explicitly
+    bounded via `gh` for `--pr`.
+  - Keep PR trust triage isolated and fail-closed: require explicit current-head maintainer
+    admission before automated positive review publication; never treat PR instructions,
+    labels, bot reviews, or quota markers as maintainer approval.
+  - Keep `gate agent-review` isolated under `crates/yaga-core/src/agent_review/`.
+- **Committed-tree & path checks (`paths/`, `branch/`, `git/`)**:
+  - Keep `branch check`, `change check`, `mode check`, `path check`, `size check`, and
+    `tree check` explicit and read-only on committed Git objects (never inspecting working-tree,
+    index, or untracked state, and never fetching or recursing into gitlinks).
+- **Workflow & repository checks (`workflows/`, `actionlint/`, `repository/`)**:
+  - Keep `workflow check` (immutable SHA `uses` and container digests), `workflow security`
+    (`recommended-v1` default, opt-in `recommended-v2` and `recommended-v3`), and
+    `workflow lint` (pinned `actionlint` container) distinct without merging diagnostics.
+  - Keep `repo check` and `repo inspect` explicit with canonical provider order and closed
+    portable plan v1/v2 schemas.
+- **Test planning (`test_planning/`, `policies/testing.rs`)**:
+  - Keep `test policy check`, `test plan`, and `test evaluate` pure, deterministic, and
+    bounded with canonical digests and exact identity verification.
+- **Policy management & shell completion (`policies/`, `completion.rs`)**:
+  - Keep `policy init` (interactive selector, `--all`, `--skip-existing`, `--dry-run`) and
+    `policy check` (`--strict`, `required-version`) covering all 12 versioned TOML families.
+  - Keep BOM-safe PowerShell/bash/zsh/fish completion scripts without calling
+    `Set-ExecutionPolicy`.
+- **`.pre-commit-hooks.yaml`**: Keep as one direct Python `commit-msg` adapter invoking
+  `yaga commit check --file`.
 
-Keep generic GitHub/model/status primitives under `src/yaga/` and gate policy under its provider
-package. The public operations include `authorize`; `prepare` emits closed `route` values including
-`approved` plus `pull_request_number`. Prefer focused modules and tests. Pin every third-party
-example action to an audited full SHA. Run `uv run make ci` before push; it covers locked
-dependencies, Ruff, ty, pinned actionlint, tests, and package build. Use Conventional Commits and
-fold review/CI fixes into the logical commit. Keep the installed CLI entrypoint UTF-8-safe before
-Typer renders untrusted text. The build gate must install hash-locked runtime wheels, add the fresh
-YAGA wheel without dependency resolution, and execute it outside the checkout.
+## Testing & verification
 
-Keep installed workflow-policy parsing and reporting under `src/yaga/workflows/`. Its YAML boundary
-must remain resource-bounded, preserve duplicate mapping pairs, and never enter either
-dependency-free Action runtime. `$/` local references are commit-bound; `./` depends on the
-caller's trusted checkout and must not be described as independently immutable.
-
-Keep `workflow lint` installed-only and out of both Action import graphs. Its actionlint image
-digest and Docker hardening flags are fixed: no shell or host mount; use a deterministic bounded
-synthetic repository in a private labeled volume, a stopped staging container, and a read-only lint
-mount.
-Include transitive local reusable workflows, at most one native actionlint config, the
-`action.yaml`-before-`action.yml` local manifest, and only zero-byte file or empty-directory runtime
-presence entries. Keep `$/` translation exact and source-marked. Disable network and logging; bound
-CPU, memory, PIDs, process trees, time, archive, and output; and verify container/volume cleanup.
-Expose only sanitized text, versioned JSON, and escaped GitHub reports with exits 0/1/2.
+- Primary unit and integration tests live in Rust (`crates/yaga-core` and `crates/yaga-cli/tests/`),
+  verified with `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`,
+  and `cargo test --workspace --locked`.
+- Python tests under `tests/` cover only the thin launcher (`src/yaga/`), wheel/release
+  packaging scripts, standalone installers, docs links, and Action fixture controls.
+- Keep `Cargo.lock` and `uv.lock` synchronized whenever dependencies change, and ensure commits
+  satisfy `.yaga/` policies (Conventional Commits with required scope for `feat`/`fix`,
+  `>= 8`-word body, paired `!` + `BREAKING CHANGE:` footer, `<= 1000` commits per PR).

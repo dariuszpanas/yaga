@@ -8,23 +8,65 @@ an HTML-escaped report summary to `$GITHUB_STEP_SUMMARY`.
 
 ## Execution runtimes and trust split
 
-To preserve YAGA's strict supply-chain and token boundaries while presenting one Marketplace-ready
-interface, the root Action dispatches into three isolated runtime branches:
+The composite Action runs a native YAGA executable on each runner. Its public inputs, outputs,
+exit codes and GitHub Step Summaries work across three execution paths.
 
-1. **`check: commit` (default, read-only tokenless fast path)**: Syncs YAGA's hash-locked
-   `--no-dev` runtime into a temporary virtual environment outside the checkout with tokens unset
-   and executes `YAGA_COMMIT_ACTION_RUNTIME=1` via `"$YAGA_RUNTIME_PYTHON" -I -m yaga` (isolated
-   from `PYTHONPATH`, working-tree imports, Typer/CLI command modules, and `GITHUB_TOKEN`/`GH_TOKEN`).
-2. **Installed CLI checks (`policy`, `pr-review`, `pr-triage`, `pr-description`, `repo`, `branch`, `change`,
-   `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`)**: Reuses the
-   same hash-locked `--no-dev` virtual environment outside the checkout and runs
-   `python -I -m yaga.cli_action`. Every mode rejects unused inputs and option-like values
-   fail-closed with exit `2`. `github-token` is stripped before `uv sync` and passed as `GH_TOKEN`
-   only when live `--pr` access is requested for `pr-review`, `pr-triage`, or `pr-description`; offline checks
-   reject `github-token`.
-3. **`check: gate` (write-capable stdlib fast path)**: Runs `YAGA_ACTION_RUNTIME=1` with
-   `python -P -S -m yaga gate` (no site packages and no runtime dependency installation) for the
-   six Agent review status-gate operations; see the [GitHub review adapter](github-review-adapter.md).
+1. **Commit.** The default check runs the tokenless commit checker and binds its bounded event to
+   the runner repository, refs and checkout. Trusted config is read from the explicit commit.
+2. **CLI checks.** The Action validates the selected mode's inputs and starts the same verified
+   executable from the consumer workspace. Only explicit live PR checks receive `GH_TOKEN`.
+3. **Gate.** A closed dispatcher accepts the six Agent review operations. The trusted default-branch
+   job supplies its token only to this process. Setup time counts against the gate's job budget.
+
+### Native distribution
+
+Pin the Action to an audited full commit SHA. A bundled distribution places the release's six
+raw binaries, its `yaga-native-sha256.txt`, and an independently reviewed `manifest.sha256` under
+`action-native/` in that Action commit. Setup verifies the manifest and runner asset before
+copying the binary into a fresh runner temporary directory. A missing asset, invalid manifest,
+unsupported platform or checksum mismatch fails setup. To stage a new distribution locally,
+review the release manifest SHA-256 independently and supply it explicitly.
+
+```sh
+node scripts/action-runtime.cjs stage release-assets action-native "$REVIEWED_MANIFEST_SHA256"
+```
+
+For a source-free Action, run the manual **Stage pinned native Action** workflow after a successful
+trusted **Release** run. Supply the Release run ID, its reviewed default-branch source SHA and
+the independently reviewed manifest SHA-256. The workflow validates the run and stages
+`native-action-distribution` as a review artifact. Its root contains `action.yml`, the bootstrap,
+the license and six verified platform assets. Release staging and the final release manifest
+check the Action's 100 MiB limit for each executable. To stage the same candidate
+locally, use `node scripts/action-runtime.cjs distribution release-assets action-dist "$REVIEWED_MANIFEST_SHA256"`.
+
+The staging workflow downloads that exact archive on all six release targets. Each runner verifies
+the reviewed manifest, Action definition, license and bootstrap, checks the executable selected for its target,
+and runs a passing and a failing branch policy through the Action runtime with an empty tool path.
+The job log records the target, source commit, executable digest and both exit codes. Check the
+six job results before promoting the staged distribution.
+
+A maintainer can inspect those exact bytes, commit the candidate to a dedicated distribution ref
+in the selected private or public Action repository, and give consumers its full commit SHA.
+Include the generated `action-native/.gitattributes` when committing the candidate. It preserves
+the checksums and executable bytes on checkouts that use automatic line-ending conversion.
+The runner fetches that Action revision with its ordinary repository access. Bundled runners
+need no Cargo installation, Python environment, release API access or additional token. The
+staging workflow has read-only repository permissions and never changes a branch or release tag.
+The source repository's own 128 KiB per-file default and 9 MiB total source-tree limit remain
+appropriate for the development branch.
+
+An unpublished source checkout without a bundle builds the selected Action's Rust sources with
+the pinned Rust 1.100.0 toolchain and `Cargo.lock`. This path requires Node, rustup, a native
+linker and access to the locked crates. It uses a fresh Cargo home and build directory. Compiler
+wrappers, consumer Cargo configuration, checkout caches and GitHub tokens stay outside the
+build environment. Toolchain installation has a two-minute deadline and compilation has a
+five-minute deadline. Bundled distributions require Node and skip toolchain and crate installation.
+
+For write-capable jobs, use a trusted runner and a pinned Action in a trusted default-branch
+workflow. Never check out or execute PR code in such a job. A local `uses: ./` in a privileged job
+requires the runner's default-branch checkout for a `pull_request_target` or `workflow_run` event.
+Setup takes its build sources or bundle pin from that exact Git commit. The workflow already
+controls the shell and Action definition the runner executes.
 
 ## Pull-request commit checks (`check: commit`)
 
@@ -88,11 +130,10 @@ jobs:
 The head checkout and complete history are required: YAGA refuses a synthetic merge checkout,
 shallow history, a missing object, an empty range, or a checkout that does not equal the event head.
 The `commit` runtime accepts no token input and has no write/API code path, and YAGA never fetches
-Git history or installs dependencies; the reference workflow grants only `contents: read`. It
+Git history; the reference workflow grants only `contents: read`. It
 strictly binds the event name, repository ID/name, base/head refs, and open PR payload to the
 runner context, strictly parses the PR author record used by the optional Dependabot policy, and
-caps workflow annotations at 50. Its pinned `uv` runtime bootstrap unsets `GITHUB_TOKEN` and
-`GH_TOKEN` and syncs only the hash-locked `--no-dev` environment outside the checkout before YAGA starts.
+caps workflow annotations at 50.
 
 This remains an unprivileged PR check and therefore a quality signal, not a security authority. The
 policy file comes from the PR-head worktree and can be changed by the PR; review policy changes like

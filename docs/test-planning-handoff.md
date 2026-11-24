@@ -151,29 +151,25 @@ and cleanup. Failed, cancelled, blocked, missing, or unexpectedly skipped work m
 If cancellation prevents aggregation, required checks must remain unsatisfied. Phase 3 does not
 replace any existing required aggregate.
 
-## Run the two example adapters
+## Run the two example policies
 
-The repository's
-[`examples/test-planning/fixed_handoff.py`](https://github.com/dariuszpanas/yaga/blob/main/examples/test-planning/fixed_handoff.py)
-contains literal maps for both catalogs. Run it from the YAGA checkout with locally available,
-explicit object IDs:
+Run the bundled example policies with the `yaga test plan` CLI (or embed `yaga_core::test_planning::handoff`
+in a Rust consumer) using explicit repository object IDs:
 
 ```bash
-uv run python examples/test-planning/fixed_handoff.py \
-  --catalog polyglot --policy docs/designs/examples/test-planning/polyglot.toml \
+yaga test plan \
+  --policy docs/designs/examples/test-planning/polyglot.toml \
   --profile development --repo /path/to/application --range BASE...CANDIDATE \
-  --execution-commit EXACT_CANDIDATE_COMMIT --execution-tree EXACT_CANDIDATE_TREE
+  --format json
 
-uv run python examples/test-planning/fixed_handoff.py \
-  --catalog django-ray --policy docs/designs/examples/test-planning/django-ray.toml \
+yaga test plan \
+  --policy docs/designs/examples/test-planning/django-ray.toml \
   --profile integration --repo /path/to/django-ray --revision CANDIDATE \
-  --execution-commit EXACT_CANDIDATE_COMMIT --execution-tree EXACT_CANDIDATE_TREE
+  --format json
 ```
 
-The adapter prints a handoff and executes nothing. Its definition digest covers its own exact
-example source bytes; it does not identify a real consumer's tools, images, or workflows. Replace
-that demonstration identity with the complete reviewed execution manifest before deployment.
-These runnable examples demonstrate selection and handoff, not successful qualification or savings.
+Planning emits a deterministic JSON plan document and executes nothing. Bind executor definitions
+explicitly via `--bindings-sha256` and evaluate completed receipts with `yaga test evaluate`.
 
 The [polyglot policy](designs/examples/test-planning/polyglot.toml) maps all five execution
 categories and their supporting suites:

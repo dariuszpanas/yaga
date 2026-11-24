@@ -7,6 +7,10 @@ gate is `agent-review`.
 
 ## Development
 
+GitHub Actions qualifies native changes on its platform runners. To reproduce those checks
+locally, `uv run make native-ci` exercises the Cargo consumer, installed wheel, standalone
+executable and Action together. Use `cargo test --locked -p yaga-core` for the library alone.
+
 Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) 0.12.7 or newer are required
 for the development workflow. CI pins uv separately for reproducibility; contributors may use
 newer uv releases. Use uv 0.13.0 or newer to download Python 3.15. CI tests Python 3.12
@@ -26,22 +30,29 @@ On Windows, put Git for Windows' Bash on `PATH` before the Windows/WSL Bash laun
 The full gate invokes
 `yaga repo check --plan .yaga/checks/ci.toml --commit HEAD --revision HEAD`; that explicit
 versioned plan selects the same providers, workflow paths, and committed-tree policies locally and
-in CI, including the Docker-backed `workflow-lint` provider. The installed CLI uses the locked
-Typer dependency. In the unified root `action.yml`, the write-capable `check: gate` import
-graph—`__main__` in gate mode, `action_cli`, `action`, `codex`, and the generic GitHub
-primitives—must remain Python-standard-library-only and must not import the installed CLI,
-command, commit-policy, or presentation modules. The read-only `check: commit` mode may import
-dependency-light commit modules, but never Typer, command modules, Codex policy, GitHub REST
-transport, site packages, or token handling. Installed-CLI `check` modes dispatch through
-`cli_action.py` inside a temporary hash-locked `--no-dev` `uv` virtual environment.
+in CI, including the Docker-backed `workflow-lint` provider. The composite Action executes the trusted Rust binary for commit,
+CLI-provider and gate modes. Its closed dispatcher preserves the tokenless commit boundary,
+the exact provider allowlists and the six write-capable gate operations. Keep the optional Python
+gate and commit API adapters isolated from CLI, presentation and unrelated policy imports.
+
+Declare new commands in the Rust CLI. Its help renderer reads Clap command metadata and
+uses fast-rich for terminal layout. Keep the checked-in help catalog for the established
+Typer command pages. Run `tests/test_native_terminal.py` with the built artifacts to compare
+redirected text, exit codes, wrapping and terminal styles across the Python reference,
+platform wheel and standalone executable.
 
 The package build gate must execute the fresh wheel outside the checkout. Export the publishable
 runtime closure from `uv.lock`, require its hashes without building dependencies, install the wheel
 with dependency resolution disabled, run `uv pip check`, and execute the installed `yaga` entrypoint
 with project and Python environment leakage removed.
 
-That strict build gate runs on Python 3.12. The Python 3.15 test jobs permit PyYAML's source-build
-fallback because the locked PyYAML release does not publish Python 3.15 wheels.
+The source archive includes the top-level source paths listed under
+`tool.hatch.build.targets.sdist` in `pyproject.toml`. Add any new distributable top-level
+directory or file there. The release build check compares the inventory with Git when run from a
+checkout. The extracted archive can rebuild wheels without Git metadata.
+
+That strict build gate runs on Python 3.12. PyYAML is used by development fixtures and the
+pre-rewrite reference package. Installed workflow checks use the Rust parser.
 
 The default `make ci` changed-path check covers only `HEAD^..HEAD`. To qualify a complete pull
 request, use exact base/head SHAs that are already available in complete local history, and run
@@ -84,28 +95,35 @@ engineering and test-fixture jobs so status checks are immediately self-explanat
 | `Commit Messages` | `.github/workflows/commit-policy.yml` | **Marketplace Action dogfooding** (`check: commit`, `pr-description`) | `[tool.yaga.commit]` in `pyproject.toml` (PR title + branch commits) and `.yaga/description-policy.toml` (PR body, rechecked on `edited`) |
 | `YAGA Checks (branch, change, policy, repo)` | `.github/workflows/ci.yml` | **Marketplace Action dogfooding** (`check: branch`, `change`, `policy`, `repo`) | `.yaga/branch-policy.toml`, `.yaga/change-policy.toml`, versioned schema audit across `.yaga/` and `pyproject.toml`, and `.yaga/checks/ci.toml` (`commit`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`) |
 | `Publish Pull Request Review` | `.github/workflows/pr-review.yml` | **Marketplace Action dogfooding** (`check: pr-triage` then `pr-review`, trusted `pull_request_target` / `workflow_run`) | `.yaga/triage-policy.toml` posts admission findings and holds unacknowledged external changes; `.yaga/agent-review-policy.toml` waits for head-bound Codex review before formal publication. |
-| `Lint, Package Build & Docs` | `.github/workflows/ci.yml` | **Repository engineering gate** | `ruff`, `ty`, `pre-commit` hook smoke, `actionlint` integration tests, strict wheel/sdist build (`scripts/check_build.py`), Zensical docs (`scripts/check_docs.py`, `scripts/check_description.py`), and `check: gate` stdlib wiring smoke |
-| `Python 3.12..3.15 on ubuntu/windows` | `.github/workflows/ci.yml` | **Repository test matrix** | Full `pytest` suite against non-editable installs |
-| `Minimum dependency security on ubuntu/windows` | `.github/workflows/ci.yml` | **Supply-chain & floor qualification** | Lowest-resolved runtime dependency smoke and `pip-audit` (`scripts/check_minimum_runtime.py`) |
-| `CI Prerequisites` | `.github/workflows/ci.yml` | **Required branch-ruleset aggregator** | Requires `yaga-checks`, `lint-and-build`, `test`, and `minimum-runtime` to all succeed so branch protection only needs `CI Prerequisites` + `Commit Messages` |
+| `Lint, Package Build & Docs` | `.github/workflows/ci.yml` | **Repository engineering gate** | `ruff`, `ty`, `pre-commit` hook smoke, strict zero-dependency wheel/sdist build, and Zensical docs |
+| `Rust CLI, tests, and wheel on ubuntu/windows` | `.github/workflows/ci.yml` | **Native product qualification** | Rustfmt, Clippy, workspace tests, independent Cargo consumer, installed platform wheel, standalone CLI, and packaging tests. Run locally with `uv run make native-ci`. |
+| `macOS ARM64 Rust tests and wheel` | `.github/workflows/ci.yml` | **Native wheel qualification** | Runs Rust workspace tests and builds/qualifies the `py3-none-macosx_11_0_arm64` wheel on macOS. |
+| `Python 3.12..3.15 wheel on ubuntu/windows` | `.github/workflows/ci.yml` | **Python launcher & packaging matrix** | Installs the zero-dependency wheel across Python versions and runs `pytest` |
+| `CI Prerequisites` | `.github/workflows/ci.yml` | **Required branch-ruleset aggregator** | Requires `yaga-checks`, `lint-and-build`, `native`, `macos-wheel`, and `test` to all succeed so branch protection only needs `CI Prerequisites` + `Commit Messages` |
 | `Action E2E Fixture (<scenario>)` | `.github/workflows/commit-adoption-qualification.yml` | **Synthetic Action fixture matrix** | Exercises `uses: ./` (`check: commit`) against disposable pass/fail/Dependabot test repositories |
-| `Hugging Face commit quality` | `.github/workflows/commit-quality.yml` | **Optional ML feature smoke** | Online + offline cache replay for `yaga commit quality` |
 
 ## CLI and commit policy contract
 
 The public installed command groups are `branch`, `change`, `commit`, `config`, `github`, `mode`,
 `path`, `policy`, `pull-request`, `repo`, `self`, `size`, `test`, `tree`, `workflow`, and `gate`.
-Keep Typer declarations in `src/yaga/commands/`; keep commit parsing, policy, Git selection,
-configuration, GitHub event adaptation, and reporting in focused dependency-light modules under
-`src/yaga/commits/`. Domain behavior must remain directly testable without invoking Typer.
+Define commands in `crates/yaga-cli` and keep their policy logic directly callable from
+`crates/yaga-core`. Commit parsing and configuration live in `crates/yaga-core/src/commits/`.
+The GitHub event adapter lives in `crates/yaga-core/src/github_commit/`.
+The Python package under `src/yaga/` is strictly a zero-dependency `uv`-style binary launcher
+that locates and executes the bundled `yaga` Rust executable and delegates `yaga self update`
+for `uv tool install yaga-cli` installations.
 
-Test planning lives under `src/yaga/test_planning/`; see the [command guide](docs/test-planning.md)
-and [design](docs/designs/test-planning.md). Keep explicit policy parsing separate from pure
-selection, reuse the neutral bounded matcher in `src/yaga/path_patterns.py`, and keep both examples
-executable in tests. `test policy check` requires one explicit file and no Git access; `test plan`
-requires policy, profile, and exactly one explicit range or revision. A revision-only plan requires
-a full profile. Keep Git collection in the source adapter, using `src/yaga/git/changes.py` and the
-shared bounded runtime; the pure planner must not discover Git or environment state. Range plans
+The native Action (`action.yml`) calls the standalone Rust dispatcher (`yaga __action ...`)
+directly without Python.
+
+Test planning lives under `crates/yaga-core/src/test_planning/`. Keep explicit policy parsing
+separate from pure selection, reuse the bounded path matcher in `yaga_core::paths`, and keep
+unit/integration tests in Rust (`crates/yaga-core` and `crates/yaga-cli/tests/`).
+See the [command guide](docs/test-planning.md) and [design](docs/designs/test-planning.md).
+`test policy check` requires one explicit file and no Git access. `test plan` requires policy,
+profile, and exactly one explicit range or revision. A revision-only plan requires
+a full profile. Collect range paths through `yaga_core::git::read_changed_paths` and keep Git
+and environment access outside pure selection. Range plans
 require complete history and exact endpoint/comparison/execution identities; revision plans need
 their selected commit and tree only. Both reject graft overlays and never fetch. Preserve exact
 policy-byte identity, optional binding SHA-256, canonical version-one plan digests, complete JSON
@@ -140,7 +158,8 @@ diagnostics to 256 with exact omitted counts. Adapters own provenance, custom ac
 and retry lineage; an artifact hash or green job alone cannot prove these. No execution, discovery,
 Git access, provider API, required-CI changes, or selective activation belongs in evaluation.
 
-All revision-bound providers use the dependency-free runtime under `src/yaga/git/`. Keep repository
+Revision-bound Rust providers share `crates/yaga-core/src/git/`. The portable Python package
+uses `src/yaga/git/` with the same process and repository boundaries. Keep repository
 and executable discovery, metadata and alternate-object-store boundaries, process execution,
 environment isolation, time and output limits, object identity parsing, and complete-history checks
 centralized there. Its hard wall-time boundary includes platform-native process-tree containment and
@@ -159,8 +178,8 @@ hard message/config/output/count bounds, shell-free Git invocation, and explicit
 or shallow history. Git-backed commit and range selection reject legacy graft overlays before and
 after reading parent metadata, and replacement refs remain disabled for every Git operation. Commit
 messages and Git output are untrusted terminal input: sanitize and bound anything displayed. The
-installed entrypoint must configure UTF-8 standard output and error before Typer renders
-user-controlled text; keep the legacy-console-encoding subprocess regression.
+standalone CLI and installed Python entry point must emit UTF-8 on stdout and stderr.
+Keep the subprocess regression for legacy console encodings.
 
 Configuration is schema version 1 in `[tool.yaga]` plus `[tool.yaga.commit]`, or in the standalone
 `.yaga.toml` root plus `[commit]`. Load exactly one nearest or explicit file, reject unknown keys and
@@ -229,7 +248,7 @@ diagnostics.
 must refuse to shadow any effective discovered configuration, never edit `pyproject.toml`, and keep
 its deterministic starter template round-trippable through the strict loader.
 
-Pull-request description policy lives under `src/yaga/descriptions/` and remains installed-only.
+Pull-request description policy lives under `crates/yaga-core/src/descriptions/` and remains installed-only.
 Require one explicit versioned policy and description source, plus an optional explicit template.
 Keep the Markdown subset and checker pure; file/stdin/event loading, explicit current-PR fetching,
 and bounded isolated Typos execution belong in adapters. File/stdin/event sources remain offline.
@@ -259,7 +278,7 @@ adapter validates supported open-PR events without claiming authenticated identi
 commit metadata. Keep both commands outside repository plans and both Action import graphs.
 See [pull-request descriptions](docs/pull-request-descriptions.md) for the complete public contract.
 
-Branch-name policy lives under `src/yaga/branches/` and remains installed-only. `branch check`
+Branch-name policy lives under `crates/yaga-core/src/branch/` and remains installed-only. `branch check`
 requires one explicit versioned policy and one explicit short name; never inspect Git, infer the
 current branch, discover policy, parse an event, normalize `refs/` or remote prefixes, or read an
 environment variable in the domain layer. Keep schema v1 closed to an ordered list of one through
@@ -271,7 +290,7 @@ YAGA portability boundary. CI adapters must select `github.head_ref` for pull re
 branch-only `github.ref_name` for pushes, copy it through an environment variable, and quote it as
 one argument. This provider must not enter either dependency-free Action import graph.
 
-Changed-path coupling lives under `src/yaga/changes/` and remains installed-only. Require one
+Changed-path coupling lives in `crates/yaga-core/src/paths/changes.rs` and remains installed-only. Require one
 explicit versioned policy and one explicit two-dot or three-dot Git range; never infer staged,
 working-tree, event, branch, or remote state. Keep schema v1 closed to named `when-any` plus
 `require-any` rules and its literal/`*`/component-`**` POSIX pattern grammar. Do not add regex,
@@ -286,7 +305,7 @@ ceiling. Keep exits `0` for pass, `1` for coupling findings, and `2` for
 policy/Git/operational failure. This provider does not enter either dependency-free Action import
 graph.
 
-Committed-tree policy lives under `src/yaga/trees/` and remains installed-only. `tree check`
+Committed-tree policy lives in `crates/yaga-core/src/paths/tree.rs` and remains installed-only. `tree check`
 requires one explicit versioned policy and one explicit commit-ish; the CLI may default only the
 repository path to `.`. Never infer `HEAD`, discover policy, fetch, parse an event, read tracked
 content, inspect the worktree/index/untracked set, or recurse into a gitlink. Schema v1 requires exact
@@ -311,7 +330,7 @@ runtime input and carries no provenance claim. Bound JSON/text/GitHub diagnostic
 weakening exact aggregate counts, and keep this provider outside both Action import graphs and the
 repository-plan v1 provider set until that contract is deliberately revised.
 
-Committed blob-size policy lives under `src/yaga/sizes/` and remains installed-only. `size check`
+Committed blob-size policy lives in `crates/yaga-core/src/paths/sizes.rs` and remains installed-only. `size check`
 requires one explicit versioned policy and one explicit commit-ish; only `--repo` may default to
 `.`. Never infer `HEAD`, discover policy, fetch, parse events, read the worktree/index/untracked
 set, or recurse into gitlinks. Schema v1 requires a nonnegative default blob limit, permits one
@@ -328,7 +347,7 @@ and shallow-checkout support only when selected objects are present. Reject lega
 before revision resolution and recheck after blob enumeration. Bound displayed findings while
 retaining exact totals, and keep the provider outside both Action graphs and repository-plan v1.
 
-Committed-path portability policy lives under `src/yaga/paths/` and remains installed-only.
+Committed-path portability policy lives in `crates/yaga-core/src/paths/portability.rs` and remains installed-only.
 `path check` requires one explicit versioned policy and one explicit commit-ish; only `--repo` may
 default to `.`. Never infer `HEAD`, discover policy, fetch, parse events, read tracked content, or
 inspect the worktree, index, or untracked set. Schema v1 selects exactly one frozen
@@ -350,7 +369,7 @@ legacy graft overlays before revision resolution and recheck after enumeration; 
 allowed when the selected objects exist. Keep this provider outside both Action import graphs and
 repository-plan v1.
 
-Committed entry-mode policy lives under `src/yaga/modes/` and remains installed-only. `mode check`
+Committed entry-mode policy lives in `crates/yaga-core/src/paths/modes.rs` and remains installed-only. `mode check`
 requires one explicit versioned policy and one explicit commit-ish; only `--repo` may default to
 `.`. Never infer `HEAD`, discover policy, fetch, parse events, read the worktree/index/untracked
 set, inspect tracked content or symlink targets, or recurse into gitlinks. Schema v1 requires one
@@ -372,10 +391,10 @@ exist. A permitted mode says nothing about shebangs, file content, ACLs, ownersh
 safety, `.gitmodules` consistency, submodule provenance, or object availability. Keep this
 provider outside both Action import graphs and repository-plan v1.
 
-Workflow reference policy lives under `src/yaga/workflows/` and remains installed-CLI-only. Parse
-untrusted YAML through the bounded pure-Python `SafeLoader` composition boundary without
-constructing Python objects or collapsing mapping pairs. Preserve source marks and duplicate keys;
-bound files, bytes, documents, nodes, depth, anchors, aliases, scalar sizes, expanded visits,
+Workflow reference policy lives under `crates/yaga-core/src/workflows/`. Its bounded YAML
+event parser preserves mapping pairs. The installed Python API uses that same parser through the
+native extension. Preserve source marks and duplicate keys. Bound files, bytes, documents,
+nodes, depth, anchors, aliases, scalar sizes, expanded visits,
 references, diagnostics, and displayed values. Keep immutable-reference checking separate from
 actionlint and out of both dependency-free composite Action import graphs. Treat `$/` local
 references as commit-bound; `./` is a compatibility path whose integrity depends on the caller's
@@ -384,8 +403,8 @@ lowercase SHA-256 digest policy to Docker Actions, job-container images, and ser
 images. Preserve GitHub's exact quoted-empty service-image disable case, but reject dynamic image
 expressions instead of approximating the Actions expression language.
 
-`workflow security` is a separate pure-Python provider over immutable, source-located facts from
-that same bounded composition. Keep `recommended-v1` frozen to its documented permission,
+`workflow security` checks immutable, source-located facts from that same bounded parse.
+Keep `recommended-v1` frozen to its documented permission,
 `write-all`, named-secret, and privileged-checkout rules, and keep it as the no-option default.
 `recommended-v2` is the explicit opt-in superset that also requires direct runner-resolved
 `actions/checkout` steps to set one literal `with.persist-credentials: false`; it does not inspect
@@ -412,7 +431,7 @@ instead of approximating checkout or expression behavior.
 `workflow lint` shares `workflow check`'s default and explicit path-selection contract, but it is an
 installed-only adapter around the fixed
 `rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667`
-container rather than a pure-Python schema linter. Keep its digest and hardening flags fixed: invoke
+container. Keep its digest and hardening flags fixed: invoke
 Docker without a shell or host mount. Build only a bounded deterministic synthetic repository:
 selected workflows, transitively called local reusable workflows, at most one native
 `.github/actionlint.yaml` or `.yml`, and actionlint's chosen local Action manifest (`action.yaml`
@@ -431,7 +450,7 @@ an uncertain late Docker create or unconfirmed cleanup is an operational failure
 for success, `1` for lint findings, and `2` for operational failure. The lint command and its runner
 must remain absent from both dependency-free composite Action import graphs.
 
-The installed-only `repo check` aggregate lives under `src/yaga/repository/`. It requires an
+The installed `repo check` aggregate lives under `crates/yaga-cli/src/repo/`. It requires an
 explicit, unique provider list closed to `commit`, `workflow`, `workflow-security`,
 `workflow-lint`, `mode`, `path`, `size`, and `tree`; never add an implicit `all` path that changes
 when a provider is introduced. Execute in that canonical order, load workflow inputs once, share
@@ -464,23 +483,16 @@ real `pre-commit try-repo` installation when changing the hook or package metada
 bypassable and cannot determine merge parent count, so they complement rather than replace CI range
 checks.
 
-In the unified root `action.yml`, `check: gate` uses the same `gate agent-review <operation>`
-command path through a fixed `YAGA_ACTION_RUNTIME=1` standard-library bootstrap. It installs no
-package and makes no network request for dependencies. Never accept `github-token` as argv,
-configuration, output, or logs.
+The root Action stages a native binary in a private runner temporary directory. Verify the
+release manifest against the pin in the trusted Action snapshot. Build unpublished sources
+only from the selected Action, with isolated Cargo state and the locked dependency graph. A
+privileged local checkout must match the runner's trusted default-branch SHA. Include time spent
+in setup in the gate deadline. Keep tokens out of setup, argv, diagnostics and output.
 
-Default `check: commit` uses its own closed `YAGA_COMMIT_ACTION_RUNTIME=1` entrypoint and the
-public `github pull-request check` path inside the shared hash-locked `--no-dev` `uv` virtual
-environment outside the checkout (`"$YAGA_RUNTIME_PYTHON" -I -m yaga`). It accepts no token or
-caller-selected revisions, unsets `GITHUB_TOKEN` and `GH_TOKEN` during both `uv sync` and check
-execution, validates one bounded event against the GitHub runner repository/ref identity, requires
-`HEAD` to equal the event head, and never fetches Git history. Keep its `edited`-aware workflow
-separate from the authenticated `CI` workflow used by the Codex gate. Its PR-head configuration is
-contributor-controlled and is only a quality signal. Installed-CLI `check` modes (`policy`,
-`pr-review`, `pr-triage`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`,
-`workflow-lint`, `mode`, `path`, `size`, and `tree`) reuse that hash-locked `--no-dev` runtime and
-execute through `cli_action.py`, passing `GH_TOKEN` only for live `pr` fetches in `pr-review`,
-`pr-triage`, and `pr-description`.
+Default `check: commit` runs the native event-bound checker without credentials. Installed CLI
+modes reject unused inputs before launching the verified executable from the consumer workspace.
+Only live PR modes receive `GH_TOKEN`. Gate operations use their own closed native dispatcher.
+The optional Python package retains its fixed, isolated compatibility entry points.
 
 ## Action contract
 
@@ -591,12 +603,16 @@ same-head transition.
 ## Testing and pull requests
 
 Add parser/checker tests for every new commit rule, strict configuration tests for every key,
-shell-free Git integration tests for selection behavior, and Typer runner tests for command/exit
-contracts. Keep a subprocess smoke proving `python -P -S -m yaga gate agent-review ...` reaches the
-dependency-free Action boundary without importing Typer.
+shell-free Git integration tests for selection behavior, and installed-product tests for command
+output and exits. Exercise the standalone executable and platform wheel, and use the portable
+Typer app from the separately installed pre-Rust release as the reference for established
+commands. Both the wheel launcher and ordinary calls to `yaga.cli.main()` run the packaged
+Rust executable. Python applications can still import and extend `yaga.cli.app`. Keep the subprocess check proving
+`python -P -S -m yaga gate agent-review ...` reaches the Python gate adapter without importing Typer.
 
-Keep generic transport/models/status primitives in `src/yaga/` and provider policy in
-`src/yaga/agent_review/github/`. Add focused tests for success, failed CI, direct/protected routing, unsolicited
+Keep native gate policy in `crates/yaga-core/src/agent_review/github/` and the compatible
+Python adapter in `src/yaga/agent_review/github/`. Add focused tests for success, failed CI,
+direct/protected routing, unsolicited
 external outcomes, exact request idempotency, malformed/incomplete APIs, deadline reserves,
 draft/ready/base/close races, same-head ambiguity, run supersession, status lineage, and
 case-insensitive collisions. Repository-contract tests pin public inputs, outputs, permissions,

@@ -28,6 +28,7 @@ first table needs GitHub credentials except explicit description or review `--pr
 | [`yaga github pull-request check`](github-actions.md) | Event snapshot, matching runner identity/checkout, complete commit history, and commit config. | Offline Git; no API/token. Typos if enabled; trusted `gpgv` for the opt-in signed Dependabot exemption, otherwise normal checks run. |
 | [`yaga github pull-request description check`](pull-request-descriptions.md#github-actions) | Explicit `--event-file`, `--policy`, optional `--template`. | Offline; no Git/checkout. Typos if enabled. |
 | [`yaga repo check`](repository-plans.md) | Explicit provider list or `--plan`; selected providers' runtime inputs. | Inherits each selected provider's tools and execution boundary. |
+| [`yaga repo inspect`](repository-plans.md) | One explicit `--plan`. | Native CLI. Reads the plan and reports what its providers require. |
 | [`yaga policy check`](configuration.md#policy-initialization-and-schema-audits) | Explicit policy TOML files or discovered repository policies in `--repo`; optional `--strict`. | Offline; validates schema versions, `required-version` floors, and deprecated schema versions. |
 
 `tree`, `path`, `mode`, and `size` do not see staged, untracked, or working-file changes. A
@@ -41,7 +42,7 @@ read that revision. Policies and workflow files remain current runtime inputs.
 | [`yaga test policy check`](test-planning.md) | Explicit policy via `--file`. | Offline; no Git or test execution. |
 | [`yaga test plan`](test-planning.md) | Explicit policy/profile and exactly one range or revision; revision requires a full profile. | Offline Git; no test execution. Range needs complete history; revision needs its commit/tree. |
 | [`yaga test evaluate`](test-planning.md#evaluate-normalized-results) | Explicit plan/results and independent policy, binding, commit/tree, run, and attempt identities. | Offline; no Git, provider API, or test execution. |
-| [`yaga commit quality`](commit-quality.md) | One message, file, stdin, commit, or range; default `HEAD`; quality config and optional provider overrides. | Optional provider extra. Hugging Face runs locally but may download models; cached `--offline` prevents downloads. Bedrock sends selected text remotely and needs AWS credentials/region/access. Git for history. |
+| [`yaga commit quality`](commit-quality.md) | One message, file, stdin, commit, or range. Defaults to `HEAD`. | Explicitly chosen API provider or a user-managed OpenAI-compatible server. Git for history. |
 | [`yaga gate agent-review policy check`](agent-review-gate.md) | Explicit named-lens policy via `--file`. | Offline; no agent execution or credentials. |
 | [`yaga gate agent-review policy plan`](agent-review-gate.md) | Explicit named-lens policy via `--file`. | Offline; describes work for an external adapter, does not run it. |
 | [`yaga gate agent-review policy template`](agent-review-gate.md) | Explicit named-lens policy via `--file`. | Offline; emits a pending receipt scaffold. |
@@ -59,10 +60,11 @@ structured operational errors use stderr. CLI usage errors may be plain text eve
 | --- | --- | --- | --- |
 | `commit check`; `workflow check`, `security`, `lint`; `tree`, `path`, `mode`, `size` checks | Text, JSON, GitHub; `0/1/2` | Exactly these eight providers; tree/path/mode/size require plan v2. | Root Action (`workflow`, `workflow-security`, `workflow-lint`, `tree`, `path`, `mode`, `size`); commit policy runs via default `check: commit` or `check: repo`. |
 | `repo check` | Text, JSON, GitHub; `0/1/2` with operational errors taking precedence | Runs a selected plan. | Root Action (`check: repo`). |
+| `repo inspect` | Text or JSON; `0/2` | Reads the selected plan. | Native CLI. |
 | `policy check` | Text, JSON, GitHub; `0/1/2` (`1` on deprecated schemas with `--strict`) | No. | Root Action (`check: policy`). |
 | `branch check`, `change check`, both description checks, `pull-request review check` | Text, JSON, GitHub; `0/1/2` | No. | Root Action (`branch`, `change`, `pr-description`, `pr-review`). |
 | `pull-request triage check` | Text, JSON, GitHub; `0` allow, `1` hold, `2` error | No. | Root Action `pr-triage`; review submission also accepts `triage-policy` in `pr-review`. |
-| `commit quality` | Text, JSON, GitHub; `0/1/2` | No. | None (requires optional model extras). |
+| `commit quality` | Text, JSON, GitHub; `0/1/2` | No. | None. |
 | `github pull-request check` | Text, JSON, GitHub; `0/1/2` | No. | Root Action default (`check: commit`). |
 | `test policy check`, `test plan` | Text, JSON; `0/2` | No. | None. |
 | `test evaluate` | Text, JSON; `0/1/2` | No. | None. |
@@ -72,7 +74,8 @@ structured operational errors use stderr. CLI usage errors may be plain text eve
 | `gate agent-review <operation>` | Lifecycle output; `GateError` returns `1`, not the policy-check error code | No. | Trusted write-capable root Action (`check: gate`). Nonempty `agent-review-policy-file` is rejected. |
 
 All installed commands can run in suitable ordinary CI with their stated prerequisites. The
-unified root Action isolates stdlib `gate` mode from the hash-locked `commit` and CLI check runtimes. Quality advice remains
+unified root Action dispatches the trusted Rust executable with separate inputs and credentials for
+gate, commit and other checks. Quality advice remains
 advisory; a plan is not evidence that tests or reviews ran. See [Usage modes](usage.md) and
 [Assess and adopt in CI](ci-adoption.md) before choosing required gates.
 

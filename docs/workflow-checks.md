@@ -29,12 +29,12 @@ it must not consume untrusted pull-request code in a write-capable workflow.
 
 The checker strictly bounds selected files, bytes, YAML nodes, depth, aliases, scalar sizes,
 references, and diagnostics. Its reported reference count includes selected `uses` values and
-container images. It composes a YAML node graph without constructing Python objects, so duplicate
-keys and merge keys remain visible and fail closed. Text, versioned JSON, and escaped GitHub
+container images. Its YAML parser preserves mapping entries so the checker can diagnose duplicate
+keys and reject merge keys. Text, versioned JSON, and escaped GitHub
 annotations use exit `0` for success, `1` for policy findings, and `2` for discovery, input, YAML,
 or resource-limit errors.
 
-`yaga workflow security` applies a narrow, pure-Python trust policy to the same bounded workflow
+`yaga workflow security` applies a trust policy to the same bounded workflow
 selection. The default, frozen `recommended-v1` profile requires an explicit read-only top-level
 `permissions` boundary, keeps write scopes at individual jobs, rejects `write-all`, requires named
 secret handoff instead of `secrets: inherit`, and hardens `actions/checkout` under privileged
@@ -90,8 +90,8 @@ default requires another versioned profile instead of silently changing an exist
 with `--profile`. Text, versioned JSON, and escaped GitHub output preserve the same `0`/`1`/`2`
 success, finding, and operational-error contract as the immutable-reference checker.
 
-`yaga workflow lint` complements that pure-Python reference policy with GitHub workflow syntax and
-schema checks. It accepts the same paths as `workflow check`: no paths selects direct `.yml` and
+`yaga workflow lint` runs actionlint's GitHub workflow syntax and schema checks.
+It accepts the same paths as `workflow check`: no paths selects direct `.yml` and
 `.yaml` children of `.github/workflows`, while explicit files or direct-child directories select
 other workflow sets.
 
@@ -100,7 +100,7 @@ yaga workflow lint
 yaga workflow lint .github/workflows examples --format github
 ```
 
-Linting requires Docker and runs the exact
+Linting requires the Docker CLI and a daemon that runs Linux containers. YAGA runs the pinned
 `rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667`
 container. YAGA does not bind the checkout into that container. It builds a bounded synthetic
 repository containing the selected workflows, their transitive local reusable workflows, the one
@@ -121,18 +121,19 @@ spelling that cannot be translated exactly fails closed.
 The lint container has networking disabled, a read-only root and snapshot, all capabilities
 dropped, `no-new-privileges`, fixed CPU and memory ceilings, a PID limit, and no Docker log driver.
 YAGA bounds discovery, support files, paths, YAML structure, archive entries and bytes, subprocess
-trees, time, output, diagnostics, and decoded JSON. It force-removes and verifies every labeled
-container and private volume, treating unconfirmed cleanup as an operational failure and naming the
-generated resource that needs manual removal. The configured Docker daemon or context may be
+trees, time, output, diagnostics, and decoded JSON. Docker automatically removes execution
+containers on exit. YAGA checks each private container and volume, force-removes any that remain,
+and verifies their absence. Unconfirmed cleanup is an operational failure that names the generated
+resource for manual removal. The configured Docker daemon or context may be
 remote and is therefore trusted with the bounded snapshot until cleanup is verified. An
 uncatchable process termination can bypass cleanup; leftover resources can be found
-with Docker's `label=io.yaga.actionlint.run` filter and should be inspected before removal. This is
-a pinned adapter around native actionlint, not a pure-Python schema linter. Sanitized text,
-versioned JSON, and escaped GitHub reports use exit `0` for success, `1` for lint findings, and `2`
-for Docker, snapshot, cleanup, input, or malformed-tool-output failures.
+with Docker's `label=io.yaga.actionlint.run` filter and should be inspected before removal.
+Sanitized text, versioned JSON, and escaped GitHub reports use exit `0` for success, `1` for lint
+findings, and `2` for Docker, snapshot, cleanup, input, or malformed-tool-output failures.
 
-All three workflow commands are installed-CLI providers, not composite Actions. Run them after
-installing the locked YAGA environment in ordinary unprivileged CI. Keep immutable-reference,
-security, and syntax diagnostics separate; none replaces another.
+Run these checks with the standalone CLI or the YAGA Checks composite Action in an unprivileged
+CI job. Set `check: workflow` for immutable references, `check: workflow-security` for trust
+policy, or `check: workflow-lint` for actionlint. To select paths, pass one file or directory per
+line in the Action's `workflow-paths` input. See [GitHub Actions](github-actions.md).
 
 See [command index](commands.md) for other checks and [adoption recipes](recipes.md) for CI setup.

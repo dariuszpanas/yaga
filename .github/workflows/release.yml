@@ -19,7 +19,9 @@ jobs:
       github.event_name == 'push' ||
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: "1.99.0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,6 +38,7 @@ jobs:
         with:
           version: "0.13.0"
           enable-cache: false
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component clippy --component rustfmt
       - run: uv sync --frozen --group dev --python 3.12
       - name: Validate release metadata and prepare notes
         env:
@@ -53,8 +56,8 @@ jobs:
         run: uv run --frozen make ci BUILD_ARGS="--output-dir dist"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: distributions
-          path: dist/
+          name: source-distribution
+          path: dist/*.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -65,15 +68,96 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  minimum-runtime:
-    name: Audit release minimum dependencies on ${{ matrix.os }}
+  native-binaries:
+    name: Verify standalone and Python wheel for ${{ matrix.target }}
     needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+        include:
+          - {os: ubuntu-24.04, target: x86_64-unknown-linux-musl}
+          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl}
+          - {os: macos-15-intel, target: x86_64-apple-darwin}
+          - {os: macos-15, target: aarch64-apple-darwin}
+          - {os: windows-latest, target: x86_64-pc-windows-msvc}
+          - {os: windows-11-arm, target: aarch64-pc-windows-msvc}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.0"
+          enable-cache: false
+      - name: Build and verify the standalone executable
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          host="$TARGET"
+          if [[ "$RUNNER_OS" == Linux ]]; then host="${TARGET%-musl}-gnu"; fi
+          version=1.99.0
+          # Windows 1.100 exposes the suspended primary thread handle directly.
+          if [[ "$RUNNER_OS" == Windows ]]; then version=1.100.0; fi
+          export RUSTUP_TOOLCHAIN="$version-$host"
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$RUSTUP_TOOLCHAIN" >> "$GITHUB_ENV"
+          rustup target add "$TARGET"
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            export MACOSX_DEPLOYMENT_TARGET="11.0"
+          fi
+          cargo build --locked --release --target "$TARGET" -p yaga-cli
+          binary="target/$TARGET/release/yaga"
+          if [[ "$RUNNER_OS" == Windows ]]; then binary+=".exe"; fi
+          uv sync --frozen --group dev --no-install-project --python 3.12
+          uv run --no-sync --python 3.12 python scripts/native_release.py stage "$TARGET" "$binary" native
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: standalone-${{ matrix.target }}
+          path: native/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Install and verify the actual standalone binary over loopback
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          binary="target/$TARGET/release/yaga"
+          if [[ "$RUNNER_OS" == Windows ]]; then binary+=".exe"; fi
+          YAGA_TEST_NATIVE_BINARY=$(uv run --no-sync --python 3.12 python -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$binary")
+          export YAGA_TEST_NATIVE_BINARY
+          uv run --no-sync --python 3.12 pytest -n 0 tests/test_native_installers.py
+
+      - name: Package and qualify the zero-dependency platform Python wheel
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          binary="target/$TARGET/release/yaga"
+          if [[ "$RUNNER_OS" == Windows ]]; then binary+=".exe"; fi
+          uv run --no-sync --python 3.12 python scripts/release_wheels.py build "$TARGET" native-wheel --prebuilt "$binary"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-wheel-${{ matrix.target }}
+          path: native-wheel/*.whl
+          if-no-files-found: error
+          retention-days: 7
+
+  python-assets:
+    name: Collect verified Python distributions
+    needs: [build, native-binaries]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -81,32 +165,47 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: distributions
-          path: dist/
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+          name: source-distribution
+          path: sdist/
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          enable-cache: false
-          version: "0.13.0"
-      - run: uv sync --frozen --group dev --python 3.12
-      - name: Qualify and audit the retained release wheel
-        shell: bash
-        env:
-          YAGA_MINIMUM_REPORT: ${{ runner.temp }}/minimum-runtime.json
-        run: >-
-          uv run --frozen --python 3.12 python scripts/check_minimum_runtime.py
-          --wheel dist/*.whl --report "$YAGA_MINIMUM_REPORT"
-      - name: Retain release minimum dependency evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          pattern: native-wheel-*
+          merge-multiple: true
+          path: wheels/
+      - run: python scripts/release_wheels.py assemble sdist wheels release-dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-minimum-runtime-${{ matrix.os }}
-          path: ${{ runner.temp }}/minimum-runtime.json
+          name: python-release
+          path: release-dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  native-assets:
+    name: Assemble verified standalone releases
+    needs: native-binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: standalone-*
+          merge-multiple: true
+          path: native/
+      - run: python scripts/native_release.py manifest native
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-release
+          path: native/
           if-no-files-found: error
           retention-days: 7
 
   publish:
     name: Publish to PyPI
-    needs: [build, minimum-runtime]
+    needs: [build, native-assets, python-assets]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -118,7 +217,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: distributions
+          name: python-release
           path: dist/
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
@@ -133,18 +232,22 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: distributions
+          name: python-release
           path: dist/
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
           path: release-notes/
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-release
+          path: native/
       - name: Announce the published version with its original artifacts
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: >-
-          gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz
+          gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz native/yaga-*
           --verify-tag --title "YAGA ${RELEASE_TAG#v}"
           --notes-file release-notes/release-notes.md

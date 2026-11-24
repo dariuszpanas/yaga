@@ -1,79 +1,67 @@
 # Get started
 
-This guide covers **YAGA 0.5.0 (Beta)**. YAGA requires Python 3.12 or newer. Install the **`yaga-cli`** distribution from PyPI;
-the executable and import package are **`yaga`**. The `yaga` distribution is an unrelated project.
-
-The core CLI is tested on Python 3.12 through 3.15. Python 3.15 installations currently use
-PyYAML's source-build fallback because PyYAML 6.0.3 does not publish Python 3.15 wheels.
-For optional model dependencies, see [commit quality installation](commit-quality.md).
+Use the standalone `yaga` executable or install the `yaga-cli` Python package. Both read the same
+policy files and support the same report formats. The PyPI distribution named `yaga` is unrelated.
 
 ## Install as a global tool
 
-A tool installer makes `yaga` available from any repository without adding it to each project's
-dependencies. Choose one installation method below.
+### Standalone installer
 
-### Convenience installer
-
-The scripts bootstrap uv when it is absent, then install the `yaga-cli` PyPI distribution in a
-per-user tool environment with Python 3.12. They do not require administrator access and do not
-install Git, Docker, Typos, or optional model dependencies.
-
-On macOS or Linux:
+On Linux and macOS:
 
 ```bash
 curl -fsSL https://dariuszpanas.github.io/yaga/install.sh | sh
 ```
 
-Or use wget:
+With GNU Wget:
 
 ```bash
 wget -qO- https://dariuszpanas.github.io/yaga/install.sh | sh
 ```
 
-The script reuses an existing uv installation. When uv needs to be installed, it prefers curl
-and falls back to wget if curl is unavailable. If neither downloader is available, it stops
-with instructions. A download failure stops installation rather than trying another downloader.
-
-In PowerShell:
+On Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://dariuszpanas.github.io/yaga/install.ps1 | iex"
+irm https://dariuszpanas.github.io/yaga/install.ps1 | iex
 ```
 
-`-ExecutionPolicy Bypass` applies to this PowerShell process; it does not persistently change your
-execution policy. This follows [uv's Windows installation instructions](https://docs.astral.sh/uv/getting-started/installation/#standalone-installer).
+The standalone release covers x86-64 and ARM64 on Linux, macOS and Windows. Linux binaries are
+statically linked with musl. Git-backed commands need a supported Git, spelling checks need
+Typos, and workflow lint needs Docker. For optional model-backed feedback, see
+[commit quality providers](commit-quality.md).
 
-You can [inspect the shell script](install.sh) or [PowerShell script](install.ps1), download it,
-and execute the saved file instead. These convenience commands execute downloaded code.
-The bootstrap uses uv 0.12.7; an existing uv is reused. Set `YAGA_VERSION` to a published final
-`X.Y.Z` release to pin YAGA, or omit it for the latest release. Set `YAGA_NO_MODIFY_PATH=1` to
-skip `uv tool update-shell`; then add the directory reported by `uv tool dir --bin` to `PATH`
-yourself. Standard uv environment variables, including `UV_TOOL_DIR` and `UV_TOOL_BIN_DIR`,
-remain supported. A failed download or install stops the script; it does not report success.
+Inspect the [shell installer](install.sh) or [PowerShell installer](install.ps1) to see what
+runs. To pin a version, download the script and run `sh install.sh --version X.Y.Z` or
+`.\install.ps1 -Version X.Y.Z`. With a piped installer, set `YAGA_VERSION` first. An unpinned
+install selects the latest release. The installer verifies the versioned SHA-256 manifest, the
+binary checksum and the executable's reported version before replacing a previous installation.
+It preserves executables owned by other package managers. Choose a separate install directory or
+remove a previous installation with its own manager before switching.
 
-Run the installer once, then use the update command below. An existing installation is managed
-by uv's normal conflict handling; the script does not force replacement of another executable.
+The default installation directory is `~/.local/bin` on all three systems. Pass
+`--install-dir <absolute-path>` (`-InstallDir` in PowerShell) or set `YAGA_INSTALL_DIR` to change it.
+On Unix the installer adds the directory to an existing shell's startup configuration for bash,
+zsh or sh if needed. In MSYS2, Git Bash or Cygwin it prints the export to run. PowerShell
+updates your per-user PATH. If the shell profile or per-user PATH cannot be updated, the
+installer prints a command that makes the installed executable available in the current shell.
+Set `YAGA_NO_MODIFY_PATH=1` to manage PATH yourself.
 
-### MSYS2, Git Bash, and Cygwin on Windows
+On a Unix runner without a home directory, pass an absolute install directory. The installer
+prints a PATH command you can use in the job. Zsh also honors an explicit `ZDOTDIR`.
 
-Use the shell installer above. Native Windows uv manages Windows' `PATH`, which may differ from
-your POSIX shell's `PATH`. The shell installer prints an export command with the resolved tool
-directory and the selected uv directory instead of invoking `uv tool update-shell` on these platforms.
-This also makes a freshly bootstrapped uv available. If uv is already on your PATH, you can resolve
-the directory yourself:
+Use `--python` (`-Python` in PowerShell) or `YAGA_INSTALL_METHOD=python` for a per-user uv tool
+environment. This path reuses uv or bootstraps uv 0.12.7 and selects Python 3.12. Published
+versions through 0.5.0 can use this path automatically when their native manifest is absent.
+Pass `--native` or set `YAGA_INSTALL_METHOD=native` to require a standalone release. An invalid
+checksum, missing binary or unsuccessful download always stops a native install.
 
-```bash
-export PATH="$(cygpath -u "$(uv --no-config tool dir --bin)"):$PATH"
-hash -r
-yaga --help
-```
+Private mirrors may set `YAGA_RELEASE_BASE_URL` to their trusted HTTPS releases base. The installer
+reads `latest/download/yaga-native-sha256.txt` or `download/vX.Y.Z/yaga-native-sha256.txt` and
+fetches the named executable under the exact version. A loopback fixture may use
+`http://127.0.0.1:PORT`. Only an explicitly selected loopback origin permits HTTP. Installation
+trusts the selected origin for both the manifest and the binary.
 
-Run them in your current shell; a piped installer cannot change its parent shell's environment.
-Add the export line to `~/.zshrc` for zsh or `~/.bashrc` for Bash to persist it. The installer
-does not edit these files. This also applies when installing with uv directly. uv itself must
-be on your shell's `PATH`.
-
-### uv (recommended)
+### Python with uv
 
 [Install uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
 
@@ -82,12 +70,10 @@ uv tool install --python 3.12 yaga-cli
 uv tool update-shell
 ```
 
-uv installs YAGA in an isolated environment for your user account and can download Python 3.12
-if needed. Open a new terminal after updating `PATH`, then run `yaga --help`.
-
-If the command is not found, `uv tool dir --bin` shows the directory to put on your `PATH`.
-Use `Get-Command yaga` in PowerShell or `command -v yaga` on macOS/Linux to find which executable
-is selected. `uv tool list` lists installed tools.
+Open a new terminal after updating PATH. Use `uv tool dir --bin` to locate your tool directory.
+The Python CLI supports Python 3.12 through 3.15. The wheel includes the Rust workflow parser.
+Standard uv settings, including `UV_TOOL_DIR` and `UV_TOOL_BIN_DIR`, apply to
+Python installations.
 
 ### pipx
 
@@ -123,7 +109,16 @@ terminals without activation, use uv or pipx above.
 
 ### Update or uninstall
 
-For a uv tool installation (including the convenience installer), run:
+Use `yaga self update --dry-run` to check which installation would be updated. For a standalone
+installation, `yaga self update` verifies the local receipt and installs the latest release from
+the configured source. Set `YAGA_RELEASE_BASE_URL` again when updating from a private mirror.
+On Windows the command prints a completion log and exits so the installer can replace the running
+executable. A successful update records `YAGA_UPDATE_EXIT_CODE=0` in that log.
+
+To uninstall, delete the installed `yaga` (Windows `yaga.exe`) and the adjacent
+`.yaga-native-receipt`. Repositories and policy files are independent of these files.
+
+For a uv tool installation, run:
 
 ```bash
 yaga self update --dry-run
@@ -224,18 +219,58 @@ hook reference.
 
 ## Install from a checkout
 
-Source installation is for contributors and users who want unreleased code. For normal use,
-choose a PyPI installation above.
+Start with a YAGA checkout at a revision you have reviewed. The examples below assume
+the checkout directory is named `yaga`.
+
+### Install the Rust CLI with Cargo
+
+From the root of the YAGA checkout, install the standalone executable with the dependency
+versions in `Cargo.lock`. Cargo builds this CLI without Python or uv.
 
 ```bash
-git clone https://github.com/dariuszpanas/yaga.git
-cd yaga
+cargo install --locked --path crates/yaga-cli
+yaga --version
 ```
 
-Checkout commands require uv 0.12.7 or newer. CI pins its own version for reproducibility.
-See [Contributing](contributing.md) for the development tool prerequisites.
+Cargo installs `yaga` in its bin directory (by default `~/.cargo/bin`). Include that directory
+on your `PATH` to use the installed command.
 
-To install the current source as a user-wide tool:
+### Use yaga-core in a Rust project
+
+For a Rust project next to the reviewed `yaga/` checkout, add the following dependency to
+your project's `Cargo.toml`. Adjust the relative path if the checkouts have a different layout.
+
+```toml
+[dependencies]
+yaga-core = { path = "../yaga/crates/yaga-core" }
+```
+
+This `src/main.rs` checks a branch against the same TOML policy that `yaga branch check`
+reads. Run `cargo run` from your project's root to use the example policy in the YAGA
+checkout. To check your project's rules, set `policy` to the path of its TOML file.
+
+```rust
+use std::path::Path;
+use yaga_core::branch::{BranchError, check_branch};
+
+fn main() -> Result<(), BranchError> {
+    let policy = Path::new("../yaga/.yaga/branch-policy.toml");
+    let checked = check_branch(policy, "feat/native-rust")?;
+    println!("{}", checked.report.valid());
+    Ok(())
+}
+```
+
+The example prints `true`. A path dependency uses the files in the selected checkout,
+including local edits.
+
+### Install the Python package from source
+
+Source and editable installs compile the CLI and Python extension with Cargo and rustc.
+Installing a matching release wheel includes both binaries and requires no Rust toolchain.
+
+For a user-wide Python tool, run these commands from the YAGA checkout with uv 0.12.7
+or newer:
 
 ```bash
 uv tool install --python 3.12 .

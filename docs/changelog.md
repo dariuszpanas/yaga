@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add checksum-verified standalone installers for Linux, macOS and Windows on x86-64 and ARM64.
+  Native installations run without Python. The existing Python tool installation remains available.
+
 - Add bounded `pull-request triage check` and root Action `check: pr-triage` with explicit
   versioned trust policy, immutable author/repository classification, sensitive-path and exact
   recent merged-tree findings, and optional idempotent comment publication. External admission
@@ -11,6 +14,12 @@
   the exact head/base/repository/PR/policy boundary. See [Pull-request trust triage](pull-request-triage.md).
 
 ### Changed
+
+- `commit quality` now requires an explicitly chosen API provider. Use OpenAI, Anthropic,
+  Gemini, Amazon Bedrock, or a user-managed OpenAI-compatible server such as Ollama.
+  The CLI and Python distributions retire bundled local model inference. Existing
+  quality settings remain readable for ordinary policy checks. See
+  [the migration guide](commit-quality.md#configuration-and-migration).
 
 - Automatic positive `pr-review` submission now requires explicit trusted `triage-policy`.
   Read-only review checks and negative-only publication remain compatible. The trusted dogfood

@@ -56,9 +56,10 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 
 ### Global defaults and project isolation
 
-For a global installation (uv tool, pipx, or system Python), a user configuration is a fallback
-only when no project configuration exists. Its location is `%APPDATA%/yaga/config.toml` on
-Windows and `$XDG_CONFIG_HOME/yaga/config.toml` (default `~/.config/yaga/config.toml`) elsewhere.
+The standalone CLI and global Python installations (uv tool, pipx, or system Python) use a user
+configuration as a fallback when no project configuration exists. Its location is
+`%APPDATA%/yaga/config.toml` on Windows and `$XDG_CONFIG_HOME/yaga/config.toml`
+(default `~/.config/yaga/config.toml`) elsewhere.
 It uses the standalone `.yaga.toml` shape. Create this file explicitly; installation does not
 create policy for you.
 
@@ -119,7 +120,10 @@ Use `yaga policy check` locally or via `check: policy` in GitHub Actions to vali
 yaga policy check --strict
 ```
 
-`yaga policy check` validates every file through its versioned Pydantic schema family and domain loader, checks `required-version` floors, warns on deprecated schema versions (such as `plan-version = 1` when `2` is current; exiting `1` with `--strict`), and exits `2` with an upgrade hint when a policy declares a newer schema version than the installed YAGA release knows.
+YAGA validates each policy against its declared schema version and checks its `required-version`
+constraint when present. A valid policy using a deprecated schema, such as `plan-version = 1`,
+produces a warning and exits `1` with `--strict`. A schema version newer than YAGA supports
+produces an upgrade hint and exits `2`.
 
 ## Commit policy keys
 
@@ -223,49 +227,24 @@ model would correctly recognize the words but overlook their blank-line layout.
 
 ### Quality advisory settings
 
-The optional model advisory reads `[tool.yaga.commit.quality]` in `pyproject.toml`, or
-`[commit.quality]` in `.yaga.toml`. These settings are defaults for `yaga commit quality`; every
-corresponding CLI option overrides them for one invocation. Credentials are never valid here.
-
-Quality reports count the complete selected message and its body lines, but those counts describe
-the input selection, not the model's token window. YAGA bounds the provider input to 12,000
-characters; Hugging Face classification and seq2seq adapters additionally tokenize with a 512-token
-limit, so a long message may be truncated at the model boundary. Keep exact structural and lexical
-requirements in the normal commit policy, which receives the complete bounded message, and use the
-quality result as an advisory signal.
+`yaga commit quality` reads `[commit.quality]` in `.yaga.toml`, or `[tool.yaga.commit.quality]`
+in `pyproject.toml`. Select a provider explicitly. CLI options override the selected file. The
+following standalone policy uses a model already served by Ollama on the same machine.
 
 ```toml
-[tool.yaga.commit.quality]
-provider = "huggingface"
-task = "classification"
-model = "saridormi/commit-message-quality-codebert"
-revision = "30c7895b3eb0270a3246ef3db7b43c837d8e553a"
-threshold = 0.70
-max-tokens = 32
-max-input-tokens = 512
-input-mode = "message"
+config-version = 1
+
+[commit.quality]
+provider = "openai-compatible"
+model = "llama3.2"
+input-mode = "title"
+max-tokens = 64
 ```
 
-`provider` is `huggingface` or `bedrock`; `task` is `classification` or `seq2seq`. The Bedrock
-provider currently supports `classification` only; `seq2seq` is a Hugging Face mode. Hugging Face
-requires a lowercase hexadecimal revision. Bedrock does not use `revision` and can set `region`
-and a provider-specific `model`. `max-tokens` is bounded from 1 through 256, while
-`threshold` is inclusive from 0 through 1; zero intentionally flags every nonnegative classifier
-score. `max-input-tokens` defaults to 512 and is bounded from 1 through 4096 for Hugging Face models.
-The CLI `--max-input-tokens` option overrides it for one invocation. Use `--config` when the quality
-settings should come from one explicit file rather than normal nearest-file discovery.
-
-`input-mode` controls the text sent to the provider. It accepts `message` (the default, sending the
-complete commit message including its body) or `title` (sending only the first line). Reports keep
-the selected message bounded for display, identify the mode, and include exact model-input
-character coverage so a title-only result is not mistaken for a full-message check. The CLI
-`--input-mode` option overrides this default for one invocation.
-
-The development quality extra uses PyTorch's CPU wheel index on Linux because YAGA's quality
-adapters run CPU inference; this avoids installing CUDA libraries in the hosted quality workflow.
-Windows and macOS retain their platform-specific PyTorch wheels. The build smoke test honors this
-declared, locked source while installing only the base runtime; the model cache is separate from the
-Python package cache, so changing or clearing one does not silently make the other complete.
+Use `message` to send the subject and body (the default), or `title` for just the first line.
+YAGA bounds each provider input to 12,000 characters and the requested output to 1–256 tokens.
+Store credentials outside TOML. The [commit quality guide](commit-quality.md) describes
+the five providers, how to select a server and how to migrate older local-model settings.
 
 ## Generate and inspect policy
 
@@ -285,8 +264,8 @@ the `.yaga.toml` path that would be created and marks the result as `dry_run` in
 
 ## Standalone provider policies
 
-The installed-only providers use separate schema-v1 files so a path policy cannot silently change
-a tree or workflow policy:
+Branch, change, and committed-tree checks each use a separate schema-v1 policy file. Repository
+checks can select providers with a versioned plan. The table lists the corresponding CLI options.
 
 | File | Required root | Runtime selection |
 | --- | --- | --- |
