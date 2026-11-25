@@ -61,10 +61,11 @@ expressions, shell fragments, or permission grants. A runner may translate a fix
 pytest markers, frontend projects/tags, Chainsaw selectors, or a reusable workflow.
 
 A variant is an explicit label resolved by the binding. There is no implicit Cartesian product,
-host-dependent discovery, or automatic dropping of unavailable variants. In v1, selecting a suite
-selects **every** declared variant. Use separate suites when different obligations require separate
-selection policies. Pin actual tool versions and image identities in the executor configuration;
-a label such as `node-supported` does not itself pin an environment.
+host-dependent discovery, or automatic dropping of unavailable variants. Selecting a suite via
+`select`, `select-tags`, `always`, or `full` mode selects **every** declared variant; rules and
+profiles may optionally target specific declared variants with `select-variants` and
+`always-variants` in selective mode. Pin actual tool versions and image identities in the executor
+configuration; a label such as `node-supported` does not itself pin an environment.
 
 Suite-level `needs` means all variants of every prerequisite. Reject cycles, self-dependencies,
 and missing IDs. Produce a deterministic topological order with lexicographic ID tie-breaking.
@@ -84,8 +85,8 @@ includes. The namespace is `test-policy-version`, independent of existing YAGA s
 | `no-impact` | Patterns acknowledging paths with no additional suite obligation; default empty |
 | `[[suites]]` | Required `id`, `binding`; optional `tags`, `variants`, `needs`, `requires` |
 | Suite defaults | Empty tags/dependencies/capabilities; variants default to `["default"]` |
-| `[profiles.<name>]` | Required `mode` (`selective` or `full`); optional `always` suite IDs, default empty |
-| `[[rules]]` | Required unique `id`, nonempty `when-any`; `select` IDs and/or `select-tags`, with a nonempty combined selection |
+| `[profiles.<name>]` | Required `mode` (`selective` or `full`); optional `always` suite IDs and `always-variants` map (`{ <suite> = ["<variant>", ...] }`), default empty |
+| `[[rules]]` | Required unique `id`, nonempty `when-any`; `select` IDs, `select-tags`, and/or `select-variants` map (`{ <suite> = ["<variant>", ...] }`), with a nonempty combined selection |
 
 Require at least one suite and one profile. All keys are closed. Reject wrong types, unsupported
 versions, duplicate array entries, duplicate IDs, unknown suite/profile/tag references, empty

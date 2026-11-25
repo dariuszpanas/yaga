@@ -10,6 +10,8 @@ pub struct Reason {
     pub rule: Option<String>,
     pub path: Option<String>,
     pub required_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variants: Option<Vec<String>>,
 }
 impl Reason {
     fn new(code: &str) -> Self {
@@ -159,22 +161,6 @@ pub fn plan_tests_with_path_repr(
         bytes: 2,
         limit: max_bytes,
     };
-    let mut selected: BTreeSet<_> = profile.always.iter().cloned().collect();
-    let mode = if profile.mode == Mode::Full {
-        reasons.add(Reason::new("test.profile-full"))?;
-        Mode::Full
-    } else {
-        let paths = paths.as_deref().ok_or_else(|| {
-            Error::Input("selective test planning requires explicit changed paths".into())
-        })?;
-        for id in &selected {
-            reasons.add(Reason {
-                suite: Some(id.clone()),
-                ..Reason::new("test.always")
-            })?;
-        }
-        classify(policy, paths, &mut selected, &mut reasons, max_work, quote)?
-    };
     let mut inventory = policy.suites.clone();
     inventory.sort_by(|a, b| a.id.cmp(&b.id));
     for s in &mut inventory {
@@ -184,18 +170,70 @@ pub fn plan_tests_with_path_repr(
         s.requires.sort();
     }
     let suites: BTreeMap<_, _> = inventory.iter().map(|s| (s.id.as_str(), s)).collect();
-    if mode == Mode::Full {
-        selected = suites.keys().map(|s| s.to_string()).collect();
+    let mut selected: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mode = if profile.mode == Mode::Full {
+        reasons.add(Reason::new("test.profile-full"))?;
+        Mode::Full
     } else {
-        let mut remaining = selected.clone();
+        let paths = paths.as_deref().ok_or_else(|| {
+            Error::Input("selective test planning requires explicit changed paths".into())
+        })?;
+        let always_whole: BTreeSet<&str> = profile.always.iter().map(String::as_str).collect();
+        for &id in &always_whole {
+            selected
+                .entry(id.to_owned())
+                .or_default()
+                .extend(suites[id].variants.iter().cloned());
+            reasons.add(Reason {
+                suite: Some(id.to_owned()),
+                ..Reason::new("test.always")
+            })?;
+        }
+        for (id, variants) in &profile.always_variants {
+            selected
+                .entry(id.clone())
+                .or_default()
+                .extend(variants.iter().cloned());
+            if !always_whole.contains(id.as_str()) {
+                let mut sorted = variants.clone();
+                sorted.sort();
+                reasons.add(Reason {
+                    suite: Some(id.clone()),
+                    variants: Some(sorted),
+                    ..Reason::new("test.always")
+                })?;
+            }
+        }
+        classify(
+            policy,
+            &suites,
+            paths,
+            &mut selected,
+            &mut reasons,
+            max_work,
+            quote,
+        )?
+    };
+    if mode == Mode::Full {
+        selected = suites
+            .iter()
+            .map(|(&id, s)| (id.to_owned(), s.variants.iter().cloned().collect()))
+            .collect();
+    } else {
+        let mut remaining: BTreeSet<String> = selected.keys().cloned().collect();
         while let Some(id) = remaining.pop_first() {
-            for need in &suites[&*id].needs {
+            for need in &suites[id.as_str()].needs {
                 reasons.add(Reason {
                     suite: Some(need.clone()),
                     required_by: Some(id.clone()),
                     ..Reason::new("test.prerequisite")
                 })?;
-                if selected.insert(need.clone()) {
+                let newly_added = !selected.contains_key(need);
+                selected
+                    .entry(need.clone())
+                    .or_default()
+                    .extend(suites[need.as_str()].variants.iter().cloned());
+                if newly_added {
                     remaining.insert(need.clone());
                 }
             }
@@ -204,18 +242,18 @@ pub fn plan_tests_with_path_repr(
     let mut ordered = Vec::new();
     while !selected.is_empty() {
         let ready = selected
-            .iter()
+            .keys()
             .find(|id| {
                 suites[id.as_str()]
                     .needs
                     .iter()
-                    .all(|n| !selected.contains(n))
+                    .all(|n| !selected.contains_key(n))
             })
             .expect("validated acyclic inventory")
             .clone();
-        selected.remove(&ready);
+        let variants = selected.remove(&ready).unwrap().into_iter().collect();
         ordered.push(SelectedSuite {
-            variants: suites[ready.as_str()].variants.clone(),
+            variants,
             suite: ready,
         });
     }
@@ -242,8 +280,9 @@ pub fn plan_tests_with_path_repr(
 
 fn classify(
     policy: &TestPolicy,
+    suites: &BTreeMap<&str, &Suite>,
     paths: &[String],
-    selected: &mut BTreeSet<String>,
+    selected: &mut BTreeMap<String, BTreeSet<String>>,
     reasons: &mut Reasons,
     max_work: usize,
     quote: impl FnOnce(&str) -> String,
@@ -277,22 +316,48 @@ fn classify(
         if matched.is_empty() {
             continue;
         }
-        let mut targets: BTreeSet<_> = rule.select.iter().collect();
-        targets.extend(
+        let mut whole_targets: BTreeSet<&str> = rule.select.iter().map(String::as_str).collect();
+        whole_targets.extend(
             policy
                 .suites
                 .iter()
                 .filter(|s| s.tags.iter().any(|t| rule.select_tags.contains(t)))
-                .map(|s| &s.id),
+                .map(|s| s.id.as_str()),
         );
-        selected.extend(targets.iter().map(|s| (*s).clone()));
+        for &id in &whole_targets {
+            selected
+                .entry(id.to_owned())
+                .or_default()
+                .extend(suites[id].variants.iter().cloned());
+        }
+        let mut variant_targets: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+        for (id, variants) in &rule.select_variants {
+            selected
+                .entry(id.clone())
+                .or_default()
+                .extend(variants.iter().cloned());
+            if !whole_targets.contains(id.as_str()) {
+                let mut sorted = variants.clone();
+                sorted.sort();
+                variant_targets.insert(id.as_str(), sorted);
+            }
+        }
         for i in matched {
             unclassified.remove(&i);
-            for id in &targets {
+            for &id in &whole_targets {
                 reasons.add(Reason {
-                    suite: Some((*id).clone()),
+                    suite: Some(id.to_owned()),
                     rule: Some(rule.id.clone()),
                     path: Some(paths[i].clone()),
+                    ..Reason::new("test.rule")
+                })?;
+            }
+            for (&id, variants) in &variant_targets {
+                reasons.add(Reason {
+                    suite: Some(id.to_owned()),
+                    rule: Some(rule.id.clone()),
+                    path: Some(paths[i].clone()),
+                    variants: Some(variants.clone()),
                     ..Reason::new("test.rule")
                 })?;
             }

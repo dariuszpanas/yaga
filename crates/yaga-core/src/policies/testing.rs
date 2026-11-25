@@ -4,7 +4,10 @@ use crate::paths::Pattern;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashSet, sync::LazyLock};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    sync::LazyLock,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -25,11 +28,13 @@ fn default_variants() -> Vec<String> {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Profile {
     pub mode: Mode,
     #[serde(default)]
     pub always: Vec<String>,
+    #[serde(default)]
+    pub always_variants: BTreeMap<String, Vec<String>>,
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -53,6 +58,8 @@ pub struct Rule {
     pub select: Vec<String>,
     #[serde(default)]
     pub select_tags: Vec<String>,
+    #[serde(default)]
+    pub select_variants: BTreeMap<String, Vec<String>>,
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -121,6 +128,29 @@ fn patterns(v: &[String], key: &str, min: usize) -> Result<(), String> {
     Ok(())
 }
 
+fn variant_targets(
+    targets: &BTreeMap<String, Vec<String>>,
+    suite_variants: &HashMap<&str, HashSet<&str>>,
+    label: &str,
+) -> Result<(), String> {
+    if targets.len() > 128 {
+        return Err(format!("{label} requires 0 through 128 immutable entries"));
+    }
+    for (suite, variants) in targets {
+        token(suite, label)?;
+        tokens(variants, label, 1, 16)?;
+        let Some(declared) = suite_variants.get(suite.as_str()) else {
+            return Err(format!("{label} references an unknown suite id"));
+        };
+        if variants.iter().any(|v| !declared.contains(v.as_str())) {
+            return Err(format!(
+                "{label} references an unknown variant for suite {suite}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl TestPolicy {
     pub fn parse(raw: &[u8]) -> Result<Self, String> {
         Self::decode(raw)
@@ -148,6 +178,7 @@ impl TestPolicy {
             return Err("rules requires 0 through 128 immutable SelectionRule entries".into());
         }
         let mut ids = HashSet::new();
+        let mut suite_variants: HashMap<&str, HashSet<&str>> = HashMap::new();
         let mut tags = HashSet::new();
         let mut capabilities = HashSet::new();
         let mut cells = 0;
@@ -165,6 +196,10 @@ impl TestPolicy {
             if !ids.insert(&s.id) {
                 return Err("suite ids must be unique".into());
             }
+            suite_variants.insert(
+                s.id.as_str(),
+                s.variants.iter().map(String::as_str).collect(),
+            );
             tags.extend(&s.tags);
             capabilities.extend(&s.requires);
             cells += s.variants.len();
@@ -188,6 +223,11 @@ impl TestPolicy {
             if p.always.iter().any(|s| !ids.contains(s)) {
                 return Err("profile always references an unknown suite id".into());
             }
+            variant_targets(
+                &p.always_variants,
+                &suite_variants,
+                "profile always-variants",
+            )?;
         }
         let mut rules = HashSet::new();
         patterns(&self.full_on, "full-on", 0)?;
@@ -198,9 +238,11 @@ impl TestPolicy {
             patterns(&r.when_any, "rule when-any", 1)?;
             tokens(&r.select, "rule select", 0, 128)?;
             tokens(&r.select_tags, "rule select-tags", 0, 128)?;
-            if r.select.is_empty() && r.select_tags.is_empty() {
+            variant_targets(&r.select_variants, &suite_variants, "rule select-variants")?;
+            if r.select.is_empty() && r.select_tags.is_empty() && r.select_variants.is_empty() {
                 return Err(
-                    "rule requires a nonempty combined select and select-tags selection".into(),
+                    "rule requires a nonempty combined select, select-tags, and select-variants selection"
+                        .into(),
                 );
             }
             if !rules.insert(&r.id) {

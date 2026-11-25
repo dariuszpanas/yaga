@@ -255,3 +255,319 @@ fn receipt_encoding_is_canonical_bounded_and_available_to_rust_producers() {
     assert_eq!(error.kind(), "configuration");
     assert_eq!(parse_results(document).unwrap().encode().unwrap(), bytes);
 }
+
+#[test]
+fn variant_targeting_supports_pruning_union_override_prerequisites_and_evaluation() {
+    let policy_bytes = br#"test-policy-version = 1
+full-on = ["Cargo.lock"]
+no-impact = ["README.md"]
+
+[[suites]]
+id = "build"
+binding = "cargo-build"
+variants = ["linux", "windows"]
+
+[[suites]]
+id = "unit"
+binding = "cargo-test"
+needs = ["build"]
+variants = ["linux", "macos", "windows"]
+
+[profiles.pr]
+mode = "selective"
+always-variants = { unit = ["linux"] }
+
+[profiles.pr-bare]
+mode = "selective"
+
+[profiles.release]
+mode = "full"
+
+[[rules]]
+id = "win-only"
+when-any = ["src/windows/**"]
+select-variants = { unit = ["windows"] }
+
+[[rules]]
+id = "mac-only"
+when-any = ["src/macos/**"]
+select-variants = { unit = ["macos"] }
+
+[[rules]]
+id = "shared"
+when-any = ["src/core/**"]
+select = ["unit"]
+"#;
+    let policy = TestPolicy::parse(policy_bytes).unwrap();
+    let registry = Registry::new(vec![
+        Executor {
+            suite: "build".into(),
+            binding: "cargo-build".into(),
+            dispatch: "build".into(),
+            variants: vec!["linux".into(), "windows".into()],
+            capabilities: vec![],
+            definition_sha256: "b".repeat(64),
+        },
+        Executor {
+            suite: "unit".into(),
+            binding: "cargo-test".into(),
+            dispatch: "unit".into(),
+            variants: vec!["linux".into(), "macos".into(), "windows".into()],
+            capabilities: vec![],
+            definition_sha256: "c".repeat(64),
+        },
+    ])
+    .unwrap();
+    let make_doc = |selection| {
+        PlanDocument::new(
+            &policy.sha256,
+            Some(registry.sha256()),
+            Source {
+                base_commit: Some("1".repeat(40)),
+                head_commit: Some("2".repeat(40)),
+                comparison_commit: Some("1".repeat(40)),
+                execution_commit: "2".repeat(40),
+                execution_tree: "3".repeat(40),
+            },
+            selection,
+        )
+        .unwrap()
+    };
+
+    // 1. Single-variant targeting keeps only `unit/windows` while expanding full prerequisite `build`.
+    let win_sel = plan_tests(&policy, "pr-bare", Some(&["src/windows/job.rs".into()])).unwrap();
+    assert_eq!(win_sel.effective_mode, Mode::Selective);
+    assert_eq!(
+        win_sel.selected,
+        vec![
+            SelectedSuite {
+                suite: "build".into(),
+                variants: vec!["linux".into(), "windows".into()],
+            },
+            SelectedSuite {
+                suite: "unit".into(),
+                variants: vec!["windows".into()],
+            },
+        ]
+    );
+    assert!(win_sel.reasons.iter().any(|r| {
+        r.code == "test.rule"
+            && r.suite.as_deref() == Some("unit")
+            && r.rule.as_deref() == Some("win-only")
+            && r.variants.as_deref() == Some(&["windows".to_owned()][..])
+    }));
+    let win_doc = make_doc(win_sel);
+    let encoded = win_doc.json().unwrap();
+    let decoded = parse_plan(serde_json::from_str(&encoded).unwrap()).unwrap();
+    assert_eq!(decoded.plan_digest, win_doc.plan_digest);
+    assert!(decoded.text().contains("variants=windows"));
+
+    // Diagnostics report partial breadth when all suite IDs are selected but matrix cells are pruned.
+    let diag = diagnostics::diagnose(&decoded, None).unwrap();
+    assert_eq!(diag["selection_breadth"], "partial");
+    assert_eq!(diag["counts"]["catalog_cells"], 5);
+    assert_eq!(diag["counts"]["selected_cells"], 3);
+
+    // Handoff and evaluation enforce exact selected cells only.
+    let handoff = create_handoff(
+        &decoded,
+        &registry,
+        &policy.sha256,
+        &decoded.plan.source.execution_commit,
+        &decoded.plan.source.execution_tree,
+    )
+    .unwrap();
+    assert_eq!(handoff["cells"].as_array().unwrap().len(), 3);
+    assert_eq!(handoff["selected"][1]["variants"], json!(["windows"]));
+
+    let expected = Expected {
+        policy_sha256: &policy.sha256,
+        bindings_sha256: registry.sha256(),
+        execution_commit: &decoded.plan.source.execution_commit,
+        execution_tree: &decoded.plan.source.execution_tree,
+        run_id: "run-win",
+        attempt: 1,
+    };
+    let pass_receipt = parse_results(json!({
+        "test-results-version": 1,
+        "plan_digest": decoded.plan_digest,
+        "policy_sha256": policy.sha256,
+        "bindings_sha256": registry.sha256(),
+        "execution_commit": decoded.plan.source.execution_commit,
+        "execution_tree": decoded.plan.source.execution_tree,
+        "run_id": "run-win",
+        "attempt": 1,
+        "results": [
+            {"suite": "build", "variant": "linux", "binding": "cargo-build", "outcome": "passed"},
+            {"suite": "build", "variant": "windows", "binding": "cargo-build", "outcome": "passed"},
+            {"suite": "unit", "variant": "windows", "binding": "cargo-test", "outcome": "passed"}
+        ]
+    }))
+    .unwrap();
+    assert!(evaluate(&decoded, &pass_receipt, expected).unwrap().passed);
+
+    // Unselected variant cell in receipt is rejected.
+    let extra_receipt = parse_results(json!({
+        "test-results-version": 1,
+        "plan_digest": decoded.plan_digest,
+        "policy_sha256": policy.sha256,
+        "bindings_sha256": registry.sha256(),
+        "execution_commit": decoded.plan.source.execution_commit,
+        "execution_tree": decoded.plan.source.execution_tree,
+        "run_id": "run-win",
+        "attempt": 1,
+        "results": [
+            {"suite": "build", "variant": "linux", "binding": "cargo-build", "outcome": "passed"},
+            {"suite": "build", "variant": "windows", "binding": "cargo-build", "outcome": "passed"},
+            {"suite": "unit", "variant": "linux", "binding": "cargo-test", "outcome": "passed"},
+            {"suite": "unit", "variant": "windows", "binding": "cargo-test", "outcome": "passed"}
+        ]
+    }))
+    .unwrap();
+    assert!(
+        evaluate(
+            &decoded,
+            &extra_receipt,
+            Expected {
+                policy_sha256: &policy.sha256,
+                bindings_sha256: registry.sha256(),
+                execution_commit: &decoded.plan.source.execution_commit,
+                execution_tree: &decoded.plan.source.execution_tree,
+                run_id: "run-win",
+                attempt: 1,
+            },
+        )
+        .is_err()
+    );
+
+    // 2. Multi-rule union merges variants deterministically in sorted order.
+    let union_sel = plan_tests(
+        &policy,
+        "pr-bare",
+        Some(&["src/windows/job.rs".into(), "src/macos/job.rs".into()]),
+    )
+    .unwrap();
+    assert_eq!(union_sel.selected[1].variants, vec!["macos", "windows"]);
+
+    // 3. Profile `always-variants` unions with matching rules and applies to empty diffs.
+    let always_sel = plan_tests(&policy, "pr", Some(&["src/windows/job.rs".into()])).unwrap();
+    assert_eq!(always_sel.selected[1].variants, vec!["linux", "windows"]);
+    assert!(always_sel.reasons.iter().any(|r| {
+        r.code == "test.always"
+            && r.suite.as_deref() == Some("unit")
+            && r.variants.as_deref() == Some(&["linux".to_owned()][..])
+    }));
+    let empty_sel = plan_tests(&policy, "pr", Some(&[])).unwrap();
+    assert_eq!(empty_sel.selected[1].variants, vec!["linux"]);
+
+    // 4. Whole-suite selection overrides partial variant targeting.
+    let whole_sel = plan_tests(
+        &policy,
+        "pr-bare",
+        Some(&["src/windows/job.rs".into(), "src/core/lib.rs".into()]),
+    )
+    .unwrap();
+    assert_eq!(
+        whole_sel.selected[1].variants,
+        vec!["linux", "macos", "windows"]
+    );
+
+    // 5. `full-on` fallback and `full` profile select all variants of all suites.
+    let full_trigger = plan_tests(&policy, "pr-bare", Some(&["Cargo.lock".into()])).unwrap();
+    assert_eq!(full_trigger.effective_mode, Mode::Full);
+    assert_eq!(
+        full_trigger.selected[1].variants,
+        vec!["linux", "macos", "windows"]
+    );
+    let release_sel = plan_tests(&policy, "release", None).unwrap();
+    assert_eq!(
+        release_sel.selected[1].variants,
+        vec!["linux", "macos", "windows"]
+    );
+}
+
+#[test]
+fn variant_targeting_rejects_invalid_policy_and_tampered_plan_variants() {
+    let header = "test-policy-version = 1\n[[suites]]\nid = 'unit'\nbinding = 'cargo'\nvariants = ['linux', 'windows']\n";
+    for bad in [
+        format!(
+            "{header}[profiles.pr]\nmode = 'selective'\n[[rules]]\nid = 'r'\nwhen-any = ['src/**']\nselect-variants = {{ unknown = ['linux'] }}\n"
+        ),
+        format!(
+            "{header}[profiles.pr]\nmode = 'selective'\n[[rules]]\nid = 'r'\nwhen-any = ['src/**']\nselect-variants = {{ unit = ['macos'] }}\n"
+        ),
+        format!(
+            "{header}[profiles.pr]\nmode = 'selective'\n[[rules]]\nid = 'r'\nwhen-any = ['src/**']\nselect-variants = {{ unit = [] }}\n"
+        ),
+        format!(
+            "{header}[profiles.pr]\nmode = 'selective'\n[[rules]]\nid = 'r'\nwhen-any = ['src/**']\nselect-variants = {{ unit = ['linux', 'linux'] }}\n"
+        ),
+        format!(
+            "{header}[profiles.pr]\nmode = 'selective'\n[[rules]]\nid = 'r'\nwhen-any = ['src/**']\nselect-variants = {{}}\n"
+        ),
+        format!(
+            "{header}[profiles.pr]\nmode = 'selective'\nalways-variants = {{ unit = ['macos'] }}\n"
+        ),
+    ] {
+        assert!(TestPolicy::parse(bad.as_bytes()).is_err(), "{bad}");
+    }
+
+    // Tampered plans dropping prerequisite variants, adding invalid reason variants, or dropping
+    // variants in full mode are rejected fail-closed by `parse_plan`.
+    let policy = TestPolicy::parse(
+        br#"test-policy-version = 1
+[[suites]]
+id = "build"
+binding = "cargo"
+variants = ["linux", "windows"]
+[[suites]]
+id = "unit"
+binding = "pytest"
+needs = ["build"]
+variants = ["linux", "windows"]
+[profiles.pr]
+mode = "selective"
+[[rules]]
+id = "win"
+when-any = ["src/win/**"]
+select-variants = { unit = ["windows"] }
+"#,
+    )
+    .unwrap();
+    let sel = plan_tests(&policy, "pr", Some(&["src/win/a.rs".into()])).unwrap();
+    let doc = PlanDocument::new(
+        &policy.sha256,
+        None,
+        Source {
+            base_commit: Some("1".repeat(40)),
+            head_commit: Some("2".repeat(40)),
+            comparison_commit: Some("1".repeat(40)),
+            execution_commit: "2".repeat(40),
+            execution_tree: "3".repeat(40),
+        },
+        sel,
+    )
+    .unwrap();
+    let original = serde_json::to_value(&doc).unwrap();
+    for case in 0..5 {
+        let mut wire = original.clone();
+        let p = &mut wire["plan"];
+        match case {
+            // Dropping a prerequisite variant is forbidden
+            0 => p["selected"][0]["variants"] = json!(["windows"]),
+            // Empty selected variants is forbidden
+            1 => p["selected"][1]["variants"] = json!([]),
+            // Unselected variant in reason is forbidden
+            2 => p["reasons"][1]["variants"] = json!(["linux"]),
+            // Explicit null variants on reason is forbidden
+            3 => p["reasons"][0]["variants"] = Value::Null,
+            // Variants attached to test.prerequisite reason is forbidden
+            _ => p["reasons"][0]["variants"] = json!(["linux"]),
+        }
+        let (_, encoded) = encode_plan_semantics(p.take()).unwrap();
+        assert!(
+            parse_plan(serde_json::from_str(&encoded).unwrap()).is_err(),
+            "case {case} should fail"
+        );
+    }
+}
