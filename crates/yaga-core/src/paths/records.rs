@@ -7,7 +7,9 @@ pub const MAX_TREE_OUTPUT: usize = 64 * 1024 * 1024;
 pub const MAX_ENTRIES: usize = 50_000;
 pub const MAX_BLOB_BYTES: u64 = (1 << 53) - 1;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum ModeKind {
     Regular,
@@ -61,7 +63,7 @@ impl ModeKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Entry<'a> {
     pub path: &'a str,
     pub oid: &'a str,

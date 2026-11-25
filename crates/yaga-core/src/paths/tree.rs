@@ -9,7 +9,7 @@ pub struct TreePolicy {
     forbidden: Vec<Pattern>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Finding<'a> {
     pub code: &'static str,
     pub message: &'static str,

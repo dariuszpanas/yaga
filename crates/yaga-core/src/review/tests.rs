@@ -1,8 +1,9 @@
-use super::{Snapshot, evaluate, in_progress, remote};
-use crate::{
-    agent_review::{Outcome, Policy},
-    gh::PullRequest,
-};
+#[cfg(feature = "process")]
+use super::remote;
+use super::{Snapshot, evaluate, in_progress};
+use crate::agent_review::{Outcome, Policy};
+#[cfg(feature = "process")]
+use crate::gh::PullRequest;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -126,6 +127,7 @@ fn rejects_duplicate_json_incomplete_pages_and_plan_changes() {
     );
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn remote_collection_authenticates_identity_before_reading_evidence() {
     let p = policy();

@@ -4,13 +4,17 @@ mod plan;
 #[cfg(test)]
 mod tests;
 pub use inspection::{PlanInspection, WorkflowSecurity};
-pub use plan::{PlanError, RepositoryPlan, load_plan, parse_plan, parse_plan_table, plan_path_key};
+#[cfg(feature = "process")]
+pub use plan::load_plan;
+pub use plan::{PlanError, RepositoryPlan, parse_plan, parse_plan_table, plan_path_key};
 
 use crate::text::safe_text;
+use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Provider {
     Commit,
     Workflow,

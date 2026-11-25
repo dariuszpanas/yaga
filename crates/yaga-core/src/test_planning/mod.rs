@@ -4,14 +4,19 @@ pub mod diagnostics;
 pub mod evaluation;
 pub mod handoff;
 mod report;
-pub use decode::{load_json, parse_plan, parse_plan_with_drive_syntax};
+#[cfg(feature = "process")]
+pub use decode::load_json;
+pub use decode::{parse_plan, parse_plan_with_drive_syntax};
 mod selection;
 #[cfg(test)]
 mod tests;
 pub use crate::policies::testing::{Mode, Profile, Rule, Suite, TestPolicy, UnknownPaths};
+#[cfg(feature = "process")]
 use crate::{
     fs::{read_regular_prefix, resolve_user_path},
     git::{GitError, read_changed_paths, resolve_repository_tree},
+};
+use crate::{
     paths::DriveSyntax,
     text::{python_repr, safe_text},
 };
@@ -21,7 +26,9 @@ pub use selection::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{fmt, path::Path};
+use std::fmt;
+#[cfg(feature = "process")]
+use std::path::Path;
 
 const MAX_BYTES: usize = 4 * 1024 * 1024;
 
@@ -29,12 +36,14 @@ const MAX_BYTES: usize = 4 * 1024 * 1024;
 pub enum Error {
     Configuration(String),
     Input(String),
+    #[cfg(feature = "process")]
     Git(GitError),
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Configuration(s) | Self::Input(s) => f.write_str(s),
+            #[cfg(feature = "process")]
             Self::Git(e) => e.fmt(f),
         }
     }
@@ -45,10 +54,12 @@ impl Error {
         match self {
             Self::Configuration(_) => "configuration",
             Self::Input(_) => "input",
+            #[cfg(feature = "process")]
             Self::Git(e) => e.kind(),
         }
     }
 }
+#[cfg(feature = "process")]
 impl From<GitError> for Error {
     fn from(e: GitError) -> Self {
         Self::Git(e)
@@ -76,6 +87,7 @@ fn resolve_profile<'a>(p: &'a TestPolicy, name: &str) -> Result<&'a Profile, Err
             ))
         })
 }
+#[cfg(feature = "process")]
 pub fn load_policy(path: &Path) -> Result<TestPolicy, Error> {
     let path = resolve_user_path(path).map_err(|_| {
         Error::Configuration(format!(
@@ -174,6 +186,7 @@ fn bounded(s: String, kind: &str) -> Result<String, Error> {
 }
 
 /// Collect exactly one explicit source and bind the resulting selection to its exact object IDs.
+#[cfg(feature = "process")]
 pub fn create_plan(
     repo: &Path,
     policy_path: &Path,

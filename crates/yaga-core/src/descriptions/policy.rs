@@ -1,16 +1,15 @@
 //! Strict schema-v1 policy for pull-request descriptions.
+#[cfg(feature = "process")]
+use crate::fs::{read_regular_prefix, resolve_user_path};
 use crate::{
     commits::TyposPolicy,
-    fs::{read_regular_prefix, resolve_user_path},
     text::{casefold, safe_text},
     version::{REQUIREMENT_TYPE_ERROR, check_requirement},
 };
 use regex::Regex;
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-    sync::LazyLock,
-};
+#[cfg(feature = "process")]
+use std::path::{Path, PathBuf};
+use std::{collections::HashSet, sync::LazyLock};
 use toml::Table;
 
 pub const MAX_DESCRIPTION_POLICY_BYTES: usize = 65536;
@@ -153,6 +152,7 @@ pub fn parse_description_table(doc: &Table) -> Result<DescriptionPolicy, String>
     Ok(policy)
 }
 
+#[cfg(feature = "process")]
 pub fn load_description_policy(path: &Path) -> Result<(DescriptionPolicy, PathBuf), String> {
     let error = "description policy could not be read as a regular file";
     let path = resolve_user_path(path).map_err(|_| error)?;

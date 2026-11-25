@@ -1,17 +1,19 @@
 use super::{Error, Kind, pretty_json, validate};
+use crate::{fs::display_path, text::safe_text};
+#[cfg(feature = "process")]
 use crate::{
-    fs::{absolute_path, display_path, read_regular_prefix, resolve_user_path},
-    text::{python_repr, safe_text},
+    fs::{absolute_path, read_regular_prefix, resolve_user_path},
+    text::python_repr,
 };
+use serde::Serialize;
 use serde_json::json;
-use std::{
-    collections::HashSet,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+#[cfg(feature = "process")]
+use std::{collections::HashSet, fs};
 use toml::Value;
 
 const MAX_FILES: usize = 128;
+#[cfg(feature = "process")]
 const MAX_DIRS: usize = 256;
 const MAX_BYTES: usize = 1024 * 1024;
 fn display(p: &Path) -> String {
@@ -36,7 +38,7 @@ fn decode_error(bytes: &[u8], error: std::str::Utf8Error) -> String {
     format!("invalid UTF-8 TOML: 'utf-8' codec can't decode {location}: {reason}")
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct AuditEntry {
     pub path: PathBuf,
     pub kind: Option<Kind>,
@@ -64,7 +66,7 @@ impl AuditEntry {
         self.kind.map_or("unknown", Kind::as_str)
     }
 }
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct AuditReport {
     pub entries: Vec<AuditEntry>,
     pub strict: bool,
@@ -222,63 +224,40 @@ pub fn classify_policy<'a>(
     }
     kinds
 }
-fn audit_file(path: &Path) -> Vec<AuditEntry> {
-    let resolved = match resolve_user_path(path) {
-        Ok(p) => p,
-        Err(error) => {
-            return vec![AuditEntry::invalid(
-                Path::new(&display_path(path)),
-                None,
-                format!(
-                    "cannot resolve policy path: {}",
-                    safe_text(&error.to_string(), 300)
-                ),
-            )];
-        }
-    };
-    let path = resolved.as_path();
-    let bad = |message: String| vec![AuditEntry::invalid(path, hint(path), message)];
-    let raw = match read_regular_prefix(path, MAX_BYTES) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            let message = if e.kind() == std::io::ErrorKind::NotFound {
-                format!(
-                    "[Errno 2] No such file or directory: {}",
-                    python_repr(&path.to_string_lossy())
-                )
-            } else {
-                e.to_string()
-            };
-            return bad(format!(
-                "cannot read policy file: {}",
-                safe_text(&message, 300)
-            ));
-        }
-    };
+fn parse_policy_toml(raw: &[u8]) -> Result<toml::Table, String> {
     if raw.len() > MAX_BYTES {
-        return bad(format!("policy file exceeds {MAX_BYTES} bytes"));
+        return Err(format!("policy file exceeds {MAX_BYTES} bytes"));
     }
-    let bytes = raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&raw);
-    let text = match std::str::from_utf8(bytes) {
-        Ok(s) => s,
-        Err(e) => return bad(decode_error(bytes, e)),
-    };
-    let doc: toml::Table = match toml::from_str(text) {
-        Ok(t) => t,
-        Err(e) => {
-            return bad(format!(
-                "invalid UTF-8 TOML: {}",
-                safe_text(e.message(), 300)
-            ));
-        }
-    };
+    let bytes = raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(raw);
+    let text = std::str::from_utf8(bytes).map_err(|e| decode_error(bytes, e))?;
+    toml::from_str(text).map_err(|e| format!("invalid UTF-8 TOML: {}", safe_text(e.message(), 300)))
+}
+
+fn classify_doc(path: &Path, doc: &toml::Table) -> Vec<Kind> {
     let yaga_keys = doc
         .get("tool")
         .and_then(|t| t.get("yaga"))
         .and_then(Value::as_table)
         .into_iter()
         .flat_map(|t| t.keys().map(String::as_str));
-    let kinds = classify_policy(path, |k| doc.contains_key(k), yaga_keys);
+    classify_policy(path, |k| doc.contains_key(k), yaga_keys)
+}
+
+/// Parse bounded TOML bytes and determine their policy families without touching the filesystem.
+pub fn classify_bytes(path: &Path, raw: &[u8]) -> Result<Vec<Kind>, Error> {
+    let doc = parse_policy_toml(raw).map_err(Error::Input)?;
+    Ok(classify_doc(path, &doc))
+}
+
+/// Classify and validate one in-memory policy document using the same bounds and schema checks as
+/// file-backed policy auditing.
+pub fn audit_bytes(path: &Path, raw: &[u8]) -> Vec<AuditEntry> {
+    let bad = |message: String| vec![AuditEntry::invalid(path, hint(path), message)];
+    let doc = match parse_policy_toml(raw) {
+        Ok(t) => t,
+        Err(message) => return bad(message),
+    };
+    let kinds = classify_doc(path, &doc);
     if kinds.is_empty() {
         return vec![AuditEntry::invalid(
             path,
@@ -311,7 +290,7 @@ fn audit_file(path: &Path) -> Vec<AuditEntry> {
                 .and_then(|t| t.get("required-version"))
                 .or_else(|| root.and_then(|t| t.get("required-version")))
                 .and_then(Value::as_str);
-            let (status, message) = match validate(kind, &raw, path) {
+            let (status, message) = match validate(kind, raw, path) {
                 Ok(actual) => {
                     source = Some(actual);
                     if actual < kind.current() {
@@ -342,6 +321,61 @@ fn audit_file(path: &Path) -> Vec<AuditEntry> {
         .collect()
 }
 
+/// Audit a bounded slice of in-memory `(path, bytes)` policy documents without touching the
+/// filesystem.
+pub fn audit_entries(inputs: &[(&Path, &[u8])], strict: bool) -> Result<AuditReport, Error> {
+    if inputs.len() > MAX_FILES {
+        return Err(Error::Input(format!(
+            "cannot audit more than {MAX_FILES} policy paths at once"
+        )));
+    }
+    Ok(AuditReport {
+        entries: inputs
+            .iter()
+            .flat_map(|&(path, raw)| audit_bytes(path, raw))
+            .collect(),
+        strict,
+    })
+}
+
+#[cfg(feature = "process")]
+fn audit_file(path: &Path) -> Vec<AuditEntry> {
+    let resolved = match resolve_user_path(path) {
+        Ok(p) => p,
+        Err(error) => {
+            return vec![AuditEntry::invalid(
+                Path::new(&display_path(path)),
+                None,
+                format!(
+                    "cannot resolve policy path: {}",
+                    safe_text(&error.to_string(), 300)
+                ),
+            )];
+        }
+    };
+    let path = resolved.as_path();
+    let raw = match read_regular_prefix(path, MAX_BYTES) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            let message = if e.kind() == std::io::ErrorKind::NotFound {
+                format!(
+                    "[Errno 2] No such file or directory: {}",
+                    python_repr(&path.to_string_lossy())
+                )
+            } else {
+                e.to_string()
+            };
+            return vec![AuditEntry::invalid(
+                path,
+                hint(path),
+                format!("cannot read policy file: {}", safe_text(&message, 300)),
+            )];
+        }
+    };
+    audit_bytes(path, &raw)
+}
+
+#[cfg(feature = "process")]
 fn inside(path: &Path, repo: &Path) -> Result<PathBuf, Error> {
     absolute_path(path)
         .ok()
@@ -354,6 +388,7 @@ fn inside(path: &Path, repo: &Path) -> Result<PathBuf, Error> {
             ))
         })
 }
+#[cfg(feature = "process")]
 fn audit_pyproject(path: &Path) -> bool {
     let Ok(raw) = read_regular_prefix(path, MAX_BYTES) else {
         return true;
@@ -370,6 +405,7 @@ fn audit_pyproject(path: &Path) -> bool {
     doc.get("tool")
         .is_some_and(|v| v.as_table().is_none_or(|t| t.contains_key("yaga")))
 }
+#[cfg(feature = "process")]
 fn discover(repo: &Path) -> Result<Vec<PathBuf>, Error> {
     let mut files = Vec::new();
     let mut seen = HashSet::new();
@@ -429,6 +465,7 @@ fn discover(repo: &Path) -> Result<Vec<PathBuf>, Error> {
     Ok(files)
 }
 
+#[cfg(feature = "process")]
 pub fn audit_policies(repo: &Path, paths: &[PathBuf], strict: bool) -> Result<AuditReport, Error> {
     let selected = if paths.is_empty() {
         let repo = resolve_user_path(repo)

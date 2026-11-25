@@ -2,13 +2,16 @@
 mod evaluate;
 mod evidence;
 mod markers;
+#[cfg(feature = "process")]
 mod remote;
+#[cfg(feature = "process")]
 mod service;
 mod snapshot;
 #[cfg(test)]
 mod tests;
 use crate::agent_review::{Aggregate, Outcome, Policy};
 use serde_json::Value;
+#[cfg(feature = "process")]
 pub use service::{Checked, Submit, check_live};
 pub use snapshot::Snapshot;
 use std::{collections::HashMap, fmt};

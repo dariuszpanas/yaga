@@ -3,7 +3,9 @@ use crate::json::strict_value;
 use crate::timestamp::parse_time;
 use regex::Regex;
 use serde_json::Value;
-use std::{collections::HashSet, path::Path, sync::LazyLock};
+#[cfg(feature = "process")]
+use std::path::Path;
+use std::{collections::HashSet, sync::LazyLock};
 
 pub(super) const MAX_INTEGER: u64 = (1 << 53) - 1;
 pub(super) const MAX_BYTES: usize = 1024 * 1024;
@@ -271,6 +273,7 @@ impl Snapshot {
     pub fn draft(&self) -> bool {
         self.draft
     }
+    #[cfg(feature = "process")]
     pub fn load(path: &Path) -> Result<Self, String> {
         let raw = crate::fs::read_regular_prefix(path, MAX_BYTES).map_err(|e| {
             format!(

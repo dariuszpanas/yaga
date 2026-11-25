@@ -1,9 +1,12 @@
 use super::{Provider, SECURITY_RULES, Selection, TREE_PROVIDERS, normalize_security};
+#[cfg(feature = "process")]
 use crate::fs::{absolute_path, display_path, resolve_user_path};
 use crate::text::{casefold, json_text, python_repr, safe_text};
 use crate::version::{REQUIREMENT_TYPE_ERROR, check_requirement};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
+#[cfg(feature = "process")]
 use std::fs::File;
+#[cfg(feature = "process")]
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -30,7 +33,48 @@ pub struct RepositoryPlan {
 }
 
 impl RepositoryPlan {
+    /// Validate and return canonical POSIX repository-relative policy paths without accessing
+    /// the filesystem.
+    pub fn relative_policy_paths(&self) -> Result<BTreeMap<Provider, String>, String> {
+        let mut seen = HashSet::new();
+        let mut paths = BTreeMap::new();
+        for (&provider, path) in &self.selection.policy_paths {
+            let key = format!("{}-policy", provider.name());
+            let raw = path
+                .to_str()
+                .ok_or_else(|| format!("{key} contains a non-portable repository-relative path"))?;
+            let folded = plan_path_key(raw, &key)?;
+            if !seen.insert(folded) {
+                return Err("repository policy paths must not be repeated".into());
+            }
+            paths.insert(provider, raw.to_owned());
+        }
+        Ok(paths)
+    }
+
+    /// Validate and return canonical POSIX repository-relative workflow paths without accessing
+    /// the filesystem.
+    pub fn relative_workflow_paths(&self) -> Result<Vec<String>, String> {
+        let mut seen = HashSet::new();
+        let mut paths = Vec::with_capacity(self.selection.workflow_paths.len());
+        for path in &self.selection.workflow_paths {
+            let raw = path.to_str().ok_or_else(|| {
+                "workflow-paths contains a non-portable repository-relative path".to_owned()
+            })?;
+            let folded = plan_path_key(raw, "workflow-paths")?;
+            if !seen.insert(folded) {
+                return Err(format!(
+                    "workflow-paths contains duplicate path {}",
+                    python_repr(raw)
+                ));
+            }
+            paths.push(raw.to_owned());
+        }
+        Ok(paths)
+    }
+
     /// Bind an on-disk plan's exact policy paths to the runtime repository.
+    #[cfg(feature = "process")]
     pub fn bind(mut self, repo: &Path) -> Result<Selection, String> {
         if !self.selection.policy_paths.is_empty() {
             let invalid =
@@ -51,6 +95,7 @@ impl RepositoryPlan {
     }
 }
 
+#[cfg(feature = "process")]
 pub fn load_plan(path: &Path) -> Result<RepositoryPlan, String> {
     let path = resolve_user_path(path).map_err(|_| {
         format!(

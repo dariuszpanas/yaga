@@ -11,11 +11,19 @@ Deterministic Git, commit, pull-request, workflow, test-planning, and repository
 yaga-core = "0.6"
 ```
 
-Optional Cargo features:
+For pure in-memory policy evaluation (without filesystem, subprocess, or OS-FFI dependencies):
 
-- `github-http`: bounded GitHub API HTTP transport (`ureq` with `rustls`)
-- `quality-http`: hosted OpenAI / Anthropic / Gemini / OpenAI-compatible commit quality clients
-- `quality-bedrock`: Amazon Bedrock Converse commit quality client
+```toml
+[dependencies]
+yaga-core = { version = "0.6", default-features = false }
+```
+
+Cargo features:
+
+- `process` (enabled by default): filesystem helpers, shell-free `git`/`gh`/`typos`/`docker` runners, policy discovery/init, and shell completions
+- `github-http`: bounded GitHub API HTTP transport (`ureq` with `rustls`; implies `process`)
+- `quality-http`: hosted OpenAI / Anthropic / Gemini / OpenAI-compatible commit quality clients (implies `process`)
+- `quality-bedrock`: Amazon Bedrock Converse commit quality client (implies `process`)
 
 ## Example
 

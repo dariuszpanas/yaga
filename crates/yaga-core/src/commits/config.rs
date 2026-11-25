@@ -1,11 +1,14 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+#[cfg(feature = "process")]
 use std::fs::File;
+#[cfg(feature = "process")]
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use toml::{Table, Value};
 
 use super::{policy::*, validate};
+#[cfg(feature = "process")]
 use crate::fs::resolve_user_path;
 use crate::version::{REQUIREMENT_TYPE_ERROR, check_requirement};
 
@@ -152,6 +155,7 @@ pub fn parse_config(bytes: &[u8], path: &Path) -> Result<LoadedConfig, String> {
 
 /// Select a single explicit or nearest policy, stopping at the first .git
 /// boundary. Supply a global path only when the installation permits fallback.
+#[cfg(feature = "process")]
 pub fn load_config(
     explicit: Option<&Path>,
     start: &Path,
@@ -225,6 +229,7 @@ pub fn global_config_path() -> Option<PathBuf> {
         .map(|p| p.join("yaga/config.toml"))
 }
 
+#[cfg(feature = "process")]
 fn read(path: &Path) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     File::open(path)

@@ -20,14 +20,14 @@ fn allowed(modes: &[ModeKind]) -> Result<Vec<ModeKind>, PathError> {
     Ok(modes)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Decision<'a> {
     pub path: &'a str,
     pub allowed_modes: &'a [ModeKind],
     pub pattern: Option<&'a str>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Finding<'a> {
     pub code: &'static str,
     pub message: &'static str,
@@ -38,7 +38,7 @@ pub struct Finding<'a> {
     pub pattern: Option<&'a str>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Report<'a> {
     pub finding_count: usize,
     pub diagnostics: Vec<Finding<'a>>,
