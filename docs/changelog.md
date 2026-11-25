@@ -23,6 +23,13 @@
   in `yaga-core::repository` to validate and return canonical POSIX repository-relative paths
   without touching the local filesystem.
 
+- Support optional per-variant targeting in `test-policy.toml` (`test-policy-version = 1`) via
+  `select-variants` on `[[rules]]` and `always-variants` on `[profiles.<name>]`. Rules union
+  targeted variants deterministically, whole-suite selection and `full` mode/fallback expand to
+  all declared variants, suite-level `needs` prerequisites retain all declared variants, and
+  `test evaluate` / `create_handoff` enforce exact selected cells while keeping existing v1 plans
+  byte-identical. See [Test planning](test-planning.md).
+
 ## [0.6.0] - 2026-11-24
 
 ### Added

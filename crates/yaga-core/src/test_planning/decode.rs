@@ -211,6 +211,7 @@ impl Plan {
                 Profile {
                     mode: selection.requested_mode,
                     always: vec![],
+                    always_variants: BTreeMap::new(),
                 },
             )],
             rules: vec![],
@@ -234,18 +235,34 @@ impl Plan {
             .iter()
             .map(|s| (s.id.as_str(), s))
             .collect();
-        let selected: BTreeSet<_> = selection
+        let selected_map: BTreeMap<_, _> = selection
             .selected
             .iter()
-            .map(|s| s.suite.as_str())
+            .map(|s| (s.suite.as_str(), &s.variants))
             .collect();
-        if selected.len() != selection.selected.len()
+        let selected: BTreeSet<_> = selected_map.keys().copied().collect();
+        if selected_map.len() != selection.selected.len()
             || selection.selected.iter().any(|s| {
-                suites
-                    .get(s.suite.as_str())
-                    .is_none_or(|t| s.variants != t.variants)
+                suites.get(s.suite.as_str()).is_none_or(|t| {
+                    if selection.effective_mode == Mode::Full {
+                        s.variants != t.variants
+                    } else {
+                        s.variants.is_empty()
+                            || s.variants.windows(2).any(|w| w[0] >= w[1])
+                            || s.variants
+                                .iter()
+                                .any(|v| t.variants.binary_search(v).is_err())
+                    }
+                })
             })
-            || (selection.effective_mode == Mode::Full && selected.len() != suites.len())
+            || (selection.effective_mode == Mode::Full && selected_map.len() != suites.len())
+            || selection.selected.iter().any(|s| {
+                suites[s.suite.as_str()].needs.iter().any(|need| {
+                    selected_map
+                        .get(need.as_str())
+                        .is_none_or(|variants| *variants != &suites[need.as_str()].variants)
+                })
+            })
         {
             return Err(bad());
         }
@@ -289,7 +306,21 @@ impl Plan {
                 "test.prerequisite" => [true, false, false, true],
                 _ => return Err(bad()),
             };
+            let variants_ok = match &r.variants {
+                None => true,
+                Some(vs) => {
+                    matches!(r.code.as_str(), "test.always" | "test.rule")
+                        && !vs.is_empty()
+                        && vs.windows(2).all(|w| w[0] < w[1])
+                        && r.suite.as_deref().is_some_and(|s| {
+                            selected_map.get(s).is_some_and(|chosen| {
+                                vs.iter().all(|v| chosen.binary_search(v).is_ok())
+                            })
+                        })
+                }
+            };
             if fields != expected
+                || !variants_ok
                 || r.suite.as_deref().is_some_and(|s| !selected.contains(s))
                 || r.rule.as_deref().is_some_and(|s| token(s, "rule").is_err())
                 || r.path.as_ref().is_some_and(|s| {

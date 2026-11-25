@@ -44,9 +44,11 @@ pub fn diagnose(doc: &PlanDocument, baseline: Option<&[String]>) -> Result<Value
                 .any(|r| r.code.strip_prefix("test.") == Some(name))
         })
         .unwrap_or("selective");
+    let catalog_cells: usize = s.inventory.iter().map(|i| i.variants.len()).sum();
+    let selected_cells: usize = s.selected.iter().map(|i| i.variants.len()).sum();
     let breadth = if selected.is_empty() {
         "empty"
-    } else if selected == catalog {
+    } else if selected == catalog && selected_cells == catalog_cells {
         "all"
     } else {
         "partial"
@@ -61,7 +63,7 @@ pub fn diagnose(doc: &PlanDocument, baseline: Option<&[String]>) -> Result<Value
             .filter(|p| !classified.contains(p.as_str()))
             .collect::<Vec<_>>()
     });
-    let doc = json!({"test-selection-diagnostics-version":1,"plan_digest":doc.plan_digest,"policy_sha256":p.policy_sha256,"bindings_sha256":p.bindings_sha256,"source":p.source,"profile":s.profile,"requested_mode":s.requested_mode,"effective_mode":s.effective_mode,"selection_breadth":breadth,"fallback_cause":fallback,"counts":{"catalog_suites":catalog.len(),"selected_suites":selected.len(),"catalog_cells":s.inventory.iter().map(|i|i.variants.len()).sum::<usize>(),"selected_cells":s.selected.iter().map(|i|i.variants.len()).sum::<usize>(),"changed_paths":s.changed_paths.as_ref().map(Vec::len)},"full_trigger_paths":paths_for("test.full-trigger"),"unknown_paths":paths_for("test.unknown-path"),"no_impact_paths":paths_for("test.no-impact"),"paths_without_recorded_classification":unclassified,"rules":rules,"comparison":comparison});
+    let doc = json!({"test-selection-diagnostics-version":1,"plan_digest":doc.plan_digest,"policy_sha256":p.policy_sha256,"bindings_sha256":p.bindings_sha256,"source":p.source,"profile":s.profile,"requested_mode":s.requested_mode,"effective_mode":s.effective_mode,"selection_breadth":breadth,"fallback_cause":fallback,"counts":{"catalog_suites":catalog.len(),"selected_suites":selected.len(),"catalog_cells":catalog_cells,"selected_cells":selected_cells,"changed_paths":s.changed_paths.as_ref().map(Vec::len)},"full_trigger_paths":paths_for("test.full-trigger"),"unknown_paths":paths_for("test.unknown-path"),"no_impact_paths":paths_for("test.no-impact"),"paths_without_recorded_classification":unclassified,"rules":rules,"comparison":comparison});
     bounded(format!("{}\n", canonical(doc.clone())), "test diagnostics")?;
     Ok(doc)
 }

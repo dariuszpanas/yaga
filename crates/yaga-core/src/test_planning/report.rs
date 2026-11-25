@@ -81,6 +81,9 @@ impl PlanDocument {
                     sep = "; ";
                 }
             }
+            if let Some(variants) = &r.variants {
+                write!(out, "{sep}variants={}", variants.join(",")).unwrap();
+            }
             out.push('\n');
         }
         if s.reasons.len() > 256 {

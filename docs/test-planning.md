@@ -103,14 +103,21 @@ used those objects.
 
 ## Understand the selection
 
-Rules add obligations. Each matching rule selects its named suites and every suite carrying one of
-its selected tags. The profile's `always` suites remain required. Prerequisite suites are added
-transitively and ordered before dependents; every selected suite retains all of its variants.
+Rules add obligations. Each matching rule selects its named suites (`select`), every suite
+carrying one of its selected tags (`select-tags`), and any explicitly targeted variants
+(`select-variants = { <suite-id> = ["<variant>", ...] }`). The profile's `always` suites (all
+variants) and optional `always-variants` entries remain required.
+
+When multiple rules or `always` entries select the same suite, their targeted variants are
+unioned; any whole-suite selection (`select`, `select-tags`, `always`, `full-on`, or full
+profile/fallback) expands the suite to all of its declared variants. Prerequisite suites
+(`needs`) are added transitively with all of their declared variants and ordered before
+dependents.
 
 A `full-on` match selects the entire catalog. Otherwise an unknown path defaults to full selection,
 or causes an error when `unknown-paths = "error"`. `no-impact` acknowledges a path without adding a
-suite, but cannot undo another rule or a mandatory obligation. An empty diff selects only `always`;
-an empty selection is a valid zero-obligation plan, not a test success.
+suite, but cannot undo another rule or a mandatory obligation. An empty diff selects only `always`
+and `always-variants`; an empty selection is a valid zero-obligation plan, not a test success.
 
 | Reason code | Meaning |
 | --- | --- |
@@ -166,12 +173,15 @@ and `plan`. The semantic `plan` object contains:
 | `changed_paths` | Complete sorted paths, or null for a revision-only plan |
 | `inventory` | Complete normalized suite definitions, including unselected suites |
 | `selected` | Topologically ordered `{suite, variants}` records with sorted variant IDs |
-| `reasons` | Sorted, deduplicated `{code, suite, rule, path, required_by}` records |
+| `reasons` | Sorted, deduplicated `{code, suite, rule, path, required_by}` records (with optional `variants` when targeted via `select-variants` or `always-variants`) |
 
 For revision-only plans, `base_commit`, `head_commit`, and `comparison_commit` are null. Every reason
-has all five keys; irrelevant values are null. Inventory is sorted by suite ID and contains the
+has the five base keys (`code`, `suite`, `rule`, `path`, `required_by`) with irrelevant values as
+null; `test.rule` and `test.always` reasons created by `select-variants` or `always-variants`
+additionally include a sorted nonempty `variants` array (omitted on whole-suite reasons so
+existing v1 plans remain byte-identical). Inventory is sorted by suite ID and contains the
 suite's `id`, `binding`, `tags`, `variants`, `needs`, and `requires`. Selection order uses
-lexicographic tie-breaking among available prerequisites. Reasons sort by the five listed fields,
+lexicographic tie-breaking among available prerequisites. Reasons sort by the listed fields,
 with null before strings.
 
 `plan_digest` is SHA-256 of the `plan` object encoded as UTF-8 JSON with sorted keys, compact
