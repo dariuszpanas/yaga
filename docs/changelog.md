@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add an optional default `process` Cargo feature in `yaga-core` so pure in-memory Rust consumers
+  can depend on `yaga-core = { default-features = false }` without compiling filesystem,
+  subprocess, or OS-FFI crates (`git`, `gh`, `actionlint`, `typos`, `tempfile`, `libc`, `rustix`,
+  `win32job`, `windows-sys`). Default `yaga-core` behavior is unchanged.
+
+- Add pure byte-slice policy classification and auditing helpers (`policies::classify_bytes`,
+  `policies::audit_bytes`, `policies::audit_entries`) and re-export `policies::AuditEntry` (plus
+  keep `policies::render_starter` available without `process`) so callers can validate in-memory
+  policy bytes with the same schema and byte-limit checks as `audit_policies`.
+
+- Derive or implement `serde::Serialize` consistently across pure evaluator report and diagnostic
+  types in `yaga-core` (`branch::BranchReport`, `descriptions::Report`, `paths::changes`,
+  `paths::modes`, `paths::portability`, `paths::records`, `paths::sizes`, `paths::tree`,
+  `policies::AuditEntry`, `policies::AuditReport`, `repository::Provider`, and `workflows`).
+
+- Add `RepositoryPlan::relative_policy_paths()` and `RepositoryPlan::relative_workflow_paths()`
+  in `yaga-core::repository` to validate and return canonical POSIX repository-relative paths
+  without touching the local filesystem.
+
 ## [0.6.0] - 2026-11-24
 
 ### Added

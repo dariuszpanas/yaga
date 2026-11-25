@@ -1,5 +1,6 @@
 //! Bounded workflow input discovery, YAML composition and policy evaluation.
 mod facts;
+#[cfg(feature = "process")]
 mod inputs;
 pub use facts::{Bundle, check_fact_document};
 mod inspect;
@@ -10,15 +11,17 @@ mod tags;
 mod tests;
 mod yaml;
 use crate::text::safe_text;
+#[cfg(feature = "process")]
 pub use inputs::{
     DiscoveryLimits, HostSelection, WorkflowInput, discover_inputs, discover_inputs_with,
     load_inputs,
 };
 pub use references::{check_image, check_uses};
+use std::sync::Arc;
+#[cfg(feature = "process")]
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 use yaml::{Position, Value};
 
@@ -88,7 +91,7 @@ impl Default for Limits {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub struct Diagnostic {
     pub line: usize,
     pub column: usize,
@@ -105,13 +108,18 @@ impl Diagnostic {
         }
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ReferenceContext {
     Job,
     Step,
 }
-#[derive(Debug)]
+fn serialize_arc_str<S: serde::Serializer>(value: &Arc<str>, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(value)
+}
+#[derive(Debug, serde::Serialize)]
 pub struct Reference {
+    #[serde(serialize_with = "serialize_arc_str")]
     pub value: Arc<str>,
     pub context: ReferenceContext,
     pub line: usize,
@@ -119,6 +127,7 @@ pub struct Reference {
     /// UTF-8 byte span of the exact value within the original BOM-stripped YAML.
     pub source_start: Option<usize>,
     pub source_end: Option<usize>,
+    #[serde(skip)]
     pub(super) scalar_id: usize,
 }
 #[derive(Debug)]
@@ -164,6 +173,7 @@ pub fn parse_with_limits(raw: &[u8], label: &str, limits: Limits) -> Result<Pars
 
 /// Leave malformed YAML in the staged snapshot for actionlint's own diagnostics.
 /// Resource limits and other input failures stop staging.
+#[cfg(feature = "process")]
 pub(crate) fn parse_for_actionlint(raw: &[u8], label: &str) -> Result<Option<ParsedInput>, String> {
     match parse_document(raw, label, Limits::default()) {
         Ok(input) => Ok(Some(input)),
@@ -245,6 +255,7 @@ pub fn parse_manifest_with_limits(
     Ok((graph.nodes.len(), dependencies))
 }
 
+#[cfg(feature = "process")]
 pub fn parse_inputs(inputs: &[WorkflowInput]) -> Result<Vec<ParsedInput>, String> {
     if inputs.is_empty() {
         return Err("preloaded workflow inputs must be a nonempty tuple".into());

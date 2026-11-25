@@ -1,4 +1,5 @@
 use super::*;
+use std::path::Path;
 
 fn policy(patterns: &[&str]) -> BranchPolicy {
     BranchPolicy::new(patterns.iter().copied().map(str::to_owned).collect()).unwrap()

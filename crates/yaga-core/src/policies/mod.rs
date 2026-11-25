@@ -1,5 +1,6 @@
 //! Repository policy schema registry, starter generation and version auditing.
 mod audit;
+#[cfg(feature = "process")]
 mod init;
 pub mod selector;
 pub mod testing;
@@ -13,10 +14,14 @@ use crate::{
     text::safe_text,
     version::*,
 };
-pub use audit::{AuditReport, Format, audit_policies, classify_policy};
+#[cfg(feature = "process")]
+pub use audit::audit_policies;
+pub use audit::{
+    AuditEntry, AuditReport, Format, audit_bytes, audit_entries, classify_bytes, classify_policy,
+};
+#[cfg(feature = "process")]
 pub use init::{
-    InitConflict, InitReport, InitSelection, PreparedPolicy, existing_policies,
-    initialize_policies, render_starter,
+    InitConflict, InitReport, InitSelection, PreparedPolicy, existing_policies, initialize_policies,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::HashSet, fmt, hash::Hash, path::Path};
@@ -157,4 +162,61 @@ pub fn pretty_json(obj: &serde_json::Value) -> String {
         }
     }
     ascii
+}
+
+/// Render a versioned policy starter, including the selected committed-tree providers.
+pub fn render_starter(kind: Kind, active: &HashSet<Kind>) -> String {
+    if kind == Kind::Repo {
+        let mut providers = vec!["commit", "workflow", "workflow-security", "workflow-lint"];
+        let (mut enabled, mut disabled) = (vec![], vec![]);
+        for kind in TREE_KINDS {
+            let line = format!("{}-policy = \"{}\"", kind.as_str(), kind.default_path());
+            if active.contains(&kind) {
+                providers.push(kind.as_str());
+                enabled.push(line);
+            } else {
+                disabled.push(format!("# {line}"));
+            }
+        }
+        let mut s = String::from("# YAGA repository check plan\nplan-version = 2\nchecks = [\n");
+        s.push_str(
+            &providers
+                .iter()
+                .map(|v| format!("    \"{v}\""))
+                .collect::<Vec<_>>()
+                .join(",\n"),
+        );
+        s.push_str("\n]\nworkflow-security-profile = \"recommended-v3\"\n");
+        if !enabled.is_empty() {
+            s.push('\n');
+            s.push_str(&enabled.join("\n"));
+            s.push('\n');
+        }
+        if !disabled.is_empty() {
+            s.push_str("\n# Uncomment after initializing committed-tree policies:\n");
+            s.push_str(&disabled.join("\n"));
+            s.push('\n');
+        }
+        return s;
+    }
+    if kind == Kind::Commit {
+        return format!(
+            "# YAGA commit and pull-request title policy\n{}",
+            std::str::from_utf8(commits::ConfigStarter::RecommendedV1.bytes()).unwrap()
+        );
+    }
+    match kind {
+        Kind::Branch => include_str!("starters/branch.toml"),
+        Kind::Change => include_str!("starters/change.toml"),
+        Kind::Description => include_str!("starters/description.toml"),
+        Kind::Mode => include_str!("starters/mode.toml"),
+        Kind::Path => include_str!("starters/path.toml"),
+        Kind::Size => include_str!("starters/size.toml"),
+        Kind::Tree => include_str!("starters/tree.toml"),
+        Kind::AgentReview => include_str!("starters/agent-review.toml"),
+        Kind::Test => include_str!("starters/test.toml"),
+        Kind::Triage => include_str!("starters/triage.toml"),
+        Kind::Commit | Kind::Repo => unreachable!(),
+    }
+    .to_owned()
 }

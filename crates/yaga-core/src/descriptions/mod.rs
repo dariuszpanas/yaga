@@ -2,6 +2,7 @@
 mod checker;
 mod markdown;
 pub mod policy;
+#[cfg(feature = "process")]
 pub mod sources;
 pub use checker::{CheckError, Diagnostic, Report, check_description, unicode_name};
 

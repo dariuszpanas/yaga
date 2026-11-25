@@ -1,6 +1,7 @@
 use super::{ReferenceContext, parse_action_manifest, parse_workflow};
 use crate::repository::normalize_security;
 
+#[cfg(feature = "process")]
 #[test]
 fn missing_workflow_displays_the_platform_selector_spelling() {
     use std::path::{Path, PathBuf};

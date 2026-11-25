@@ -14,9 +14,10 @@ mod validate;
 
 pub use authoring::{TemplateComment, append_template_guidance, explain_type, message_template};
 pub use checker::{CheckResult, Diagnostic, Severity, check_message, check_message_with_unicode};
+#[cfg(feature = "process")]
+pub use config::load_config;
 pub use config::{
-    LoadedConfig, MAX_CONFIG_BYTES, QualityPolicy, global_config_path, load_config, parse_config,
-    parse_root,
+    LoadedConfig, MAX_CONFIG_BYTES, QualityPolicy, global_config_path, parse_config, parse_root,
 };
 pub use content::has_issue_reference;
 pub use parser::{
@@ -24,7 +25,9 @@ pub use parser::{
 };
 pub use policy::*;
 pub use reporting::render_config;
-pub use starter::{ConfigStarter, initialize_config};
+pub use starter::ConfigStarter;
+#[cfg(feature = "process")]
+pub use starter::initialize_config;
 pub use unicode::{CommitUnicode, ScalarProperties};
 
 #[cfg(test)]

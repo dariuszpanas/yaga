@@ -1,11 +1,15 @@
 //! Shared filesystem handling for explicit local policy inputs.
 
+#[cfg(feature = "process")]
 pub(crate) mod user_path;
+#[cfg(feature = "process")]
 pub use user_path::resolve_user_path;
-#[cfg(windows)]
+#[cfg(all(windows, feature = "process"))]
 pub use user_path::windows_cli_home;
 
+#[cfg(feature = "process")]
 use std::fs::{File, Metadata, OpenOptions};
+#[cfg(feature = "process")]
 use std::io::{self, Read, Result as IoResult};
 use std::path::{Path, PathBuf};
 
@@ -27,6 +31,7 @@ pub fn display_path(path: &Path) -> String {
     normalized.display().to_string()
 }
 
+#[cfg(feature = "process")]
 pub fn absolute_path(path: &Path) -> IoResult<PathBuf> {
     let expanded = if let Ok(rest) = path.strip_prefix("~") {
         std::env::home_dir()
@@ -38,7 +43,7 @@ pub fn absolute_path(path: &Path) -> IoResult<PathBuf> {
     soft_canonicalize::soft_canonicalize(expanded)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "process"))]
 fn open_existing_regular(
     path: &Path,
     before: &Metadata,
@@ -54,7 +59,7 @@ fn open_existing_regular(
     Ok(file)
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "process"))]
 fn open_existing_regular(path: &Path, _: &Metadata, options: &mut OpenOptions) -> io::Result<File> {
     use same_file::Handle;
     use std::os::windows::fs::OpenOptionsExt;
@@ -73,11 +78,13 @@ fn open_existing_regular(path: &Path, _: &Metadata, options: &mut OpenOptions) -
     Ok(file)
 }
 
+#[cfg(feature = "process")]
 pub(crate) fn open_regular(path: &Path, before: &Metadata) -> io::Result<File> {
     open_existing_regular(path, before, OpenOptions::new().read(true))
 }
 
 /// Open the physical target for an in-place write without truncating it before validation.
+#[cfg(feature = "process")]
 pub fn open_regular_for_write(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.write(true);
@@ -91,6 +98,7 @@ pub fn open_regular_for_write(path: &Path) -> io::Result<File> {
     }
 }
 
+#[cfg(feature = "process")]
 fn checked_file(path: &Path) -> io::Result<File> {
     let before = path.symlink_metadata()?;
     if !before.is_file() {
@@ -100,6 +108,7 @@ fn checked_file(path: &Path) -> io::Result<File> {
 }
 
 /// Hash one bounded regular file without following links or buffering the file in memory.
+#[cfg(feature = "process")]
 pub fn sha256_regular_file(path: &Path, maximum: u64) -> io::Result<String> {
     use sha2::{Digest, Sha256};
     let mut digest = Sha256::new();
@@ -115,6 +124,7 @@ pub fn sha256_regular_file(path: &Path, maximum: u64) -> io::Result<String> {
 
 /// Read up to maximum + 1 bytes, checking the file identity after a nonblocking
 /// open. Resolve an allowed symlink before calling. Callers own overflow errors.
+#[cfg(feature = "process")]
 pub fn read_regular_prefix(path: &Path, maximum: usize) -> io::Result<Vec<u8>> {
     let file = checked_file(path)?;
     let mut result = Vec::new();

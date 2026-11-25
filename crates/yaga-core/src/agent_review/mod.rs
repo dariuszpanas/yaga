@@ -1,5 +1,6 @@
 //! Offline review-lens policies, plans, and digest-bound adapter receipts.
 
+#[cfg(feature = "process")]
 pub mod github;
 mod results;
 pub use results::{Aggregate, LensResult, Outcome};

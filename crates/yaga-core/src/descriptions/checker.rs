@@ -14,7 +14,7 @@ pub struct Diagnostic {
     pub line: usize,
     pub column: usize,
 }
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct Report {
     pub diagnostics: Vec<Diagnostic>,
     pub diagnostic_count: usize,

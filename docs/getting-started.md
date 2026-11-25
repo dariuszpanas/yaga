@@ -258,6 +258,20 @@ Add `yaga-core` from crates.io to your project's `Cargo.toml`:
 yaga-core = "0.6"
 ```
 
+For pure in-memory consumers (such as virtual filesystems, object stores, or sandboxed services)
+that do not need filesystem loaders or subprocess runners, disable the default `process` feature:
+
+```toml
+[dependencies]
+yaga-core = { version = "0.6", default-features = false }
+```
+
+Pure builds omit all process, filesystem, and OS-FFI crates while keeping the in-memory parsers,
+evaluators (`commits`, `branch`, `descriptions`, `paths`, `workflows`, `test_planning`, `triage`,
+`review`, `agent_review`), byte-slice policy auditing (`policies::classify_bytes`,
+`policies::audit_bytes`, `policies::audit_entries`), and non-filesystem plan helpers
+(`RepositoryPlan::relative_policy_paths`, `RepositoryPlan::relative_workflow_paths`).
+
 Or, against a local reviewed `yaga/` checkout next to your project, use a path dependency:
 
 ```toml

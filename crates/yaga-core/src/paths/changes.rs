@@ -25,14 +25,15 @@ pub struct ChangePolicy {
     patterns: Vec<Pattern>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Status {
     Skipped,
     Passed,
     Failed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct RuleResult<'a> {
     pub name: &'a str,
     pub when_any: Vec<&'a str>,

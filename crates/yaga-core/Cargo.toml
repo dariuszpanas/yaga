@@ -16,11 +16,26 @@ description = "Deterministic Git, commit, workflow, pull-request, and repository
 all-features = true
 
 [features]
+default = ["process"]
+process = [
+    "dep:ctrlc",
+    "dep:getrandom",
+    "dep:libc",
+    "dep:rustix",
+    "dep:rustversion",
+    "dep:same-file",
+    "dep:sha1",
+    "dep:soft-canonicalize",
+    "dep:tar",
+    "dep:tempfile",
+    "dep:win32job",
+    "dep:windows-sys",
+]
 # Compatibility for existing Cargo consumers. Local inference is retired.
 quality-models = []
-quality-bedrock = ["dep:aws-config", "dep:aws-sdk-bedrockruntime", "dep:tokio"]
-github-http = ["dep:ureq"]
-quality-http = ["dep:ureq"]
+quality-bedrock = ["process", "dep:aws-config", "dep:aws-sdk-bedrockruntime", "dep:tokio"]
+github-http = ["process", "dep:ureq"]
+quality-http = ["process", "dep:ureq"]
 
 [dependencies]
 aws-config = { version = "1.13", optional = true }
@@ -28,27 +43,27 @@ aws-sdk-bedrockruntime = { version = "1.157", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "time"], optional = true }
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
-ctrlc = { version = "3.5", features = ["termination"] }
-getrandom = "0.4"
-tar = { version = "0.4", default-features = false }
-soft-canonicalize = { version = "0.5.6", default-features = false, features = ["dunce"] }
+ctrlc = { version = "3.5", features = ["termination"], optional = true }
+getrandom = { version = "0.4", optional = true }
+tar = { version = "0.4", default-features = false, optional = true }
+soft-canonicalize = { version = "0.5.6", default-features = false, features = ["dunce"], optional = true }
 memchr = "2.8"
 regex.workspace = true
 unicode_names2 = "3"
 sha2 = "0.10"
-sha1 = "0.10"
+sha1 = { version = "0.10", optional = true }
 libyaml-safer = "=0.3.0"
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
-tempfile = "3.27"
+tempfile = { version = "3.27", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-rustversion = "1"
-same-file = "1.0.6"
-win32job = "2.1.0"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }
+rustversion = { version = "1", optional = true }
+same-file = { version = "1.0.6", optional = true }
+win32job = { version = "2.1.0", optional = true }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"], optional = true }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
-rustix = { version = "1.1", features = ["process", "fs"] }
+libc = { version = "0.2", optional = true }
+rustix = { version = "1.1", features = ["process", "fs"], optional = true }

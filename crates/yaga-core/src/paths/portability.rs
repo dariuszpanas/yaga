@@ -2,11 +2,15 @@
 use super::{PathComponents, PathError, WorkBudget, leaf_topology, sorted_selection};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub enum Rule {
+    #[serde(rename = "windows-characters")]
     Characters,
+    #[serde(rename = "windows-trailing")]
     Trailing,
+    #[serde(rename = "windows-reserved")]
     Reserved,
+    #[serde(rename = "ascii-case-collision")]
     AsciiCaseCollision,
 }
 
@@ -38,7 +42,7 @@ impl Rule {
 #[derive(Debug)]
 pub struct PathPolicy(Vec<Rule>, Option<&'static str>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Finding<'a> {
     pub code: &'static str,
     pub message: String,
@@ -47,7 +51,7 @@ pub struct Finding<'a> {
     pub related_path: Option<&'a str>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Report<'a> {
     pub diagnostics: Vec<Finding<'a>>,
     pub rule_counts: Vec<(Rule, usize)>,

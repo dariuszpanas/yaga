@@ -1,5 +1,8 @@
+#[cfg(feature = "process")]
 use super::{LoadedConfig, load_config};
+#[cfg(feature = "process")]
 use crate::{fs::resolve_user_path, text::safe_text};
+#[cfg(feature = "process")]
 use std::{
     fs,
     io::{ErrorKind, Write},
@@ -25,10 +28,12 @@ impl ConfigStarter {
     }
 }
 
+#[cfg(feature = "process")]
 fn display(p: &Path) -> String {
     safe_text(&p.to_string_lossy(), 1000)
 }
 
+#[cfg(feature = "process")]
 fn no_applied_config(repo: &Path) -> Result<(), String> {
     if let Some(existing) = load_config(None, repo, None)?.path {
         return Err(format!(
@@ -40,6 +45,7 @@ fn no_applied_config(repo: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "process")]
 fn require_absent(target: &Path) -> Result<(), String> {
     match fs::symlink_metadata(target) {
         Ok(_) => Err(format!(
@@ -56,6 +62,7 @@ fn require_absent(target: &Path) -> Result<(), String> {
 
 /// Validate a frozen starter using the normal loader, then atomically publish
 /// the complete same-directory file if no policy already applies.
+#[cfg(feature = "process")]
 pub fn initialize_config(
     repo: &Path,
     dry_run: bool,

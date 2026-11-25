@@ -2,6 +2,7 @@ use super::*;
 use crate::policies::testing::token;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(feature = "process")]
 pub fn load_json(path: &Path) -> Result<Value, Error> {
     let bytes = soft_canonicalize::soft_canonicalize(path)
         .and_then(|p| read_regular_prefix(&p, MAX_BYTES))

@@ -8,14 +8,19 @@ mod tests;
 
 use std::collections::HashSet;
 use std::fmt;
-use std::path::{Path, PathBuf};
+#[cfg(feature = "process")]
+use std::path::Path;
+use std::path::PathBuf;
 
 use crate::paths::{PathComponents, Pattern, WorkBudget};
+use serde::ser::SerializeStruct;
 
 pub use patterns::{
     is_portable as is_portable_branch_name, match_branch_pattern, validate_branch_pattern,
 };
-pub use policy::{load_branch_policy, parse_branch_policy, parse_branch_table};
+#[cfg(feature = "process")]
+pub use policy::load_branch_policy;
+pub use policy::{parse_branch_policy, parse_branch_table};
 use reporting::DisplayField;
 pub use reporting::OutputFormat;
 
@@ -123,6 +128,17 @@ impl BranchReport {
     }
 }
 
+impl serde::Serialize for BranchReport {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("BranchReport", 4)?;
+        state.serialize_field("branch", self.branch())?;
+        state.serialize_field("valid", &self.valid())?;
+        state.serialize_field("matched_pattern", &self.matched_pattern())?;
+        state.serialize_field("diagnostic", &self.diagnostic())?;
+        state.end()
+    }
+}
+
 /// Check transport bounds, then syntax, then admission. No filesystem or environment access.
 pub fn check_branch_name(policy: &BranchPolicy, branch: &str) -> Result<BranchReport, BranchError> {
     patterns::validate_transport(branch).map_err(BranchError::Input)?;
@@ -155,6 +171,7 @@ pub struct CheckedBranch {
     policy: LoadedBranchPolicy,
 }
 
+#[cfg(feature = "process")]
 pub fn check_branch(policy_path: &Path, branch: &str) -> Result<CheckedBranch, BranchError> {
     let policy = load_branch_policy(policy_path)?;
     let report = check_branch_name(&policy.policy, branch)?;

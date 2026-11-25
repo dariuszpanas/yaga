@@ -1,7 +1,10 @@
 use super::*;
+#[cfg(feature = "process")]
 use std::fs;
+#[cfg(feature = "process")]
 use tempfile::tempdir;
 
+#[cfg(feature = "process")]
 #[test]
 fn prepare_starters_uses_existing_tree_policies_and_preserves_selection_order() {
     let dir = tempdir().unwrap();
@@ -56,6 +59,7 @@ fn undecodable_filename_preserves_plan_directory_hint() {
     );
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn policy_audit_reports_strict_utf8_byte_offsets() {
     let dir = tempdir().unwrap();
@@ -94,6 +98,7 @@ fn policy_audit_reports_strict_utf8_byte_offsets() {
     }
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn initialize_all_and_audit_every_family() {
     let dir = tempdir().unwrap();
@@ -124,6 +129,7 @@ fn initialize_all_and_audit_every_family() {
     assert_eq!(audit_policies(repo, &[path], false).unwrap().exit_code(), 2);
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn policy_initialization_preflights_whole_set() {
     let dir = tempdir().unwrap();
@@ -161,6 +167,7 @@ fn test_and_triage_policies_fail_on_ambiguous_identities() {
     assert!(testing::TestPolicy::parse(dated).is_err());
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn discovery_rejects_escape_and_cycles_are_finite() {
     #[cfg(unix)]
@@ -179,6 +186,7 @@ fn discovery_rejects_escape_and_cycles_are_finite() {
     }
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn nested_starter_paths_use_native_separators_on_both_dry_runs() {
     let directory = tempdir().unwrap();
@@ -189,4 +197,114 @@ fn nested_starter_paths_use_native_separators_on_both_dry_runs() {
         let report = initialize_policies(&repo, &kinds, dry_run, true).unwrap();
         assert_eq!(report.items[0].path.as_os_str(), expected.as_os_str());
     }
+}
+
+#[test]
+fn byte_slice_classification_and_auditing_match_all_twelve_families() {
+    let all_tree = TREE_KINDS.into_iter().collect::<HashSet<_>>();
+    let rendered: Vec<(String, String)> = Kind::ALL
+        .iter()
+        .map(|&kind| {
+            (
+                kind.default_path().to_owned(),
+                render_starter(kind, &all_tree),
+            )
+        })
+        .collect();
+    for (&kind, (path, body)) in Kind::ALL.iter().zip(&rendered) {
+        let p = Path::new(path);
+        assert_eq!(classify_bytes(p, body.as_bytes()).unwrap(), vec![kind]);
+        let entries = audit_bytes(p, body.as_bytes());
+        assert_eq!(entries.len(), 1, "{path}: {entries:?}");
+        assert_eq!(entries[0].kind, Some(kind));
+        assert_eq!(entries[0].status, "current");
+        assert_eq!(entries[0].source_version, Some(kind.current()));
+        assert_eq!(entries[0].current_version, Some(kind.current()));
+    }
+    let inputs: Vec<(&Path, &[u8])> = rendered
+        .iter()
+        .map(|(path, body)| (Path::new(path.as_str()), body.as_bytes()))
+        .collect();
+    let report = audit_entries(&inputs, true).unwrap();
+    assert_eq!(report.exit_code(), 0);
+    assert_eq!(report.entries.len(), Kind::ALL.len());
+    let serialized = serde_json::to_value(&report).unwrap();
+    assert_eq!(serialized["strict"], true);
+    assert_eq!(
+        serialized["entries"].as_array().unwrap().len(),
+        Kind::ALL.len()
+    );
+}
+
+#[test]
+fn byte_slice_audit_handles_pyproject_bom_utf8_bounds_and_deprecations() {
+    let pyproject = b"\xef\xbb\xbf[tool.yaga]\nconfig-version = 1\n[tool.yaga.commit]\n[tool.yaga.agent-review]\nversion = 1\nrequired = ['codex']\n";
+    let path = Path::new("pyproject.toml");
+    assert_eq!(
+        classify_bytes(path, pyproject).unwrap(),
+        vec![Kind::Commit, Kind::AgentReview]
+    );
+    let dual = audit_bytes(path, pyproject);
+    assert_eq!(dual.len(), 2);
+    assert!(dual.iter().all(|e| e.status == "current"));
+
+    // Deprecated repo v1 plan
+    let deprecated_entries = audit_entries(
+        &[(
+            Path::new(".yaga/checks/ci.toml"),
+            b"plan-version = 1\nchecks = ['commit']\n",
+        )],
+        true,
+    )
+    .unwrap();
+    assert_eq!(deprecated_entries.exit_code(), 1);
+    assert_eq!(deprecated_entries.entries[0].status, "deprecated");
+    assert_eq!(
+        audit_entries(
+            &[(
+                Path::new(".yaga/checks/ci.toml"),
+                b"plan-version = 1\nchecks = ['commit']\n",
+            )],
+            false,
+        )
+        .unwrap()
+        .exit_code(),
+        0
+    );
+
+    // Invalid UTF-8 preserves exact offset diagnostics without touching disk
+    let bad_utf8 = audit_bytes(
+        Path::new(".yaga/branch-policy.toml"),
+        b"\xef\xbb\xbf# x\n\xe2\x82",
+    );
+    assert_eq!(bad_utf8.len(), 1);
+    assert_eq!(bad_utf8[0].status, "invalid");
+    assert_eq!(bad_utf8[0].kind, Some(Kind::Branch));
+    assert_eq!(
+        bad_utf8[0].message,
+        "invalid UTF-8 TOML: 'utf-8' codec can't decode bytes in position 4-5: unexpected end of data"
+    );
+    assert_eq!(
+        classify_bytes(Path::new(".yaga/branch-policy.toml"), b"\xff")
+            .unwrap_err()
+            .kind(),
+        "input"
+    );
+
+    // Oversized input and over-limit entry counts are bounded fail-closed
+    let oversized = vec![b' '; 1024 * 1024 + 1];
+    assert_eq!(
+        classify_bytes(Path::new(".yaga.toml"), &oversized)
+            .unwrap_err()
+            .kind(),
+        "input"
+    );
+    let oversized_audit = audit_bytes(Path::new(".yaga.toml"), &oversized);
+    assert_eq!(oversized_audit[0].status, "invalid");
+    assert!(oversized_audit[0].message.contains("exceeds"));
+
+    let too_many: Vec<(&Path, &[u8])> =
+        vec![(Path::new(".yaga.toml"), b"config-version = 1\n"); 129];
+    assert_eq!(audit_entries(&too_many, false).unwrap_err().kind(), "input");
+    assert!(audit_entries(&[], false).unwrap().entries.is_empty());
 }

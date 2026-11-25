@@ -83,7 +83,19 @@ def main() -> None:
     for args in (
         ["fmt", "--all", "--check"],
         ["clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"],
+        [
+            "clippy",
+            "-p",
+            "yaga-core",
+            "--no-default-features",
+            "--all-targets",
+            "--locked",
+            "--",
+            "-D",
+            "warnings",
+        ],
         ["test", "--workspace", "--locked"],
+        ["test", "-p", "yaga-core", "--no-default-features", "--locked"],
     ):
         subprocess.run(["cargo", *args], cwd=ROOT, env=environment, check=True)
     binary = executable(environment, "yaga", "--release", "--locked", "--package", "yaga-cli")

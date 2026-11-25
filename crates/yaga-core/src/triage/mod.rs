@@ -1,10 +1,14 @@
 //! Bounded trust triage and current-head admission over validated metadata.
+#[cfg(feature = "process")]
 mod publication;
+#[cfg(feature = "process")]
 mod remote;
 mod snapshot;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "process")]
 pub use remote::{check_live, collect_for_review};
+#[cfg(feature = "process")]
 pub fn load_policy(path: &std::path::Path) -> Result<TriagePolicy, String> {
     let data = crate::fs::resolve_user_path(path)
         .and_then(|p| crate::fs::read_regular_prefix(&p, 65536))

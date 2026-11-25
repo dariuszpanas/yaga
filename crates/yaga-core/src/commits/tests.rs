@@ -408,6 +408,7 @@ fn commit_configuration_errors_preserve_wire_keys_and_future_version_hint() {
     );
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn nearest_config_stops_at_git_boundary_and_never_merges() {
     use std::fs;
@@ -437,6 +438,7 @@ fn nearest_config_stops_at_git_boundary_and_never_merges() {
     assert_eq!(loaded.policy.body_min_words, 1);
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn starters_validate_and_publish_without_replacement() {
     use std::fs;
