@@ -291,6 +291,44 @@ fn pr_triage_check_enforces_maintainer_admission_on_external_prs() {
         stderr_str(&allow)
     );
     assert_eq!(stdout_json(&allow)["admission"]["decision"], "allow");
+
+    // Passing a directory as --file fails cleanly with exit 2.
+    let dir_err = run(
+        dir.path(),
+        &[
+            "pull-request",
+            "triage",
+            "check",
+            "--policy",
+            "triage.toml",
+            "--file",
+            ".",
+        ],
+    );
+    assert_eq!(dir_err.status.code(), Some(2));
+
+    // Passing a symlinked snapshot works via resolve_user_path.
+    #[cfg(unix)]
+    {
+        let link = dir.path().join("allow-link.json");
+        std::os::unix::fs::symlink(dir.path().join("allow.json"), &link).unwrap();
+        let sym = run(
+            dir.path(),
+            &[
+                "pull-request",
+                "triage",
+                "check",
+                "--policy",
+                "triage.toml",
+                "--file",
+                "allow-link.json",
+                "--format",
+                "json",
+            ],
+        );
+        assert_eq!(sym.status.code(), Some(0), "stderr: {}", stderr_str(&sym));
+        assert_eq!(stdout_json(&sym)["admission"]["decision"], "allow");
+    }
 }
 
 #[test]

@@ -119,7 +119,13 @@ fn boundary_encoding_carries_action_pr_base_timestamp_and_run_attempt() {
     let s = parse_status(&status(10, "pending", &description), "status").unwrap();
     assert_eq!(
         parse_boundary_description(&s, HEAD),
-        Some((b, "Codex pending"))
+        Some((b.clone(), "Codex pending"))
     );
     assert!(parse_boundary_description(&s, "HEAD").is_none());
+    let mut bad_action = b;
+    bad_action.action = "unknown".into();
+    assert_eq!(
+        bad_action.description("Codex pending").unwrap_err(),
+        "YAGA boundary action is invalid"
+    );
 }

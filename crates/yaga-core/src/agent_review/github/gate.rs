@@ -326,6 +326,11 @@ impl Publisher<'_> {
             return Ok(false);
         }
         let t = c.boundary.occurred_at.max(p.request.created_at);
+        let request_valid = match validate_authorization(api, p.key, p.request) {
+            Ok(valid) => valid,
+            Err(err) if err == "GitHub API GET failed with HTTP 404" => false,
+            Err(err) => return Err(err),
+        };
         if p.request.kind != "request"
             || !validate_codex_outcome(
                 api,
@@ -336,7 +341,7 @@ impl Publisher<'_> {
                 p.outcome,
                 Some(t + 1_000_000),
             )?
-            || !validate_authorization(api, p.key, p.request).unwrap_or(false)
+            || !request_valid
         {
             return Ok(false);
         }
@@ -761,5 +766,149 @@ impl Publisher<'_> {
         } else {
             GateResult::failed("CI Gate failed because Agent Review is not successful")
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent_review::github::{
+        CODEX_CONNECTOR_APP_ID, CODEX_CONNECTOR_APP_SLUG, CODEX_CONNECTOR_LOGIN,
+        CODEX_CONNECTOR_USER_ID, GITHUB_ACTIONS_LOGIN, GITHUB_ACTIONS_USER_ID, PullRequest,
+    };
+    use serde_json::json;
+
+    struct FakeApi {
+        comment_error: &'static str,
+    }
+    impl RestApi for FakeApi {
+        fn get(&mut self, path: &str) -> Result<Value> {
+            if path.ends_with("/issues/comments/10") {
+                return Ok(json!({
+                    "id": 10,
+                    "user": {"id": CODEX_CONNECTOR_USER_ID, "login": CODEX_CONNECTOR_LOGIN},
+                    "performed_via_github_app": {"id": CODEX_CONNECTOR_APP_ID, "slug": CODEX_CONNECTOR_APP_SLUG},
+                    "created_at": "2026-11-01T12:01:00Z",
+                    "updated_at": "2026-11-01T12:01:00Z",
+                    "body": format!("Agent Review: Didn't find any major issues.\n\n**Reviewed commit:** `{}`", "a".repeat(40)),
+                }));
+            }
+            if path.ends_with("/issues/comments/20") {
+                return Err(self.comment_error.into());
+            }
+            Err(format!("unexpected path: {path}"))
+        }
+        fn post(&mut self, _: &str, _: &Value) -> Result<Value> {
+            Err("unexpected post".into())
+        }
+        fn require_success_tail(&self, _: usize, _: u64) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn proof_current_treats_deleted_request_404_as_false_and_propagates_5xx() {
+        let head = "a".repeat(40);
+        let base = "b".repeat(40);
+        let source = SourceRun {
+            run_id: 12,
+            run_attempt: 1,
+            run_number: 1,
+            workflow_path: ".github/workflows/ci.yml".into(),
+            head_sha: head.clone(),
+            conclusion: "success".into(),
+            created_at: 1_793_534_400_000_000,
+            updated_at: 1_793_534_400_000_000,
+            pull_request_number: 9,
+            pull_request_action: "opened".into(),
+            base_sha: base.clone(),
+            head_ref: "feat/x".into(),
+            head_repository: "ex/project".into(),
+        };
+        let publisher = Publisher {
+            repository: "ex/project",
+            source: &source,
+            lifecycle_workflow: ".github/workflows/review-policy.yml",
+            server_url: "https://github.com",
+            target_url: "https://github.com/ex/project/actions/runs/12/attempts/1",
+            owner_id: 1,
+        };
+        let boundary = ReviewBoundary {
+            run_id: 8,
+            run_attempt: 1,
+            action: "opened".into(),
+            pull_request_number: 9,
+            head_sha: head.clone(),
+            base_sha: base.clone(),
+            occurred_at: 1_793_534_400_000_000,
+        };
+        let candidate = LiveCandidate {
+            pull_request: PullRequest {
+                number: 9,
+                head_sha: head.clone(),
+                head_ref: "feat/x".into(),
+                head_repository: "ex/project".into(),
+                base_ref: "main".into(),
+                base_sha: base.clone(),
+                draft: false,
+                state: "open".into(),
+                created_at: 1_793_534_400_000_000,
+            },
+            author_id: 1,
+            author_login: "owner".into(),
+            default_branch: "main".into(),
+            boundary,
+            lifecycle_updated_at: 1_793_534_400_000_000,
+            latest_codex_status: CommitStatus {
+                status_id: 1,
+                state: "pending".into(),
+                context: CODEX_STATUS_CONTEXT.into(),
+                description: None,
+                target_url: None,
+                created_at: 1_793_534_400_000_000,
+                creator_id: GITHUB_ACTIONS_USER_ID,
+                creator_login: GITHUB_ACTIONS_LOGIN.into(),
+            },
+        };
+        let key = publisher.key(&candidate);
+        let request = RequestComment {
+            comment_id: 20,
+            key: key.clone(),
+            kind: "request".into(),
+            created_at: 1_793_534_400_000_000,
+            updated_at: 1_793_534_400_000_000,
+        };
+        let outcome = CodexOutcome {
+            occurred_at: 1_793_534_460_000_000,
+            database_id: 10,
+            kind: "clean comment".into(),
+            reviewed_commit: head,
+        };
+        let proof = Proof {
+            key: &key,
+            request: &request,
+            approval: None,
+            outcome: &outcome,
+            codex_status: None,
+        };
+
+        let mut api_404 = FakeApi {
+            comment_error: "GitHub API GET failed with HTTP 404",
+        };
+        assert!(
+            !publisher
+                .proof_current(&mut api_404, &candidate, Some(&proof))
+                .unwrap()
+        );
+
+        let mut api_500 = FakeApi {
+            comment_error: "GitHub API GET failed with HTTP 500",
+        };
+        assert_eq!(
+            publisher
+                .proof_current(&mut api_500, &candidate, Some(&proof))
+                .unwrap_err(),
+            "GitHub API GET failed with HTTP 500"
+        );
     }
 }

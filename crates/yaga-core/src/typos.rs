@@ -24,36 +24,15 @@ struct Typo {
     corrections: Vec<String>,
 }
 
-fn installed_typos() -> Result<PathBuf, String> {
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    for directory in std::env::split_paths(&path) {
-        let candidate = directory.join(if cfg!(windows) { "typos.exe" } else { "typos" });
-        let Ok(metadata) = candidate.metadata() else {
-            continue;
-        };
-        if !metadata.is_file() {
-            continue;
+fn installed_typos(directory: &Path) -> Result<PathBuf, String> {
+    crate::git::external_executable(directory, "typos").map_err(|err| {
+        let message = err.to_string();
+        if message == "typos executable was not found" {
+            "commit policy requires the typos executable, but it is not installed".into()
+        } else {
+            message
         }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if metadata.permissions().mode() & 0o111 == 0 {
-                continue;
-            }
-        }
-        let resolved = candidate
-            .canonicalize()
-            .map_err(|_| "typos executable could not be resolved")?;
-        #[cfg(windows)]
-        if !resolved
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
-        {
-            continue;
-        }
-        return Ok(resolved);
-    }
-    Err("commit policy requires the typos executable, but it is not installed".into())
+    })
 }
 
 pub fn check(
@@ -62,7 +41,7 @@ pub fn check(
     isolated: bool,
     severity: Severity,
 ) -> Result<Vec<Diagnostic>, String> {
-    let executable = installed_typos()?;
+    let executable = installed_typos(directory)?;
     let message = normalize_message(message);
     if message.len() > MAX_MESSAGE_BYTES {
         return Err("commit message exceeds the hard byte limit for Typos input".into());

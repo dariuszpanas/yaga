@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(feature = "process")]
 pub fn load_json(path: &Path) -> Result<Value, Error> {
-    let bytes = soft_canonicalize::soft_canonicalize(path)
+    let bytes = resolve_user_path(path)
         .and_then(|p| read_regular_prefix(&p, MAX_BYTES))
         .map_err(|_| Error::Input("cannot read a regular test evaluation input file".into()))?;
     if bytes.len() > MAX_BYTES {

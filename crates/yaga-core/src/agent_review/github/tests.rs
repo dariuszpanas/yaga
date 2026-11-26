@@ -116,4 +116,24 @@ fn authorization_compares_iso_timestamps_at_microsecond_precision() {
         timestamp(&json!("2026-11-22T08:04:05"), "time").unwrap_err(),
         "time must include a timezone"
     );
+    let base = timestamp(&json!("2026-11-22T08:04:05Z"), "time").unwrap();
+    assert_eq!(
+        timestamp(&json!("2026-11-22T08:04:05+00:00.5"), "time").unwrap(),
+        base - 500_000
+    );
+    assert_eq!(
+        timestamp(&json!("2026-11-22T08:04:05-00:00.5"), "time").unwrap(),
+        base + 500_000
+    );
+    for invalid in [
+        "2026-11-22T08:04:05+24:00",
+        "2026-11-22T08:04:05+01:99:99",
+        "2026-11-22T08:04:05-00:60",
+        "2026-11-22T08:04:05+00:00:60",
+    ] {
+        assert!(
+            timestamp(&json!(invalid), "time").is_err(),
+            "{invalid} should be rejected"
+        );
+    }
 }

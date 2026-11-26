@@ -571,3 +571,93 @@ select-variants = { unit = ["windows"] }
         );
     }
 }
+
+#[test]
+fn design_example_policies_parse_and_plan_deterministically() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let examples = root.join("docs/designs/examples/test-planning");
+    if !examples.is_dir() {
+        // Packaged crates.io tarballs do not bundle the repository docs tree.
+        assert!(
+            !root.join("Cargo.toml").is_file(),
+            "missing docs/designs/examples/test-planning in workspace checkout"
+        );
+        return;
+    }
+
+    let polyglot_bytes = std::fs::read(examples.join("polyglot.toml")).expect("read polyglot.toml");
+    let polyglot = TestPolicy::parse(&polyglot_bytes).expect("parse polyglot.toml");
+    let dev_container = plan_tests(
+        &polyglot,
+        "development",
+        Some(&["docker/app.Dockerfile".into()]),
+    )
+    .unwrap();
+    assert_eq!(dev_container.effective_mode, Mode::Selective);
+    let selected_ids: Vec<&str> = dev_container
+        .selected
+        .iter()
+        .map(|s| s.suite.as_str())
+        .collect();
+    assert!(selected_ids.contains(&"repository.smoke"));
+    assert!(selected_ids.contains(&"image.build"));
+    assert!(selected_ids.contains(&"container.smoke"));
+    assert!(selected_ids.contains(&"infra.chainsaw"));
+    assert!(selected_ids.contains(&"qualification.ray"));
+    assert!(!selected_ids.contains(&"frontend.unit"));
+
+    let no_impact = plan_tests(&polyglot, "development", Some(&["LICENSE".into()])).unwrap();
+    assert_eq!(no_impact.effective_mode, Mode::Selective);
+    assert_eq!(
+        no_impact
+            .selected
+            .iter()
+            .map(|s| s.suite.as_str())
+            .collect::<Vec<_>>(),
+        vec!["repository.smoke"]
+    );
+
+    let poly_full = plan_tests(&polyglot, "release", None).unwrap();
+    assert_eq!(poly_full.effective_mode, Mode::Full);
+    assert_eq!(poly_full.selected.len(), polyglot.suites.len());
+
+    let django_bytes =
+        std::fs::read(examples.join("django-ray.toml")).expect("read django-ray.toml");
+    let django = TestPolicy::parse(&django_bytes).expect("parse django-ray.toml");
+    let latency = plan_tests(
+        &django,
+        "development",
+        Some(&["qualification/latency/run.py".into()]),
+    )
+    .unwrap();
+    assert_eq!(latency.effective_mode, Mode::Selective);
+    assert_eq!(
+        latency
+            .selected
+            .iter()
+            .map(|s| s.suite.as_str())
+            .collect::<Vec<_>>(),
+        vec!["qualification.latency"]
+    );
+
+    let docs_only = plan_tests(&django, "development", Some(&["docs/index.md".into()])).unwrap();
+    assert_eq!(docs_only.effective_mode, Mode::Selective);
+    assert!(docs_only.selected.is_empty());
+
+    let doc = PlanDocument::new(
+        &django.sha256,
+        None,
+        Source {
+            base_commit: Some("1".repeat(40)),
+            head_commit: Some("2".repeat(40)),
+            comparison_commit: Some("1".repeat(40)),
+            execution_commit: "2".repeat(40),
+            execution_tree: "3".repeat(40),
+        },
+        latency,
+    )
+    .unwrap();
+    let encoded = doc.json().unwrap();
+    let decoded = parse_plan(serde_json::from_str(&encoded).unwrap()).unwrap();
+    assert_eq!(decoded.plan_digest, doc.plan_digest);
+}

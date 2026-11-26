@@ -165,6 +165,16 @@ fn test_and_triage_policies_fail_on_ambiguous_identities() {
     );
     let dated=b"test-policy-version=1\n[[suites]]\nid=2001-01-01\nbinding='ok'\n[profiles.ci]\nmode='full'";
     assert!(testing::TestPolicy::parse(dated).is_err());
+    assert!(
+        testing::TestPolicy::parse(b"test-policy-version = 2\n")
+            .unwrap_err()
+            .contains("found newer schema version 2; update YAGA using its installation manager")
+    );
+    assert!(
+        triage::TriagePolicy::parse(b"triage-policy-version = 3\n")
+            .unwrap_err()
+            .contains("found newer schema version 3; update YAGA using its installation manager")
+    );
 }
 
 #[cfg(feature = "process")]

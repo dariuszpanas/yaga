@@ -143,3 +143,20 @@ fn remote_collection_authenticates_identity_before_reading_evidence() {
     );
     assert_eq!(reads, ["repos/owner/repo/pulls/7"]);
 }
+
+#[cfg(feature = "process")]
+#[test]
+fn snapshot_load_resolves_symlinks_and_rejects_directories() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = policy();
+    let snap = dir.path().join("snap.json");
+    std::fs::write(&snap, document(&p).to_string()).unwrap();
+    assert_eq!(Snapshot::load(&snap).unwrap().number(), 7);
+    assert!(Snapshot::load(dir.path()).is_err());
+    #[cfg(unix)]
+    {
+        let link = dir.path().join("link.json");
+        std::os::unix::fs::symlink(&snap, &link).unwrap();
+        assert_eq!(Snapshot::load(&link).unwrap().number(), 7);
+    }
+}

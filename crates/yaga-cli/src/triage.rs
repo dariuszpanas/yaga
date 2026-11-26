@@ -3,7 +3,7 @@ use clap::Subcommand;
 use serde_json::{Value, json};
 use std::{path::PathBuf, process::ExitCode};
 use yaga_core::{
-    fs::read_regular_prefix,
+    fs::{read_regular_prefix, resolve_user_path},
     gh::PullRequest,
     text::safe_text,
     triage::{self, MAX_BYTES, Snapshot, ascii_json},
@@ -93,7 +93,9 @@ pub fn run(command: Command) -> ExitCode {
                 publish_comment,
             )
         } else {
-            let raw = read_regular_prefix(&file.unwrap(), MAX_BYTES)
+            let path = resolve_user_path(&file.unwrap())
+                .map_err(|_| input("cannot resolve explicit triage snapshot".into()))?;
+            let raw = read_regular_prefix(&path, MAX_BYTES)
                 .map_err(|_| input("cannot read explicit triage snapshot".into()))?;
             Snapshot::decode(&raw).and_then(|snapshot| triage::evaluate(&policy, &snapshot))
         }

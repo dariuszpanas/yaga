@@ -1,6 +1,6 @@
 use std::{io, path::Path, process::Command};
 use yaga_core::{
-    fs::{read_regular_prefix, sha256_regular_file},
+    fs::{absolute_path, read_regular_prefix, sha256_regular_file},
     text::{python_repr, safe_text},
 };
 
@@ -8,6 +8,7 @@ const RECEIPT: &str = ".yaga-native-receipt";
 const INVALID: &str = "the native installation receipt does not match this executable";
 
 pub(super) fn receipt(exe: &Path) -> Result<Option<String>, String> {
+    let exe = absolute_path(exe).map_err(|_| INVALID)?;
     let dir = exe.parent().ok_or(INVALID)?;
     let contents = match read_regular_prefix(&dir.join(RECEIPT), 256) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -18,7 +19,7 @@ pub(super) fn receipt(exe: &Path) -> Result<Option<String>, String> {
     if contents.len() > 256 || exe.file_name().is_none_or(|s| s != name) {
         return Err(INVALID.into());
     }
-    let digest = sha256_regular_file(exe, 128 * 1024 * 1024).map_err(|_| INVALID)?;
+    let digest = sha256_regular_file(&exe, 128 * 1024 * 1024).map_err(|_| INVALID)?;
     let version = env!("CARGO_PKG_VERSION");
     let expected = format!("yaga-native-install-v1 {version}\n{digest}  {name}\n");
     if expected.as_bytes() != contents {
@@ -37,6 +38,7 @@ pub(super) fn installer_env(command: &mut Command, dir: &Path, digest: &str) {
 }
 
 pub(super) fn update(exe: &Path, digest: &str, dry_run: bool) -> Result<(), String> {
+    let exe = absolute_path(exe).map_err(|_| INVALID)?;
     let dir = exe.parent().ok_or(INVALID)?;
     if dry_run {
         println!(
@@ -87,6 +89,6 @@ pub(super) fn update(exe: &Path, digest: &str, dry_run: bool) -> Result<(), Stri
             .collect(),
             root: dir.to_owned(),
         };
-        super::windows_handoff(&plan, exe, Some(digest))
+        super::windows_handoff(&plan, &exe, Some(digest))
     }
 }

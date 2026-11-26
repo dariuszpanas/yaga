@@ -2,7 +2,7 @@ mod common;
 
 use common::{
     commit_all, init_git_repo, run, run_with_stdin, stderr_json, stderr_str, stdout_json,
-    stdout_str, write_file,
+    stdout_str, write_file, yaga_cmd,
 };
 use serde_json::json;
 
@@ -363,5 +363,85 @@ fn commit_quality_reports_migration_error_for_retired_local_backend() {
     assert!(
         err.contains("provider") || err.contains("local") || err.contains("retired"),
         "{err}"
+    );
+}
+
+#[test]
+fn typos_discovery_rejects_in_repo_and_relative_path_executables() {
+    let dir = tempfile::tempdir().unwrap();
+    init_git_repo(dir.path());
+    write_file(
+        dir.path(),
+        ".yaga.toml",
+        b"config-version = 1\n[commit]\ntypos = \"check\"\n",
+    );
+    let bin_name = if cfg!(windows) { "typos.exe" } else { "typos" };
+    let fake_bin = dir.path().join(bin_name);
+    std::fs::write(&fake_bin, b"#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake_bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    // Repository directory on PATH must be rejected fail-closed (exit 2).
+    let in_repo = yaga_cmd(dir.path())
+        .env("PATH", dir.path())
+        .args([
+            "commit",
+            "check",
+            "--config",
+            ".yaga.toml",
+            "--message",
+            "feat(cli): check boundary",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(in_repo.status.code(), Some(2));
+    assert!(
+        stderr_str(&in_repo).contains("must not be discovered inside the repository"),
+        "stderr: {}",
+        stderr_str(&in_repo)
+    );
+
+    // Relative `.` PATH entry must also be rejected fail-closed (exit 2).
+    let relative = yaga_cmd(dir.path())
+        .env("PATH", ".")
+        .args([
+            "commit",
+            "check",
+            "--config",
+            ".yaga.toml",
+            "--message",
+            "feat(cli): check boundary",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(relative.status.code(), Some(2));
+    assert!(
+        stderr_str(&relative).contains("must be absolute"),
+        "stderr: {}",
+        stderr_str(&relative)
+    );
+
+    // Missing typos preserves the exact not-installed diagnostic.
+    let missing = yaga_cmd(dir.path())
+        .env("PATH", dir.path().join("no-tools"))
+        .args([
+            "commit",
+            "check",
+            "--config",
+            ".yaga.toml",
+            "--message",
+            "feat(cli): check boundary",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(2));
+    assert!(
+        stderr_str(&missing)
+            .contains("commit policy requires the typos executable, but it is not installed"),
+        "stderr: {}",
+        stderr_str(&missing)
     );
 }

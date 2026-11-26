@@ -37,10 +37,13 @@ fn diagnostics(provider: P, child: &ChildReport) -> usize {
         P::Mode | P::Path => d["counts"]["findings"]
             .as_u64()
             .expect("exact mode/path count") as usize,
-        P::Size | P::Tree => d["diagnostics"]
-            .as_array()
-            .expect("provider diagnostics")
-            .len(),
+        P::Size | P::Tree => {
+            d["diagnostics"]
+                .as_array()
+                .expect("provider diagnostics")
+                .len()
+                + d["diagnostics_omitted"].as_u64().unwrap_or(0) as usize
+        }
         _ => {
             let entries = if provider == P::Commit {
                 "commits"
@@ -191,5 +194,31 @@ mod tests {
         assert_eq!(doc["failed"], 1);
         assert_eq!(doc["errored"], 1);
         assert!(doc["checks"][0]["report"].is_null());
+    }
+
+    #[test]
+    fn github_summary_includes_omitted_size_and_tree_diagnostics() {
+        let make_child = |name: &str, count: usize, omitted: usize| ChildReport {
+            document: json!({
+                "valid": false,
+                "diagnostics": vec![json!({"code": format!("{name}.finding")}); count],
+                "diagnostics_omitted": omitted,
+            }),
+            text: format!("{name} details"),
+            annotations: (0..25)
+                .map(|n| format!("::error title=YAGA {name}::{n}"))
+                .collect(),
+        };
+        let checks = vec![
+            (P::Size, Ok(make_child("size", 256, 44))),
+            (P::Tree, Ok(make_child("tree", 256, 14))),
+        ];
+        // Total findings = (256 + 44) + (256 + 14) = 570; 49 visible annotations + 1 summary = 521 omitted.
+        let (exit, output) = render(&checks, Format::Github);
+        assert_eq!(exit, 1);
+        assert!(
+            output.contains("521 additional repository diagnostic(s) omitted"),
+            "unexpected output:\n{output}"
+        );
     }
 }
