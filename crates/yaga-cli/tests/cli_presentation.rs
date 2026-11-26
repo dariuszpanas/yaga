@@ -203,11 +203,35 @@ fn usage_errors_render_framed_diagnostics_with_exit_2() {
         );
     }
 
+    // Explicit empty string values must still report Invalid value rather than missing argument.
+    for args in [
+        &["commit", "check", "--format", ""][..],
+        &["commit", "check", "--format="][..],
+    ] {
+        let out = run(dir.path(), args);
+        assert_eq!(out.status.code(), Some(2));
+        let err = stderr_str(&out);
+        assert!(
+            err.contains(
+                "Invalid value for '--format': '' is not one of 'text', 'json', 'github'."
+            ),
+            "args={args:?}\nstderr:\n{err}"
+        );
+    }
+
     // Float flag parse failures must report float rather than integer.
-    let bad_float = run(dir.path(), &["commit", "quality", "--threshold", "abc"]);
-    assert_eq!(bad_float.status.code(), Some(2));
-    let err = stderr_str(&bad_float);
-    assert!(err.contains("is not a valid float."), "{err}");
+    for args in [
+        &["commit", "quality", "--threshold", "abc"][..],
+        &["commit", "quality", "--threshold", ""][..],
+    ] {
+        let bad_float = run(dir.path(), args);
+        assert_eq!(bad_float.status.code(), Some(2));
+        let err = stderr_str(&bad_float);
+        assert!(
+            err.contains("is not a valid float."),
+            "args={args:?}\nstderr:\n{err}"
+        );
+    }
 
     // Integer flag parse failures keep reporting integer.
     let bad_int = run(

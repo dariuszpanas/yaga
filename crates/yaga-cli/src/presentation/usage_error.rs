@@ -230,15 +230,18 @@ pub(super) fn render(
                 })
             });
             let typed_flag = arg.filter(|a| !a.is_positional()).and_then(|a| {
-                args.iter().rev().filter_map(|s| s.to_str()).find(|&token| {
-                    a.get_long().is_some_and(|l| token == format!("--{l}"))
-                        || a.get_short().is_some_and(|c| token == format!("-{c}"))
+                args.iter().enumerate().rev().find_map(|(idx, s)| {
+                    let token = s.to_str()?;
+                    (a.get_long().is_some_and(|l| token == format!("--{l}"))
+                        || a.get_short().is_some_and(|c| token == format!("-{c}")))
+                    .then_some((idx, token))
                 })
             });
             if error.kind() == ErrorKind::InvalidValue
                 && wrong.is_empty()
                 && !has_explicit_empty
-                && let Some(flag) = typed_flag
+                && let Some((idx, flag)) = typed_flag
+                && !args.get(idx + 1).is_some_and(|next| next.is_empty())
             {
                 usage = false;
                 format!("Option {} requires an argument.", literal(flag))
