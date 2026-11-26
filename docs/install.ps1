@@ -140,17 +140,23 @@
         if (!(Get-ReleaseFile "$base/$location/yaga-native-sha256.txt" $manifest 2048)) {
             if ($method -ceq 'auto' -and !(Test-Path -LiteralPath $receipt)) {
                 if (!$version) {
+                    $deadline = [Threading.CancellationTokenSource]::new(120000)
                     $request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Head, "$base/latest")
                     try {
-                        $response = $client.SendAsync($request, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+                        $response = $client.SendAsync($request, [Net.Http.HttpCompletionOption]::ResponseHeadersRead, $deadline.Token).GetAwaiter().GetResult()
                         try {
-                            $tag = [string]$response.Headers.Location
-                            if ([int]$response.StatusCode -in 301, 302, 303, 307, 308 -and
-                                $tag -cmatch ("\A" + [Regex]::Escape($base) + "/tag/v($versionPattern)\z")) {
-                                $version = $Matches[1]
+                            if ([int]$response.StatusCode -in 301, 302, 303, 307, 308 -and $response.Headers.Location) {
+                                $resolved = [Uri]::new([Uri]"$base/latest", $response.Headers.Location)
+                                if (($loopback -or $resolved.Scheme -eq 'https') -and !$resolved.UserInfo -and
+                                    $resolved.AbsoluteUri -cmatch ("\A" + [Regex]::Escape($base) + "/tag/v($versionPattern)\z")) {
+                                    $version = $Matches[1]
+                                }
                             }
                         } finally { $response.Dispose() }
-                    } finally { $request.Dispose() }
+                    } finally {
+                        $request.Dispose()
+                        $deadline.Dispose()
+                    }
                 }
                 if ($version -cmatch '\A(0\.[0-4]\.[0-9]+|0\.5\.0)\z') { Install-PythonYaga; return }
             }

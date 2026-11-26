@@ -75,6 +75,7 @@ jobs:
           path: ${{ runner.temp }}/yaga-action-dist/
           include-hidden-files: true # Retain the generated action-native/.gitattributes.
           if-no-files-found: error
+          retention-days: 7
 
   verify:
     name: Run staged Action on ${{ matrix.target }}

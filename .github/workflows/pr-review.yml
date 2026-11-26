@@ -129,7 +129,7 @@ jobs:
       group: yaga-pr-review-${{ needs.resolve.outputs.pull_request_number }}
       cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
       pull-requests: write

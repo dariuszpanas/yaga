@@ -48,6 +48,10 @@ class NativeWheelHook(BuildHookInterface):
             executable = Path(prebuilt).resolve(strict=True)
             tag_platform = os.environ.get("YAGA_WHEEL_PLATFORM")
             if not tag_platform:
+                if not shutil.which("rustc"):
+                    raise RuntimeError(
+                        "Determining the wheel platform tag without YAGA_WHEEL_PLATFORM requires rustc."
+                    )
                 host = subprocess.check_output(
                     ["rustc", "--print", "host-tuple"], text=True
                 ).strip()
@@ -93,6 +97,9 @@ class NativeWheelHook(BuildHookInterface):
                 and item["target"]["name"] == "yaga"
                 and item.get("executable")
             ]
-        build_data["force_include"][str(executable)] = f"yaga/_bin/{executable.name}"
+        platform_parts = tag_platform.split(".")
+        windows = all(part.startswith("win") for part in platform_parts)
+        binary_name = "yaga.exe" if windows else "yaga"
+        build_data["force_include"][str(executable)] = f"yaga/_bin/{binary_name}"
         build_data["tag"] = f"py3-none-{tag_platform}"
         build_data["pure_python"] = False

@@ -17,27 +17,35 @@ from pathlib import Path
 
 if __package__:
     from .release_images import (
-        check_musl_executable_headers,
+        check_musl_executable,
         check_pe_image,
-        elf_program_headers,
         macos_deployment,
     )
 else:
     from release_images import (
-        check_musl_executable_headers,
+        check_musl_executable,
         check_pe_image,
-        elf_program_headers,
         macos_deployment,
     )
 
 # Platform tags accepted by pip/uv wheel selection rules.
+# Linux release wheels bundle static musl binaries and advertise both manylinux and musllinux tags.
 PLATFORMS = {
     "aarch64-apple-darwin": "macosx_11_0_arm64",
     "x86_64-apple-darwin": "macosx_11_0_x86_64",
     "aarch64-pc-windows-msvc": "win_arm64",
     "x86_64-pc-windows-msvc": "win_amd64",
-    "aarch64-unknown-linux-musl": "manylinux_2_28_aarch64",
-    "x86_64-unknown-linux-musl": "manylinux_2_28_x86_64",
+    "aarch64-unknown-linux-musl": (
+        "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
+    ),
+    "x86_64-unknown-linux-musl": (
+        "manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_1_x86_64"
+    ),
+}
+
+LINUX_MACHINES = {
+    PLATFORMS["aarch64-unknown-linux-musl"]: 183,
+    PLATFORMS["x86_64-unknown-linux-musl"]: 62,
 }
 
 
@@ -48,6 +56,10 @@ def package_version(source: Path) -> str:
 
 def wheel_name(version: str, tag: str) -> str:
     return f"yaga_cli-{version}-py3-none-{tag}.whl"
+
+
+def wheel_tags(tag: str) -> list[str]:
+    return sorted(f"py3-none-{platform_tag}" for platform_tag in tag.split("."))
 
 
 def run(*command: str | Path, directory: Path, env: dict[str, str] | None = None) -> None:
@@ -70,68 +82,69 @@ def wheel_payload(wheel: Path, tag: str, scratch: Path) -> Path:
         if not windows and not (entry.external_attr >> 16 & stat.S_IXUSR):
             raise ValueError("packaged CLI lacks Unix executable mode")
         (scratch / filename).write_bytes(archive.read(entry))
+        dist_info = "-".join(wheel.name.split("-")[:2]) + ".dist-info"
         metadata = [
             item for item in archive.infolist() if item.filename.endswith(".dist-info/WHEEL")
         ]
-        expected = "-".join(wheel.name.split("-")[:2]) + ".dist-info/WHEEL"
+        expected_wheel = f"{dist_info}/WHEEL"
         if (
             len(metadata) != 1
-            or metadata[0].filename != expected
+            or metadata[0].filename != expected_wheel
             or metadata[0].file_size > 64 * 1024
         ):
             raise ValueError("invalid native wheel metadata member")
         headers = Parser().parsestr(archive.read(metadata[0]).decode("ascii"))
-        if headers.get_all("Root-Is-Purelib") != ["false"] or headers.get_all("Tag") != [
-            f"py3-none-{tag}"
-        ]:
+        actual_tags = headers.get_all("Tag") or []
+        if headers.get_all("Root-Is-Purelib") != ["false"] or sorted(actual_tags) != wheel_tags(
+            tag
+        ):
             raise ValueError("native wheel metadata does not match its filename")
+        package_metadata = [
+            item for item in archive.infolist() if item.filename.endswith(".dist-info/METADATA")
+        ]
+        expected_metadata = f"{dist_info}/METADATA"
+        if (
+            len(package_metadata) != 1
+            or package_metadata[0].filename != expected_metadata
+            or package_metadata[0].file_size > 256 * 1024
+        ):
+            raise ValueError("invalid native wheel package metadata member")
+        package_headers = Parser().parsestr(archive.read(package_metadata[0]).decode("utf-8"))
+        requires = package_headers.get_all("Requires-Dist") or []
+        if requires:
+            raise ValueError(f"native wheel must have zero runtime dependencies, found: {requires}")
     executable = scratch / filename
     if windows:
-        check_pe(executable, tag, executable=True)
-    elif tag.startswith("manylinux"):
-        check_elf(executable, tag, executable=True)
+        check_pe(executable, tag)
+    elif tag in LINUX_MACHINES:
+        check_elf(executable, tag)
     else:
-        check_macos(executable, tag, executable=True)
+        check_macos(executable, tag)
     return executable
 
 
-def check_pe(path: Path, tag: str, *, executable: bool = True) -> None:
+def check_pe(path: Path, tag: str) -> None:
     machine = {"win_arm64": 0xAA64, "win_amd64": 0x8664}[tag]
-    check_pe_image(path, machine, executable=executable)
+    check_pe_image(path, machine, executable=True)
 
 
-def check_elf(path: Path, tag: str, *, executable: bool = True) -> None:
-    """Verify ELF executable architecture and headers (static/static-PIE musl or dynamic)."""
-    machine = {"manylinux_2_28_aarch64": 183, "manylinux_2_28_x86_64": 62}[tag]
-    with path.open("rb") as stream:
-        kind, entry, headers = elf_program_headers(stream, path, machine)
-        types = [header[0] for header in headers]
-        if 1 not in types:
-            raise ValueError(f"{path.name} has the wrong ELF executable or shared-object role")
-        if executable:
-            # Dynamic glibc executables have PT_LOAD (1) and exactly one PT_INTERP (3).
-            # Plain static musl executables have PT_LOAD (1) and no PT_INTERP (3) or PT_DYNAMIC (2).
-            if kind in (2, 3) and (types.count(3) == 1 or (2 not in types and 3 not in types)):
-                return
-            # Static-PIE musl executables (e.g. x86_64-unknown-linux-musl) carry PT_DYNAMIC (2)
-            # for self-relocations without PT_INTERP (3) or DT_NEEDED shared libraries.
-            try:
-                check_musl_executable_headers(stream, kind, entry, headers)
-            except ValueError as error:
-                raise ValueError(
-                    f"{path.name} has the wrong ELF executable or shared-object role"
-                ) from error
-        else:
-            if kind != 3 or 3 in types:
-                raise ValueError(f"{path.name} has the wrong ELF executable or shared-object role")
+def check_elf(path: Path, tag: str) -> None:
+    """Verify static/static-PIE musl ELF executable architecture and headers."""
+    machine = LINUX_MACHINES[tag]
+    try:
+        check_musl_executable(path, machine)
+    except ValueError as error:
+        raise ValueError(f"{path.name} has the wrong ELF executable or shared-object role") from (
+            error
+        )
 
 
-def check_macos(path: Path, tag: str, *, executable: bool = True) -> None:
+def check_macos(path: Path, tag: str) -> None:
     """Verify the declared runtime is compatible with the wheel tag."""
     _, major, minor, arch = tag.split("_", 3)
     ceiling = (int(major), int(minor), 0)
     floor = (11, 0, 0) if arch == "arm64" else (10, 0, 0)
-    minimum = macos_deployment(path, arch, executable=executable)
+    minimum = macos_deployment(path, arch, executable=True)
     if not floor <= minimum <= ceiling:
         required = ".".join(map(str, minimum))
         raise ValueError(f"{path.name} declares macOS {required}, incompatible with {tag}")

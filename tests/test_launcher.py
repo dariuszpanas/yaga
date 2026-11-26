@@ -143,7 +143,10 @@ def test_native_wheel_hook_honors_platform_override_for_source_builds(
 
     monkeypatch.delenv("YAGA_PREBUILT_BINARY", raising=False)
     monkeypatch.setenv("YAGA_CARGO_TARGET", "x86_64-unknown-linux-musl")
-    monkeypatch.setenv("YAGA_WHEEL_PLATFORM", "manylinux_2_28_x86_64")
+    monkeypatch.setenv(
+        "YAGA_WHEEL_PLATFORM",
+        "manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_1_x86_64",
+    )
     monkeypatch.setattr(native_wheel.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(
         native_wheel.subprocess,
@@ -165,6 +168,62 @@ def test_native_wheel_hook_honors_platform_override_for_source_builds(
     hook.initialize("standard", build_data)
 
     assert "--target" in seen_cmd and "x86_64-unknown-linux-musl" in seen_cmd
-    assert build_data["tag"] == "py3-none-manylinux_2_28_x86_64"
+    assert (
+        build_data["tag"]
+        == "py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_1_x86_64"
+    )
     assert build_data["pure_python"] is False
     assert build_data["force_include"] == {str(built): "yaga/_bin/yaga"}
+
+
+@pytest.mark.parametrize(
+    ("source_name", "wheel_platform", "expected_member"),
+    [
+        (
+            "yaga-x86_64-unknown-linux-musl",
+            "manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_1_x86_64",
+            "yaga/_bin/yaga",
+        ),
+        (
+            "yaga-x86_64-pc-windows-msvc.exe",
+            "win_amd64",
+            "yaga/_bin/yaga.exe",
+        ),
+    ],
+)
+def test_native_wheel_hook_canonicalizes_prebuilt_binary_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source_name: str,
+    wheel_platform: str,
+    expected_member: str,
+) -> None:
+    staged = tmp_path / source_name
+    staged.write_bytes(b"binary")
+    monkeypatch.setenv("YAGA_PREBUILT_BINARY", str(staged))
+    monkeypatch.setenv("YAGA_WHEEL_PLATFORM", wheel_platform)
+    monkeypatch.setattr(native_wheel.shutil, "which", lambda name: None)
+
+    hook = object.__new__(native_wheel.NativeWheelHook)
+    monkeypatch.setattr(native_wheel.NativeWheelHook, "root", property(lambda self: str(tmp_path)))
+    build_data: dict[str, Any] = {"force_include": {}}
+    hook.initialize("standard", build_data)
+
+    assert build_data["tag"] == f"py3-none-{wheel_platform}"
+    assert build_data["pure_python"] is False
+    assert build_data["force_include"] == {str(staged.resolve()): expected_member}
+
+
+def test_native_wheel_hook_requires_rustc_when_prebuilt_lacks_platform_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    staged = tmp_path / "yaga"
+    staged.write_bytes(b"binary")
+    monkeypatch.setenv("YAGA_PREBUILT_BINARY", str(staged))
+    monkeypatch.delenv("YAGA_WHEEL_PLATFORM", raising=False)
+    monkeypatch.setattr(native_wheel.shutil, "which", lambda name: None)
+
+    hook = object.__new__(native_wheel.NativeWheelHook)
+    monkeypatch.setattr(native_wheel.NativeWheelHook, "root", property(lambda self: str(tmp_path)))
+    with pytest.raises(RuntimeError, match="requires rustc"):
+        hook.initialize("standard", {"force_include": {}})

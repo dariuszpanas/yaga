@@ -104,19 +104,30 @@ def install(tmp: Path, url: str, *arguments: str, **extra: str) -> subprocess.Co
     )
 
 
+def _native_binary_path() -> Path | None:
+    if configured := os.environ.get("YAGA_TEST_NATIVE_BINARY"):
+        path = Path(configured)
+        if path.is_file():
+            return path
+    try:
+        from yaga import find_yaga_bin
+
+        return find_yaga_bin()
+    except (ImportError, FileNotFoundError):
+        return None
+
+
 def executable_fixture() -> bytes:
-    if binary := os.environ.get("YAGA_TEST_NATIVE_BINARY") or os.environ.get(
-        "YAGA_TEST_NATIVE_CLI"
-    ):
-        return Path(binary).read_bytes()
+    if binary := _native_binary_path():
+        return binary.read_bytes()
     if WINDOWS:
         pytest.skip("set YAGA_TEST_NATIVE_BINARY to qualify a built Windows release")
     return f"#!/bin/sh\nprintf '%s\\n' 'yaga {VERSION}'\n".encode()
 
 
 def test_native_self_update_uses_the_installation_receipt(tmp_path: Path) -> None:
-    if not (os.environ.get("YAGA_TEST_NATIVE_BINARY") or os.environ.get("YAGA_TEST_NATIVE_CLI")):
-        pytest.skip("requires the native YAGA executable from native-ci")
+    if _native_binary_path() is None:
+        pytest.skip("requires a built native YAGA executable")
     binary = executable_fixture()
     # ELF and PE allow an opaque trailer. Two functional images at the same version
     # let the test observe an actual replacement without breaking Apple code signing.
@@ -672,6 +683,38 @@ def test_wget_https_redirects_install_only_verified_release(tmp_path: Path) -> N
         result = install(tmp_path, local, "--native", PATH=str(tools), no_proxy="127.0.0.1")
         assert result.returncode == 2
         assert requests == [entry]
+
+
+@pytest.mark.skipif(not WINDOWS, reason="PowerShell legacy relative redirect handling")
+def test_windows_relative_legacy_tag_stays_at_the_release_base(tmp_path: Path) -> None:
+    log = tmp_path / "manager-call"
+    mock = tmp_path / "uv.cmd"
+    mock.write_text('@echo off\necho %* > "%YAGA_TEST_LOG%"\n', encoding="ascii")
+    location = "tag/v0.4.0"
+
+    class Latest(QuietHandler):
+        def do_HEAD(self) -> None:  # noqa: N802
+            self.send_response(302)
+            self.send_header("location", location)
+            self.end_headers()
+
+    with release_server(tmp_path, Latest) as url:
+
+        def run() -> subprocess.CompletedProcess[str]:
+            return install(
+                tmp_path,
+                url,
+                YAGA_TEST_LOG=str(log),
+                PATH=str(tmp_path) + os.pathsep + os.environ["PATH"],
+            )
+
+        result = run()
+        assert result.returncode == 0, result.stderr
+        assert log.read_text().strip() == "--no-config tool install --python 3.12 yaga-cli==0.4.0"
+        log.unlink()
+        location = "/other/tag/v0.4.0"
+        assert run().returncode != 0
+        assert not log.exists()
 
 
 @pytest.mark.skipif(WINDOWS, reason="POSIX shell and GNU Wget")

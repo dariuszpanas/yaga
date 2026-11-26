@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.check_release import release_notes, validate_release
+from scripts.check_release import release_notes, validate_release, verify_bundled_assets
 from scripts.native_release import TARGETS, verify_image
-from scripts.release_wheels import PLATFORMS
+from scripts.release_wheels import PLATFORMS, wheel_tags
 from tests.test_macos_release_wheels import MACOS_11, legacy
 from tests.test_macos_release_wheels import image as mach_image
 
@@ -70,6 +70,37 @@ def test_crate_license_copies_match_repository_license() -> None:
     expected = (root / "LICENSE").read_text(encoding="utf-8")
     for crate in ("crates/yaga-core/LICENSE", "crates/yaga-cli/LICENSE"):
         assert (root / crate).read_text(encoding="utf-8") == expected, crate
+    verify_bundled_assets(root)
+
+
+def test_verify_bundled_assets_rejects_drift(tmp_path: Path) -> None:
+    for rel, content in (
+        ("docs/install.sh", b"#!/bin/sh\n"),
+        ("crates/yaga-cli/assets/install.sh", b"#!/bin/sh\n"),
+        ("docs/install.ps1", b"# ps1\n"),
+        ("crates/yaga-cli/assets/install.ps1", b"# ps1\n"),
+        ("LICENSE", b"BSD-3-Clause\n"),
+        ("crates/yaga-core/LICENSE", b"BSD-3-Clause\n"),
+        ("crates/yaga-cli/LICENSE", b"BSD-3-Clause\n"),
+    ):
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+    verify_bundled_assets(tmp_path)
+
+    (tmp_path / "crates/yaga-cli/assets/install.ps1").write_bytes(b"# drifted\n")
+    with pytest.raises(ValueError, match=r"crates/yaga-cli/assets/install\.ps1"):
+        verify_bundled_assets(tmp_path)
+
+
+def test_linux_release_wheels_advertise_manylinux_and_musllinux_tags() -> None:
+    for arch in ("x86_64", "aarch64"):
+        tag = PLATFORMS[f"{arch}-unknown-linux-musl"]
+        assert wheel_tags(tag) == [
+            f"py3-none-manylinux2014_{arch}",
+            f"py3-none-manylinux_2_17_{arch}",
+            f"py3-none-musllinux_1_1_{arch}",
+        ]
 
 
 @pytest.mark.parametrize(

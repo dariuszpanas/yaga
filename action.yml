@@ -41,7 +41,7 @@ inputs:
   repo:
     description: >-
       [HOST/]OWNER/REPO for numeric pr in pr-review, pr-triage, or pr-description, or local
-      repository root for change, workflow*, mode, path, size, tree, or repo
+      repository root for policy, change, workflow*, mode, path, size, tree, or repo
     required: false
     default: ""
   wait-seconds:
@@ -364,7 +364,7 @@ runs:
       run: |
         # yaga-commit-action-shell
         set -euo pipefail
-        unset PYTHONHOME GITHUB_TOKEN GH_TOKEN
+        unset GITHUB_TOKEN GH_TOKEN
         YAGA_REPORT="$(mktemp)"
         YAGA_ERROR="$(mktemp)"
         trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT
@@ -513,7 +513,7 @@ runs:
         set -euo pipefail
         unset YAGA_SAVED_GH_TOKEN
         YAGA_SAVED_GH_TOKEN="${YAGA_GH_TOKEN:-}"
-        unset PYTHONHOME GITHUB_TOKEN GH_TOKEN YAGA_GH_TOKEN
+        unset GITHUB_TOKEN GH_TOKEN YAGA_GH_TOKEN
         YAGA_REPORT="$(mktemp)"
         YAGA_ERROR="$(mktemp)"
         trap 'rm -f "$YAGA_REPORT" "$YAGA_ERROR"' EXIT

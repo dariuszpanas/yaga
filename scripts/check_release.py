@@ -62,6 +62,23 @@ def _read_action_versions(root: Path) -> set[str]:
     return set(found)
 
 
+def verify_bundled_assets(root: Path) -> None:
+    """Verify crate-bundled installers and license files match canonical repository copies."""
+    pairs = (
+        ("docs/install.sh", "crates/yaga-cli/assets/install.sh"),
+        ("docs/install.ps1", "crates/yaga-cli/assets/install.ps1"),
+        ("LICENSE", "crates/yaga-core/LICENSE"),
+        ("LICENSE", "crates/yaga-cli/LICENSE"),
+    )
+    for canonical, bundled in pairs:
+        source = root / canonical
+        copy = root / bundled
+        if not source.is_file() or not copy.is_file():
+            raise ValueError(f"missing required release asset pair: {canonical} and {bundled}")
+        if source.read_bytes() != copy.read_bytes():
+            raise ValueError(f"{bundled} does not match {canonical}")
+
+
 def release_notes(version: str, changelog: str) -> str:
     """Extract only the validated release section for the GitHub announcement."""
     validate_release(f"v{version}", version, changelog)
@@ -97,6 +114,7 @@ def main() -> None:
         core_dependency_version=core_dependency_version,
         action_versions=_read_action_versions(root),
     )
+    verify_bundled_assets(root)
     if args.notes_file is not None:
         args.notes_file.write_text(release_notes(project["version"], changelog), encoding="utf-8")
 

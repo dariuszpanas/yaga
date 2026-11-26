@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from html.parser import HTMLParser
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from readme_renderer.markdown import render
@@ -30,8 +31,8 @@ class DescriptionLinks(HTMLParser):
             self.links.append(attributes.get("src") or "")
 
 
-def validate_description(description: str) -> str:
-    """Return PyPI-compatible HTML; reject nonportable links and missing branding."""
+def validate_description(description: str, *, require_logo: bool = True) -> str:
+    """Return PyPI/crates.io-compatible HTML; reject nonportable links and missing branding."""
     html = render(description)
     if not html:
         raise SystemExit("package description did not render")
@@ -45,9 +46,26 @@ def validate_description(description: str) -> str:
         url = urlsplit(link)
         if url.scheme != "https" or not url.netloc:
             raise SystemExit(f"package description requires absolute HTTPS links: {link}")
-    if not any(
+    if require_logo and not any(
         image.get("src") == LOGO_URL and image.get("alt") == "YAGA terminal Y logo"
         for image in parsed.images
     ):
         raise SystemExit("package description must retain the public documentation logo")
     return html
+
+
+def validate_repository_descriptions(root: Path) -> None:
+    """Validate the root README and both published crate READMEs."""
+    validate_description((root / "README.md").read_text(encoding="utf-8"), require_logo=True)
+    for relative in ("crates/yaga-core/README.md", "crates/yaga-cli/README.md"):
+        validate_description((root / relative).read_text(encoding="utf-8"), require_logo=False)
+
+
+def main() -> None:
+    root = Path(__file__).resolve().parents[1]
+    validate_repository_descriptions(root)
+    print("Validated root and crate package descriptions.")
+
+
+if __name__ == "__main__":
+    main()
