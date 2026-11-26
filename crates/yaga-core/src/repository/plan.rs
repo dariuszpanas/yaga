@@ -1,13 +1,9 @@
 use super::{Provider, SECURITY_RULES, Selection, TREE_PROVIDERS, normalize_security};
 #[cfg(feature = "process")]
-use crate::fs::{absolute_path, display_path, resolve_user_path};
+use crate::fs::{absolute_path, display_path, read_regular_prefix, resolve_user_path};
 use crate::text::{casefold, json_text, python_repr, safe_text};
 use crate::version::{REQUIREMENT_TYPE_ERROR, check_requirement};
 use std::collections::{BTreeMap, HashSet};
-#[cfg(feature = "process")]
-use std::fs::File;
-#[cfg(feature = "process")]
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const PLAN_BYTES: usize = 64 * 1024;
@@ -103,9 +99,7 @@ pub fn load_plan(path: &Path) -> Result<RepositoryPlan, String> {
             safe_text(&display_path(path), 300)
         )
     })?;
-    let mut bytes = Vec::new();
-    File::open(&path)
-        .and_then(|file| file.take(PLAN_BYTES as u64 + 1).read_to_end(&mut bytes))
+    let bytes = read_regular_prefix(&path, PLAN_BYTES)
         .map_err(|_| format!("cannot read repository check plan {}", path.display()))?;
     parse_plan(&bytes, &path)
 }

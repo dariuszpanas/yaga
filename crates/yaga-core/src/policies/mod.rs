@@ -92,7 +92,13 @@ fn decode_v1<T: DeserializeOwned>(raw: &[u8], version: &str, kind: &str) -> Resu
     }
     let actual = t.remove(version).and_then(|v| v.as_integer());
     if actual != Some(1) {
-        return Err(format!("invalid {kind}: {version} must be the integer 1"));
+        let mut message = format!("invalid {kind}: {version} must be the integer 1");
+        if let Some(v) = actual.filter(|&v| v > 1) {
+            message.push_str(&format!(
+                " (found newer schema version {v}; update YAGA using its installation manager)"
+            ));
+        }
+        return Err(message);
     }
     if has_datetime(&t) {
         return Err(format!(

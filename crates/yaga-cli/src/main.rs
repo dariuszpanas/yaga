@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 // The installed Python CLI writes through a text stream. Match its native
 // Windows newlines even when a consumer redirects a multiline report to a pipe.
 #[cfg(windows)]

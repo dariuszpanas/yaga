@@ -36,6 +36,33 @@
   and use `default-https-client` (`hyper` 1.x + `rustls` 0.23) exclusively, removing legacy
   `rustls 0.21` and `rustls-webpki 0.101` from `Cargo.lock`.
 
+- Resolve `typos` through `git::external_executable` so relative `PATH` entries and repository-local
+  executables are rejected consistently with `git`, `gh`, `docker`, and `cargo`, and enforce
+  nonblocking regular-file guards (`read_regular_prefix`) on explicit commit, branch, repository
+  plan, and Agent review policy files.
+
+### Fixed
+
+- Fix CLI usage errors for short value-taking flags missing arguments (`-m`, `-F`, `-c`, `-r`),
+  missing arguments followed by another flag, and float/non-integer flag parse failures (such as
+  `commit quality --threshold`).
+
+- Resolve symlinks and `~` home paths consistently for `pull-request triage check --file`,
+  `test evaluate` JSON inputs, `review::Snapshot::load`, and native `yaga self update` receipts.
+
+- Include `diagnostics_omitted` for `size` and `tree` providers in `repo check --format github`
+  omitted-diagnostic summaries, report `pull-request triage` context in triage `gh` transport errors,
+  and append newer-schema upgrade hints for `TestPolicy` and `TriagePolicy`.
+
+- Validate Bedrock Converse `stop_reason` (`end_turn` / `stop_sequence`) and skip reasoning content
+  blocks before reading the decision text; tolerate small backward wall-clock skew in `__action gate`
+  setup timing and align `gate` operational/input errors to exit code `2`.
+
+- Gate `commits::global_config_path()` under `#[cfg(feature = "process")]`, fix ISO-8601 timezone
+  offset bounds and `+00:00.5` fractional offsets, honor `--` in shell completion, render short flags
+  in dynamic help tables, treat empty `NO_COLOR=""` consistently in `policy init`, refresh `self
+  update` help/error wording, and resolve Cargo's `redundant_homepage` warning in `yaga-cli`.
+
 ## [0.6.0] - 2026-11-24
 
 ### Added

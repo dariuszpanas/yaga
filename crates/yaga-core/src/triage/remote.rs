@@ -3,7 +3,7 @@ use super::{
     snapshot::{BOUNDARY, MAX_FILES, timestamp},
 };
 use crate::{
-    gh::{Client, PullRequest},
+    gh::{Client, Context, PullRequest},
     policies::triage::TriagePolicy,
 };
 use serde_json::{Value, json};
@@ -253,7 +253,7 @@ pub fn check_live(
     publish: bool,
 ) -> Result<Value, String> {
     let mut client = TriageClient {
-        api: Client::open(reference)?,
+        api: Client::open(reference, Context::Triage)?,
         requests: 0,
         deadline: Instant::now() + Duration::from_secs(300),
     };
@@ -273,7 +273,7 @@ pub fn collect_for_review<T>(
     ) -> Result<(T, Value, String, String), String>,
 ) -> Result<(T, Value), String> {
     let mut client = TriageClient {
-        api: Client::open(reference)?,
+        api: Client::open(reference, Context::Triage)?,
         requests: 0,
         deadline: Instant::now() + Duration::from_secs(300),
     };

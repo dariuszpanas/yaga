@@ -76,19 +76,21 @@ pub fn run_action(operation: &str) -> Result<(u8, String), String> {
 /// Include trusted Action setup in the existing per-job request and finalization budgets.
 #[cfg(feature = "github-http")]
 pub fn run_action_after_setup(operation: &str, elapsed: Duration) -> Result<(u8, String), String> {
-    let start = Instant::now()
-        .checked_sub(elapsed)
-        .ok_or("invalid Action setup duration")?;
-    run_from(operation, start, |timeout, budget, requests, success| {
-        super::api::GitHubRestApi::new(
-            &required("GITHUB_TOKEN")?,
-            &env::var("GITHUB_API_URL").unwrap_or_else(|_| "https://api.github.com".into()),
-            timeout,
-            budget,
-            Some(requests),
-            Some(success),
-        )
-    })
+    run_from(
+        operation,
+        Instant::now(),
+        elapsed,
+        |timeout, budget, requests, success| {
+            super::api::GitHubRestApi::new(
+                &required("GITHUB_TOKEN")?,
+                &env::var("GITHUB_API_URL").unwrap_or_else(|_| "https://api.github.com".into()),
+                timeout,
+                budget,
+                Some(requests),
+                Some(success),
+            )
+        },
+    )
 }
 
 /// Execute the same lifecycle state machine with an embedding host's bounded REST transport.
@@ -96,12 +98,13 @@ pub fn run_with_transport<A: RestApi>(
     operation: &str,
     transport: impl FnOnce(Duration, usize, Instant, Instant) -> Result<A, String>,
 ) -> Result<(u8, String), String> {
-    run_from(operation, Instant::now(), transport)
+    run_from(operation, Instant::now(), Duration::ZERO, transport)
 }
 
 fn run_from<A: RestApi>(
     operation: &str,
-    start: Instant,
+    now: Instant,
+    elapsed: Duration,
     transport: impl FnOnce(Duration, usize, Instant, Instant) -> Result<A, String>,
 ) -> Result<(u8, String), String> {
     let budget = match operation {
@@ -161,15 +164,23 @@ fn run_from<A: RestApi>(
         .checked_sub(timeout * 48 + Duration::from_secs(60))
         .filter(|d| !d.is_zero())
         .ok_or("YAGA job timeout leaves no bounded polling window")?;
-    let poll = start + available.min(Duration::from_secs(480));
-    if Instant::now() >= start + available {
-        return Err("YAGA job timeout leaves no bounded polling window".into());
-    }
+    let remaining_span = span
+        .checked_sub(elapsed)
+        .ok_or("YAGA job timeout leaves no bounded polling window")?;
+    let remaining_available = available
+        .checked_sub(elapsed)
+        .filter(|d| !d.is_zero())
+        .ok_or("YAGA job timeout leaves no bounded polling window")?;
+    let poll = now
+        + available
+            .min(Duration::from_secs(480))
+            .saturating_sub(elapsed);
+    let _ = remaining_available;
     let mut api = transport(
         timeout,
         budget,
-        start + span - Duration::from_secs(15),
-        start + span,
+        now + remaining_span.saturating_sub(Duration::from_secs(15)),
+        now + remaining_span,
     )?;
     let (result, n) = if operation == "invalidate" {
         (
@@ -206,7 +217,7 @@ fn run_from<A: RestApi>(
                 event["workflow_run"]["path"]
                     .as_str()
                     .ok_or("publisher wake workflow is invalid")?,
-                Some(poll.min(start + Duration::from_secs(120))),
+                Some(poll.min(now + Duration::from_secs(120).saturating_sub(elapsed))),
             )?,
             "authorize" => publisher.authorize(&mut api)?,
             "observe" | "request" => publisher.review(&mut api, operation == "request", poll)?,

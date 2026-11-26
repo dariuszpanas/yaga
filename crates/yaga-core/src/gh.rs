@@ -164,15 +164,76 @@ pub(crate) fn configure(command: &mut Command) {
 const MAX_GH_STDOUT_BYTES: usize = 512 * 1024;
 const MAX_GH_STDERR_BYTES: usize = 64 * 1024;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Context {
+    Review,
+    Triage,
+}
+
+impl Context {
+    fn operation(self, is_write: bool) -> &'static str {
+        match (self, is_write) {
+            (Self::Review, true) => "pull-request review submission",
+            (Self::Review, false) => "pull-request review",
+            (Self::Triage, true) => "pull-request triage comment publication",
+            (Self::Triage, false) => "pull-request triage",
+        }
+    }
+
+    fn process_error(self, is_write: bool, err: ProcessError) -> String {
+        let operation = self.operation(is_write);
+        match err {
+            ProcessError::Timeout => format!("gh exceeded the 30-second {operation} timeout"),
+            ProcessError::StdoutLimit | ProcessError::StderrLimit => {
+                format!("gh exceeded the bounded {operation} output limit")
+            }
+            _ => match (self, is_write) {
+                (Self::Review, false) => {
+                    "gh could not execute its bounded pull-request review request".into()
+                }
+                (Self::Review, true) => {
+                    "gh could not execute its bounded pull-request review submission".into()
+                }
+                (Self::Triage, false) => {
+                    "gh could not execute its bounded pull-request triage request".into()
+                }
+                (Self::Triage, true) => {
+                    "gh could not execute its bounded pull-request triage comment publication"
+                        .into()
+                }
+            },
+        }
+    }
+
+    fn status_error(self, is_write: bool) -> &'static str {
+        match (self, is_write) {
+            (Self::Review, true) => {
+                "gh could not submit the pull-request review; check gh authentication, pull-requests: write permission, and repository Actions approval settings"
+            }
+            (Self::Review, false) => {
+                "gh could not fetch the pull-request review state; check gh authentication, repository access, PR existence, and network connectivity"
+            }
+            (Self::Triage, true) => {
+                "gh could not publish the pull-request triage comment; check gh authentication and issues: write / pull-requests: write permission"
+            }
+            (Self::Triage, false) => {
+                "gh could not fetch the pull-request triage state; check gh authentication, repository access, PR existence, and network connectivity"
+            }
+        }
+    }
+}
+
 pub(crate) struct Client {
     executable: PathBuf,
     pub reference: PullRequest,
+    context: Context,
 }
 impl Client {
-    pub fn open(reference: PullRequest) -> Result<Self, String> {
+    pub fn open(reference: PullRequest, context: Context) -> Result<Self, String> {
         Ok(Self {
             executable: gh_executable()?,
             reference,
+            context,
         })
     }
     pub fn get(&self, endpoint: &str) -> Result<Value, String> {
@@ -227,11 +288,7 @@ impl Client {
         }
         command.arg(endpoint);
         configure(&mut command);
-        let operation = if method.is_some() {
-            "pull-request review submission"
-        } else {
-            "pull-request review"
-        };
+        let is_write = method.is_some();
         let out = run_bounded(
             command,
             None,
@@ -239,19 +296,51 @@ impl Client {
             MAX_GH_STDERR_BYTES,
             Duration::from_secs(30),
         )
-        .map_err(|e| match e {
-            ProcessError::Timeout => format!("gh exceeded the 30-second {operation} timeout"),
-            ProcessError::StdoutLimit | ProcessError::StderrLimit => {
-                format!("gh exceeded the bounded {operation} output limit")
-            }
-            _ if method.is_none() => {
-                "gh could not execute its bounded pull-request review request".into()
-            }
-            _ => "gh could not execute its bounded pull-request review submission".into(),
-        })?;
+        .map_err(|e| self.context.process_error(is_write, e))?;
         if !out.status.success() {
-            return Err(if method.is_some(){"gh could not submit the pull-request review; check gh authentication, pull-requests: write permission, and repository Actions approval settings"}else{"gh could not fetch the pull-request review state; check gh authentication, repository access, PR existence, and network connectivity"}.into());
+            return Err(self.context.status_error(is_write).into());
         }
         strict_value(&out.stdout).map_err(|_| "gh returned invalid or ambiguous UTF-8 JSON".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_errors_distinguish_review_and_triage_operations() {
+        assert!(
+            Context::Review
+                .process_error(false, ProcessError::Timeout)
+                .contains("pull-request review timeout")
+        );
+        assert!(
+            Context::Review
+                .status_error(true)
+                .contains("submit the pull-request review")
+        );
+        assert!(
+            Context::Triage
+                .process_error(false, ProcessError::Timeout)
+                .contains("pull-request triage timeout")
+        );
+        assert!(
+            Context::Triage
+                .process_error(true, ProcessError::StdoutLimit)
+                .contains("pull-request triage comment publication output limit")
+        );
+        assert!(
+            Context::Triage
+                .status_error(false)
+                .contains("fetch the pull-request triage state")
+        );
+        assert!(
+            Context::Triage
+                .status_error(true)
+                .contains("publish the pull-request triage comment")
+        );
+        assert!(!Context::Triage.status_error(false).contains("review"));
+        assert!(!Context::Triage.status_error(true).contains("review"));
     }
 }

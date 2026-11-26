@@ -1,15 +1,11 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-#[cfg(feature = "process")]
-use std::fs::File;
-#[cfg(feature = "process")]
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use toml::{Table, Value};
 
 use super::{policy::*, validate};
 #[cfg(feature = "process")]
-use crate::fs::resolve_user_path;
+use crate::fs::{read_regular_prefix, resolve_user_path};
 use crate::version::{REQUIREMENT_TYPE_ERROR, check_requirement};
 
 pub const MAX_CONFIG_BYTES: usize = 1024 * 1024;
@@ -203,8 +199,8 @@ pub fn load_config(
     }
 }
 
-/// Standalone installations follow the user configuration directory outside
-/// CI. Python adapters own their existing virtual environment eligibility.
+/// Resolve the user-level fallback configuration path outside CI and Action runtimes.
+#[cfg(feature = "process")]
 pub fn global_config_path() -> Option<PathBuf> {
     if [
         "CI",
@@ -231,14 +227,10 @@ pub fn global_config_path() -> Option<PathBuf> {
 
 #[cfg(feature = "process")]
 fn read(path: &Path) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    File::open(path)
-        .and_then(|file| {
-            file.take(MAX_CONFIG_BYTES as u64 + 1)
-                .read_to_end(&mut bytes)
-        })
+    let resolved = resolve_user_path(path)
         .map_err(|_| format!("cannot read configuration {}", display(path)))?;
-    Ok(bytes)
+    read_regular_prefix(&resolved, MAX_CONFIG_BYTES)
+        .map_err(|_| format!("cannot read configuration {}", display(path)))
 }
 
 fn take<T: DeserializeOwned>(table: &mut Table, key: &str, default: T) -> Result<T, String> {

@@ -14,11 +14,9 @@ mod validate;
 
 pub use authoring::{TemplateComment, append_template_guidance, explain_type, message_template};
 pub use checker::{CheckResult, Diagnostic, Severity, check_message, check_message_with_unicode};
+pub use config::{LoadedConfig, MAX_CONFIG_BYTES, QualityPolicy, parse_config, parse_root};
 #[cfg(feature = "process")]
-pub use config::load_config;
-pub use config::{
-    LoadedConfig, MAX_CONFIG_BYTES, QualityPolicy, global_config_path, parse_config, parse_root,
-};
+pub use config::{global_config_path, load_config};
 pub use content::has_issue_reference;
 pub use parser::{
     CommitFooter, MAX_MESSAGE_BYTES, ParsedCommit, footer_start, normalize_message, parse_message,

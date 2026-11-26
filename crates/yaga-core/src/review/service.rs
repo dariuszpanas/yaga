@@ -1,7 +1,7 @@
 use super::{Error, Lens, Snapshot, evaluate, in_progress, remote};
 use crate::{
     agent_review::{Aggregate, Outcome, Policy},
-    gh::{Client, PullRequest},
+    gh::{Client, Context, PullRequest},
     policies::triage::TriagePolicy,
 };
 use serde_json::Value;
@@ -87,7 +87,7 @@ pub fn check_live(
     };
     let budget = Duration::from_secs(wait.unwrap_or_else(|| seconds("wait_seconds")));
     let digest = policy.digest();
-    let client = Client::open(reference.clone())?;
+    let client = Client::open(reference.clone(), Context::Review)?;
     std::thread::sleep(Duration::from_secs(seconds("delay_seconds")));
     let collect = || {
         remote::collect(&reference, &digest, include_runs, &mut |e| client.get(e)).map(|(s, _)| s)

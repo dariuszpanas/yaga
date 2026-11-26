@@ -59,6 +59,9 @@ fn catalog_completes_aliases_choices_and_repeated_options() {
         ["#", ";"]
     );
     assert!(values(&["branch", "check", "--policy"], "some file").is_empty());
+    assert!(values(&["commit", "check", "--", "--format"], "").is_empty());
+    assert!(values(&["commit", "check", "--"], "--f").is_empty());
+    assert!(values(&["commit", "check", "--"], "--format=j").is_empty());
 }
 
 #[test]

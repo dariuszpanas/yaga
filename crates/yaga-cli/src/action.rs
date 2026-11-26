@@ -3,8 +3,15 @@ mod cli;
 mod summary;
 
 use crate::{Format, commit_report};
-use std::{env, path::Path, process::ExitCode};
+use std::{
+    env,
+    path::Path,
+    process::ExitCode,
+    time::{Duration, SystemTime},
+};
 use yaga_core::{agent_review::github::runtime, github_commit, text::safe_text};
+
+const MAX_CLOCK_SKEW: Duration = Duration::from_secs(5);
 
 fn variable(name: &str) -> String {
     env::var(name).unwrap_or_default()
@@ -68,17 +75,25 @@ fn commit() -> Result<u8, String> {
     }
 }
 
+fn setup_elapsed(raw: &str, now: SystemTime) -> Result<Duration, &'static str> {
+    let start = raw
+        .parse::<u64>()
+        .map_err(|_| "invalid Action setup time")?;
+    let started = SystemTime::UNIX_EPOCH
+        .checked_add(Duration::from_millis(start))
+        .ok_or("invalid Action setup time")?;
+    match now.duration_since(started) {
+        Ok(elapsed) => Ok(elapsed),
+        Err(skew) if skew.duration() <= MAX_CLOCK_SKEW => Ok(Duration::ZERO),
+        Err(_) => Err("invalid Action setup time"),
+    }
+}
+
 fn gate() -> Result<u8, String> {
     if variable("YAGA_GATE") != "agent-review" {
         return Err("gate is invalid".into());
     }
-    let start = variable("YAGA_SETUP_START_MS")
-        .parse::<u64>()
-        .map_err(|_| "invalid Action setup time")?;
-    let elapsed = std::time::SystemTime::UNIX_EPOCH
-        .checked_add(std::time::Duration::from_millis(start))
-        .and_then(|s| s.elapsed().ok())
-        .ok_or("invalid Action setup time")?;
+    let elapsed = setup_elapsed(&variable("YAGA_SETUP_START_MS"), SystemTime::now())?;
     let (code, message) = runtime::run_action_after_setup(&variable("YAGA_OPERATION"), elapsed)?;
     println!("{message}");
     Ok(code)
@@ -109,7 +124,44 @@ pub fn run() -> ExitCode {
         }
         Err(message) => {
             eprintln!("YAGA failed: {}", safe_text(&message, 1000));
-            ExitCode::from(if mode == "gate" { 1 } else { 2 })
+            ExitCode::from(2)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_elapsed_clamps_small_backward_skew_and_rejects_distant_future() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let past_ms = (1_700_000_000u64 - 12) * 1000;
+        assert_eq!(
+            setup_elapsed(&past_ms.to_string(), now),
+            Ok(Duration::from_secs(12))
+        );
+
+        let small_skew_ms = 1_700_000_000u64 * 1000 + 2_500;
+        assert_eq!(
+            setup_elapsed(&small_skew_ms.to_string(), now),
+            Ok(Duration::ZERO)
+        );
+
+        let exact_bound_ms = (1_700_000_000u64 + 5) * 1000;
+        assert_eq!(
+            setup_elapsed(&exact_bound_ms.to_string(), now),
+            Ok(Duration::ZERO)
+        );
+
+        let far_future_ms = (1_700_000_000u64 + 60) * 1000;
+        assert_eq!(
+            setup_elapsed(&far_future_ms.to_string(), now),
+            Err("invalid Action setup time")
+        );
+        assert_eq!(
+            setup_elapsed("not-a-number", now),
+            Err("invalid Action setup time")
+        );
     }
 }

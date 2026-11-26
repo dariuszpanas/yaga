@@ -63,7 +63,7 @@ impl ReviewBoundary {
         let a = ACTIONS
             .iter()
             .find(|(v, _)| *v == self.action)
-            .ok_or("YAGA boundary phase is invalid")?
+            .ok_or("YAGA boundary action is invalid")?
             .1;
         if self.run_attempt <= 0 || self.run_id <= 0 || self.pull_request_number <= 0 {
             return Err("boundary requires positive run, attempt and PR identities".into());

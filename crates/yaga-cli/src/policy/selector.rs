@@ -46,7 +46,9 @@ fn enable_stderr_vt() -> bool {
     let Ok(handle) = io::stderr().as_handle().try_clone_to_owned() else {
         return false;
     };
-    // Transfer a duplicate of the console handle. Dropping it must leave stderr open.
+    // SAFETY: `handle` is a freshly duplicated `OwnedHandle` from `try_clone_to_owned`;
+    // transferring ownership to `crossterm_winapi::Handle` closes only the duplicate on drop.
+    #[allow(unsafe_code)]
     let handle = unsafe { crossterm_winapi::Handle::from_raw(handle.into_raw_handle().cast()) };
     let console = crossterm_winapi::ConsoleMode::from(handle);
     const ENABLE_VIRTUAL_TERMINAL_PROCESSING: u32 = 0x0004;
@@ -77,7 +79,7 @@ fn action(pressed: event::KeyEvent) -> Key {
 pub(super) fn select(existing: &HashMap<Kind, PathBuf>) -> io::Result<Option<Vec<Kind>>> {
     let mut out = io::stderr().lock();
     let ansi = out.is_terminal()
-        && std::env::var_os("NO_COLOR").is_none()
+        && std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty())
         && std::env::var_os("TERM").is_none_or(|s| s != "dumb");
     #[cfg(windows)]
     let ansi = ansi && enable_stderr_vt();

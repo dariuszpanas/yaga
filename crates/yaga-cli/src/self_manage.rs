@@ -24,7 +24,7 @@ pub enum Operation {
         dry_run: bool,
     },
 }
-const UNMANAGED: &str = "self update requires a Cargo installation from a local YAGA checkout; update this executable with the manager that installed it";
+const UNMANAGED: &str = "self update requires a standalone native release, uv tool, or local Cargo checkout installation; update this executable with the manager that installed it";
 struct Plan {
     tool: PathBuf,
     arguments: Vec<OsString>,
@@ -177,7 +177,9 @@ fn plan(exe: &Path) -> Result<Plan, String> {
     })
 }
 fn update(dry_run: bool) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|_| UNMANAGED)?;
+    let exe = std::env::current_exe()
+        .and_then(|path| absolute_path(&path))
+        .map_err(|_| UNMANAGED)?;
     if let Some(digest) = release::receipt(&exe)? {
         return release::update(&exe, &digest, dry_run);
     }
@@ -361,5 +363,33 @@ mod tests {
         receipt["installs"]["other 0.1.0 (unowned)"] = record;
         std::fs::write(path, receipt.to_string()).unwrap();
         assert!(owned_installation(&exe).is_err())
+    }
+
+    #[test]
+    fn native_receipt_resolves_canonical_executable_and_unmanaged_mentions_native() {
+        use sha2::{Digest, Sha256};
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("native-bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        let name = if cfg!(windows) { "yaga.exe" } else { "yaga" };
+        let exe = bin_dir.join(name);
+        let payload = b"native-binary-fixture";
+        std::fs::write(&exe, payload).unwrap();
+        let digest = format!("{:x}", Sha256::digest(payload));
+        let receipt = format!(
+            "yaga-native-install-v1 {}\n{digest}  {name}\n",
+            env!("CARGO_PKG_VERSION")
+        );
+        std::fs::write(bin_dir.join(".yaga-native-receipt"), receipt).unwrap();
+        assert_eq!(release::receipt(&exe).unwrap(), Some(digest.clone()));
+        #[cfg(unix)]
+        {
+            let link_dir = temp.path().join("links");
+            std::fs::create_dir_all(&link_dir).unwrap();
+            let link = link_dir.join(name);
+            std::os::unix::fs::symlink(&exe, &link).unwrap();
+            assert_eq!(release::receipt(&link).unwrap(), Some(digest));
+        }
+        assert!(UNMANAGED.contains("standalone native release"));
     }
 }

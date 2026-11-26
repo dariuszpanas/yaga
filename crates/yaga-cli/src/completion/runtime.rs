@@ -239,18 +239,22 @@ fn values(param: &OptionSpec, partial: &str) -> Vec<(String, String)> {
 
 fn candidates(root: &Command, args: &[String], partial: &str) -> Vec<(String, String)> {
     let ctx = resolve(root, args);
+    let after_terminator = args.iter().any(|s| s == "--");
     let mut previous = args.last().map(String::as_str);
     let mut prefix = partial;
-    if partial == "=" {
-        prefix = ""
-    } else if partial.starts_with('-')
-        && let Some((name, value)) = partial.split_once('=')
-    {
-        previous = Some(name);
-        prefix = value
+    if !after_terminator {
+        if partial == "=" {
+            prefix = ""
+        } else if partial.starts_with('-')
+            && let Some((name, value)) = partial.split_once('=')
+        {
+            previous = Some(name);
+            prefix = value
+        }
     }
-    if !prefix.starts_with('-') || args.iter().any(|s| s == "--") {
-        if let Some(i) = previous.and_then(|v| find_option(&ctx.menu, v))
+    if !prefix.starts_with('-') || after_terminator {
+        if !after_terminator
+            && let Some(i) = previous.and_then(|v| find_option(&ctx.menu, v))
             && ctx.menu.options[i].takes_value
         {
             return values(&ctx.menu.options[i], prefix);
@@ -264,6 +268,9 @@ fn candidates(root: &Command, args: &[String], partial: &str) -> Vec<(String, St
             .map(|(_, p)| p)
         {
             return values(param, prefix);
+        }
+        if after_terminator {
+            return Vec::new();
         }
     }
     let mut result: Vec<_> = ctx

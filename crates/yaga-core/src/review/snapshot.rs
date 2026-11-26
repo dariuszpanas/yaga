@@ -275,13 +275,19 @@ impl Snapshot {
     }
     #[cfg(feature = "process")]
     pub fn load(path: &Path) -> Result<Self, String> {
-        let raw = crate::fs::read_regular_prefix(path, MAX_BYTES).map_err(|e| {
+        let resolved = crate::fs::resolve_user_path(path).map_err(|e| {
             format!(
-                "cannot read pull-request review snapshot {}: {e}",
+                "cannot resolve pull-request review snapshot {}: {e}",
                 path.display()
             )
         })?;
-        Self::from_bytes(&raw, &path.display().to_string())
+        let raw = crate::fs::read_regular_prefix(&resolved, MAX_BYTES).map_err(|e| {
+            format!(
+                "cannot read pull-request review snapshot {}: {e}",
+                resolved.display()
+            )
+        })?;
+        Self::from_bytes(&raw, &resolved.display().to_string())
     }
     pub fn from_bytes(bytes: &[u8], source: &str) -> Result<Self, String> {
         if bytes.len() > MAX_BYTES {

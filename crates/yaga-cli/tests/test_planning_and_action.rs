@@ -567,3 +567,63 @@ fn native_action_cli_and_summary_dispatch_cleanly() {
     assert!(md.contains("YAGA Checks"), "{md}");
     assert!(md.contains("Passed"), "{md}");
 }
+
+#[test]
+fn gate_action_operational_errors_exit_2_and_tolerate_small_clock_skew() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Invalid gate input exits 2 (consistent with action.yml and AGENTS.md).
+    let bad_gate = yaga_cmd(dir.path())
+        .args(["__action", "gate"])
+        .env("YAGA_GATE", "unknown")
+        .env("YAGA_SETUP_START_MS", "1700000000000")
+        .output()
+        .unwrap();
+    assert_eq!(bad_gate.status.code(), Some(2));
+    assert!(stderr_str(&bad_gate).contains("gate is invalid"));
+
+    // Distant future setup timestamp still fails closed with exit 2.
+    let future_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        + 60_000;
+    let far_future = yaga_cmd(dir.path())
+        .args(["__action", "gate"])
+        .env("YAGA_GATE", "agent-review")
+        .env("YAGA_SETUP_START_MS", future_ms.to_string())
+        .env("YAGA_OPERATION", "invalidate")
+        .output()
+        .unwrap();
+    assert_eq!(far_future.status.code(), Some(2));
+    assert!(stderr_str(&far_future).contains("invalid Action setup time"));
+
+    // Small backward wall-clock skew (2s in future) passes setup timing and fails later on missing env.
+    let small_skew_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        + 2_000;
+    let skewed = yaga_cmd(dir.path())
+        .args(["__action", "gate"])
+        .env_remove("GITHUB_REPOSITORY")
+        .env("YAGA_GATE", "agent-review")
+        .env("YAGA_SETUP_START_MS", small_skew_ms.to_string())
+        .env("YAGA_OPERATION", "invalidate")
+        .output()
+        .unwrap();
+    assert_eq!(skewed.status.code(), Some(2));
+    assert!(
+        stderr_str(&skewed).contains("required GitHub environment is missing"),
+        "stderr: {}",
+        stderr_str(&skewed)
+    );
+
+    // Direct CLI gate operational error also exits 2.
+    let cli_gate_err = yaga_cmd(dir.path())
+        .env_remove("GITHUB_REPOSITORY")
+        .args(["gate", "agent-review", "invalidate"])
+        .output()
+        .unwrap();
+    assert_eq!(cli_gate_err.status.code(), Some(2));
+}

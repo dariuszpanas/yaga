@@ -4,7 +4,8 @@ use crate::commits::QualityPolicy;
 use aws_sdk_bedrockruntime::{
     Client,
     config::Region,
-    types::{ContentBlock, ConversationRole, InferenceConfiguration, Message},
+    operation::converse::ConverseOutput,
+    types::{ContentBlock, ConversationRole, InferenceConfiguration, Message, StopReason},
 };
 use std::time::Duration;
 use tokio::runtime::Runtime;
@@ -53,14 +54,45 @@ impl Provider {
             .block_on(async { tokio::time::timeout(Duration::from_secs(30), request.send()).await })
             .map_err(|_| "Bedrock request exceeded the provider time limit")?
             .map_err(|_| "Bedrock request failed")?;
-        let text = reply
-            .output()
-            .and_then(|o| o.as_message().ok())
-            .and_then(|m| m.content().first())
-            .and_then(|b| b.as_text().ok())
-            .ok_or("Bedrock returned invalid output: expected non-empty text output")?;
-        decision(text).map_err(|e| format!("Bedrock returned invalid output: {e}"))
+        parse_reply(&reply)
     }
+}
+
+fn parse_reply(reply: &ConverseOutput) -> Result<Prediction, String> {
+    if !matches!(
+        reply.stop_reason(),
+        StopReason::EndTurn | StopReason::StopSequence
+    ) {
+        return Err(format!(
+            "Bedrock returned incomplete output: stop_reason {}",
+            reply.stop_reason().as_str()
+        ));
+    }
+    let message = reply
+        .output()
+        .and_then(|o| o.as_message().ok())
+        .filter(|m| m.role() == &ConversationRole::Assistant)
+        .ok_or("Bedrock returned invalid output: expected assistant message")?;
+    let mut final_text = None;
+    for block in message.content() {
+        match block {
+            ContentBlock::ReasoningContent(_) => {}
+            ContentBlock::Text(text) if final_text.is_none() => final_text = Some(text.as_str()),
+            ContentBlock::Text(_) => {
+                return Err(
+                    "Bedrock returned invalid output: expected a single text content block".into(),
+                );
+            }
+            _ => {
+                return Err(
+                    "Bedrock returned invalid output: unexpected non-text content block".into(),
+                );
+            }
+        }
+    }
+    let text =
+        final_text.ok_or("Bedrock returned invalid output: expected non-empty text output")?;
+    decision(text).map_err(|e| format!("Bedrock returned invalid output: {e}"))
 }
 
 #[cfg(test)]
@@ -130,5 +162,98 @@ mod tests {
             decision("FLAG vague change").unwrap()
         );
         server.join().unwrap()
+    }
+
+    #[test]
+    fn parse_reply_validates_stop_reason_and_skips_reasoning_blocks() {
+        use aws_sdk_bedrockruntime::types::{
+            CachePointBlock, CachePointType, ConverseOutput as ConverseBody, ReasoningContentBlock,
+            ReasoningTextBlock,
+        };
+        let make = |stop_reason: StopReason, content: Vec<ContentBlock>| {
+            let msg = Message::builder()
+                .role(ConversationRole::Assistant)
+                .set_content(Some(content))
+                .build()
+                .unwrap();
+            ConverseOutput::builder()
+                .output(ConverseBody::Message(msg))
+                .stop_reason(stop_reason)
+                .build()
+                .unwrap()
+        };
+
+        let reasoning = ContentBlock::ReasoningContent(ReasoningContentBlock::ReasoningText(
+            ReasoningTextBlock::builder()
+                .text("analyzing commit")
+                .build()
+                .unwrap(),
+        ));
+        let ok_reply = make(
+            StopReason::EndTurn,
+            vec![reasoning.clone(), ContentBlock::Text("PASS".into())],
+        );
+        assert_eq!(parse_reply(&ok_reply).unwrap(), decision("PASS").unwrap());
+
+        let stop_seq = make(
+            StopReason::StopSequence,
+            vec![ContentBlock::Text("FLAG vague subject".into())],
+        );
+        assert_eq!(
+            parse_reply(&stop_seq).unwrap(),
+            decision("FLAG vague subject").unwrap()
+        );
+
+        let truncated = make(
+            StopReason::MaxTokens,
+            vec![ContentBlock::Text("PASS".into())],
+        );
+        assert!(
+            parse_reply(&truncated)
+                .unwrap_err()
+                .contains("stop_reason max_tokens")
+        );
+
+        let guard = make(
+            StopReason::GuardrailIntervened,
+            vec![ContentBlock::Text("PASS".into())],
+        );
+        assert!(
+            parse_reply(&guard)
+                .unwrap_err()
+                .contains("guardrail_intervened")
+        );
+
+        let cache_point = ContentBlock::CachePoint(
+            CachePointBlock::builder()
+                .r#type(CachePointType::Default)
+                .build()
+                .unwrap(),
+        );
+        let unexpected = make(
+            StopReason::EndTurn,
+            vec![ContentBlock::Text("PASS".into()), cache_point],
+        );
+        assert!(
+            parse_reply(&unexpected)
+                .unwrap_err()
+                .contains("unexpected non-text")
+        );
+
+        let multi_text = make(
+            StopReason::EndTurn,
+            vec![
+                ContentBlock::Text("PASS".into()),
+                ContentBlock::Text("extra".into()),
+            ],
+        );
+        assert!(
+            parse_reply(&multi_text)
+                .unwrap_err()
+                .contains("single text content block")
+        );
+
+        let only_reasoning = make(StopReason::EndTurn, vec![reasoning]);
+        assert!(parse_reply(&only_reasoning).is_err());
     }
 }

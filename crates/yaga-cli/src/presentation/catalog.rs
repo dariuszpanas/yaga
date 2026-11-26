@@ -11,11 +11,24 @@ fn styled(style: &str, text: String) -> Copy {
     }
 }
 
-fn option(arg: &Arg) -> Vec<Copy> {
-    let label = match (arg.get_long(), arg.get_short()) {
-        (Some(long), _) => format!("--{long}"),
-        (_, Some(short)) => format!("-{short}"),
-        _ => arg.get_id().to_string(),
+fn option(arg: &Arg, has_short: bool) -> Vec<Copy> {
+    let (primary, short) = match (arg.get_long(), arg.get_short()) {
+        (Some(long), Some(short)) => (
+            styled("bold cyan", format!("--{long}")),
+            styled("bold green", format!("-{short}")),
+        ),
+        (Some(long), None) => (
+            styled("bold cyan", format!("--{long}")),
+            Copy::Plain(String::new()),
+        ),
+        (None, Some(short)) => (
+            styled("bold green", format!("-{short}")),
+            Copy::Plain(String::new()),
+        ),
+        (None, None) => (
+            styled("bold cyan", arg.get_id().to_string()),
+            Copy::Plain(String::new()),
+        ),
     };
     let choices = arg
         .get_possible_values()
@@ -50,14 +63,18 @@ fn option(arg: &Arg) -> Vec<Copy> {
             .collect::<Vec<_>>();
         description.push(styled("dim", format!("[default: {}]", defaults.join(", "))));
     }
-    vec![
+    let mut row = vec![
         styled("red", if required { "*".into() } else { String::new() }),
-        styled("bold cyan", label),
-        styled("bold yellow", value),
-        Copy::Columns {
-            columns: description,
-        },
-    ]
+        primary,
+    ];
+    if has_short {
+        row.push(short);
+    }
+    row.push(styled("bold yellow", value));
+    row.push(Copy::Columns {
+        columns: description,
+    });
+    row
 }
 
 fn from_command(command: &Command) -> Page {
@@ -65,11 +82,15 @@ fn from_command(command: &Command) -> Page {
     let usage = usage.strip_prefix("Usage: ").unwrap_or(&usage);
     let mut panels = Vec::new();
     for (positionals, title) in [(true, "Arguments"), (false, "Options")] {
-        let rows: Vec<_> = command
+        let args: Vec<_> = command
             .get_arguments()
             .filter(|arg| !arg.is_hide_set() && arg.is_positional() == positionals)
-            .map(option)
             .collect();
+        let has_short = !positionals
+            && args
+                .iter()
+                .any(|arg| arg.get_long().is_some() && arg.get_short().is_some());
+        let rows: Vec<_> = args.into_iter().map(|arg| option(arg, has_short)).collect();
         if !rows.is_empty() {
             panels.push(HelpPanel {
                 title: title.into(),
@@ -183,5 +204,33 @@ mod tests {
             })
             .collect::<BTreeSet<_>>();
         assert_eq!(documented, expected);
+    }
+
+    #[test]
+    fn dynamic_help_renders_short_flags_when_present() {
+        let cmd = Command::new("demo")
+            .arg(
+                clap::Arg::new("quiet")
+                    .long("quiet")
+                    .short('q')
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Suppress output."),
+            )
+            .arg(
+                clap::Arg::new("format")
+                    .long("format")
+                    .value_parser(["text", "json"]),
+            );
+        let page = super::from_command(&cmd);
+        let options = page
+            .panels
+            .iter()
+            .find(|p| p.title == "Options")
+            .expect("options panel");
+        assert_eq!(options.rows[0].len(), 5);
+        assert_eq!(options.rows[0][1].text().plain_text(), "--quiet");
+        assert_eq!(options.rows[0][2].text().plain_text(), "-q");
+        assert_eq!(options.rows[1][1].text().plain_text(), "--format");
+        assert_eq!(options.rows[1][2].text().plain_text(), "");
     }
 }

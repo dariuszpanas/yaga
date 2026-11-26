@@ -52,15 +52,11 @@ pub(crate) fn parse_time(raw: &str) -> Option<Option<i64>> {
         return Some(Some(wall));
     }
     let (h, m, s, us) = clock_fields(zone.get(1..)?)?;
-    let seconds = i64::from(h) * 3600 + i64::from(m) * 60 + i64::from(s);
-    if seconds >= 86_400 {
+    if h >= 24 || m >= 60 || s >= 60 {
         return None;
     }
-    let offset = if seconds == 0 {
-        0
-    } else {
-        seconds * 1_000_000 + i64::from(us)
-    };
+    let seconds = i64::from(h) * 3600 + i64::from(m) * 60 + i64::from(s);
+    let offset = seconds * 1_000_000 + i64::from(us);
     Some(Some(if zone.starts_with('+') {
         wall - offset
     } else if zone.starts_with('-') {

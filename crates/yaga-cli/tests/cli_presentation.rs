@@ -169,6 +169,74 @@ fn usage_errors_render_framed_diagnostics_with_exit_2() {
     );
     assert_eq!(bad_format.status.code(), Some(2));
     assert!(stderr_str(&bad_format).contains("Invalid value"));
+
+    // Missing value on short flags and flags followed by another flag must report missing argument.
+    for (args, expected) in [
+        (
+            vec!["commit", "check", "-m"],
+            "Option '-m' requires an argument.",
+        ),
+        (
+            vec!["commit", "check", "-F"],
+            "Option '-F' requires an argument.",
+        ),
+        (
+            vec!["commit", "check", "-c"],
+            "Option '-c' requires an argument.",
+        ),
+        (
+            vec!["commit", "check", "-r"],
+            "Option '-r' requires an argument.",
+        ),
+        (
+            vec!["commit", "check", "--message", "--quiet"],
+            "Option '--message' requires an argument.",
+        ),
+    ] {
+        let out = run(dir.path(), &args);
+        assert_eq!(out.status.code(), Some(2));
+        let err = stderr_str(&out);
+        assert!(err.contains(expected), "args={args:?}\nstderr:\n{err}");
+        assert!(
+            !err.contains("not a valid integer"),
+            "args={args:?}\nstderr:\n{err}"
+        );
+    }
+
+    // Float flag parse failures must report float rather than integer.
+    let bad_float = run(dir.path(), &["commit", "quality", "--threshold", "abc"]);
+    assert_eq!(bad_float.status.code(), Some(2));
+    let err = stderr_str(&bad_float);
+    assert!(err.contains("is not a valid float."), "{err}");
+
+    // Integer flag parse failures keep reporting integer.
+    let bad_int = run(
+        dir.path(),
+        &[
+            "pull-request",
+            "review",
+            "check",
+            "--policy",
+            "p.toml",
+            "--wait-seconds",
+            "abc",
+        ],
+    );
+    assert_eq!(bad_int.status.code(), Some(2));
+    let err = stderr_str(&bad_int);
+    assert!(err.contains("is not a valid integer."), "{err}");
+
+    // Self-update help reflects all managed installation owners rather than uv-only.
+    for args in [&["self", "--help"][..], &["self", "update", "--help"][..]] {
+        let help = run(dir.path(), args);
+        assert_eq!(help.status.code(), Some(0));
+        let text = stdout_str(&help);
+        assert!(
+            text.contains("Update the current installation through its recorded owner."),
+            "{text}"
+        );
+        assert!(!text.contains("uv tool installation"), "{text}");
+    }
 }
 
 #[test]

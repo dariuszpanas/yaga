@@ -217,15 +217,32 @@ pub(super) fn render(
             format!("Missing option {}.", literal(&first))
         }
         ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
-            if wrong.is_empty() && args.last().is_some_and(|s| s == name) {
+            let arg = at.get_arguments().find(|a| {
+                a.get_long()
+                    .is_some_and(|s| name.trim_start_matches('-') == s)
+                    || a.get_short().is_some_and(|c| name == format!("-{c}"))
+                    || (a.is_positional() && a.to_string() == name)
+            });
+            let has_explicit_empty = arg.is_some_and(|a| {
+                args.iter().filter_map(|s| s.to_str()).any(|token| {
+                    a.get_long().is_some_and(|l| token == format!("--{l}="))
+                        || a.get_short().is_some_and(|c| token == format!("-{c}="))
+                })
+            });
+            let typed_flag = arg.filter(|a| !a.is_positional()).and_then(|a| {
+                args.iter().rev().filter_map(|s| s.to_str()).find(|&token| {
+                    a.get_long().is_some_and(|l| token == format!("--{l}"))
+                        || a.get_short().is_some_and(|c| token == format!("-{c}"))
+                })
+            });
+            if error.kind() == ErrorKind::InvalidValue
+                && wrong.is_empty()
+                && !has_explicit_empty
+                && let Some(flag) = typed_flag
+            {
                 usage = false;
-                format!("Option {} requires an argument.", literal(name))
+                format!("Option {} requires an argument.", literal(flag))
             } else {
-                let arg = at.get_arguments().find(|a| {
-                    a.get_long()
-                        .is_some_and(|s| name.trim_start_matches('-') == s)
-                        || (a.is_positional() && a.to_string() == name)
-                });
                 let mut choices = values(error, ContextKind::ValidValue);
                 if choices.is_empty()
                     && let Some(i) = arg.and_then(Arg::get_index)
@@ -262,11 +279,47 @@ pub(super) fn render(
                             .join(", ")
                     )
                 } else {
-                    format!(
-                        "Invalid value for {}: {} is not a valid integer.",
-                        literal(&shown),
-                        literal(&wrong)
-                    )
+                    let type_id = arg.map(|a| a.get_value_parser().type_id());
+                    let is_int = type_id.is_some_and(|id| {
+                        [
+                            clap::builder::ValueParser::from(clap::value_parser!(usize)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(u64)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(u32)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(u16)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(u8)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(isize)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(i64)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(i32)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(i16)).type_id(),
+                            clap::builder::ValueParser::from(clap::value_parser!(i8)).type_id(),
+                        ]
+                        .contains(&id)
+                    });
+                    let is_float = type_id.is_some_and(|id| {
+                        id == clap::builder::ValueParser::from(clap::value_parser!(f64)).type_id()
+                            || id
+                                == clap::builder::ValueParser::from(clap::value_parser!(f32))
+                                    .type_id()
+                    });
+                    if is_int {
+                        format!(
+                            "Invalid value for {}: {} is not a valid integer.",
+                            literal(&shown),
+                            literal(&wrong)
+                        )
+                    } else if is_float {
+                        format!(
+                            "Invalid value for {}: {} is not a valid float.",
+                            literal(&shown),
+                            literal(&wrong)
+                        )
+                    } else {
+                        format!(
+                            "Invalid value for {}: {} is not valid.",
+                            literal(&shown),
+                            literal(&wrong)
+                        )
+                    }
                 }
             }
         }

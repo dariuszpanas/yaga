@@ -1,12 +1,10 @@
 //! Offline, provider-neutral review policy commands.
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
-use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use yaga_core::agent_review::{Aggregate, MAX_BYTES, Outcome, Policy};
-use yaga_core::fs::resolve_user_path;
+use yaga_core::fs::{read_regular_prefix, resolve_user_path};
 use yaga_core::text::{github_data, safe_text};
 
 #[derive(Args)]
@@ -74,15 +72,12 @@ fn read(path: &Path, kind: &str) -> Result<(PathBuf, Vec<u8>), Failure> {
             format!("cannot resolve Agent review {kind}: {e}"),
         )
     })?;
-    let mut bytes = Vec::new();
-    File::open(&path)
-        .and_then(|f| f.take((MAX_BYTES + 1) as u64).read_to_end(&mut bytes))
-        .map_err(|e| {
-            (
-                "configuration",
-                format!("cannot read Agent review {kind} {}: {e}", path.display()),
-            )
-        })?;
+    let bytes = read_regular_prefix(&path, MAX_BYTES).map_err(|e| {
+        (
+            "configuration",
+            format!("cannot read Agent review {kind} {}: {e}", path.display()),
+        )
+    })?;
     Ok((path, bytes))
 }
 fn pretty(v: &Value) -> String {
@@ -227,7 +222,7 @@ pub fn run(args: Gate) -> ExitCode {
                 }
                 Err(e) => {
                     eprintln!("YAGA failed: {}", safe_text(&e, 1000));
-                    ExitCode::from(1)
+                    ExitCode::from(2)
                 }
             };
         }
