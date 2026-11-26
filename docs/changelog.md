@@ -30,6 +30,12 @@
   `test evaluate` / `create_handoff` enforce exact selected cells while keeping existing v1 plans
   byte-identical. See [Test planning](test-planning.md).
 
+### Security
+
+- Disable `aws-sdk-bedrockruntime`'s legacy `rustls` default feature in `yaga-core` (`quality-bedrock`)
+  and use `default-https-client` (`hyper` 1.x + `rustls` 0.23) exclusively, removing legacy
+  `rustls 0.21` and `rustls-webpki 0.101` from `Cargo.lock`.
+
 ## [0.6.0] - 2026-11-24
 
 ### Added
