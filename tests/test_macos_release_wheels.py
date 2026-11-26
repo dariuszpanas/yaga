@@ -49,11 +49,10 @@ def image(
 
 
 @pytest.mark.parametrize(
-    ("arch", "data", "executable"),
+    ("arch", "data"),
     [
-        ("arm64", image(build_version(MACOS_11)), False),
-        ("arm64", image(build_version(MACOS_11), kind=2), True),
-        ("x86_64", image(legacy(0x0A0900), cpu=INTEL, subtype=3, kind=8), False),
+        ("arm64", image(build_version(MACOS_11), kind=2)),
+        ("x86_64", image(legacy(0x0A0900), cpu=INTEL, subtype=3, kind=2)),
         (
             "x86_64",
             image(
@@ -61,17 +60,15 @@ def image(
                 build_version(MACOS_11),
                 cpu=INTEL,
                 subtype=0x80000003,
+                kind=2,
             ),
-            False,
         ),
     ],
 )
-def test_accepts_supported_thin_macos_member(
-    tmp_path: Path, arch: str, data: bytes, executable: bool
-) -> None:
+def test_accepts_supported_thin_macos_executable(tmp_path: Path, arch: str, data: bytes) -> None:
     path = tmp_path / "image"
     path.write_bytes(data)
-    release_wheels.check_macos(path, f"macosx_11_0_{arch}", executable=executable)
+    release_wheels.check_macos(path, f"macosx_11_0_{arch}")
 
 
 @pytest.mark.parametrize(
@@ -80,46 +77,47 @@ def test_accepts_supported_thin_macos_member(
         b"",
         bytes.fromhex("cafebabe") + bytes(28),
         bytes.fromhex("cafebabf") + bytes(28),
-        image(build_version(MACOS_11), cpu=INTEL, subtype=3),
-        image(build_version(MACOS_11), subtype=2),  # arm64e
+        image(build_version(MACOS_11), cpu=INTEL, subtype=3, kind=2),
+        image(build_version(MACOS_11), subtype=2, kind=2),  # arm64e
         image(build_version(MACOS_11), kind=1),  # MH_OBJECT
-        image(build_version(MACOS_11), kind=2),  # Executable passed as non-executable.
-        image(build_version(MACOS_11 + 1)),  # Exceeds macOS 11.0.0 tag.
-        image(legacy(0x0A0F00)),  # arm64 requires 11.0 or later.
-        image(build_version(0)),
-        image(),
-        image(struct.pack("<II", 0x1B, 24) + bytes(16)),
-        image(build_version(MACOS_11), build_version(MACOS_11)),
-        image(legacy(MACOS_11), build_version(MACOS_11)),
-        image(build_version(MACOS_11, platform=6)),  # Mac Catalyst
-        image(build_version(MACOS_11, platform=7)),  # iOS simulator
-        image(legacy(MACOS_11), legacy(MACOS_11, 0x25)),
-        image(legacy(MACOS_11, 0x2F)),
-        image(legacy(MACOS_11, 0x30)),
-        image(build_version(MACOS_11), size=40),
-        image(legacy(MACOS_11), size=8),
-        image(legacy(MACOS_11), count=0),
-        image(legacy(MACOS_11), count=2),
-        image(legacy(MACOS_11), count=3),
-        image(struct.pack("<II", 0x24, 8)),
-        image(struct.pack("<II", 0x32, 16) + bytes(8)),
-        image(build_version(MACOS_11, tools=2)),
-        image(struct.pack("<II", 0x1B, 0)),
-        image(struct.pack("<II", 0x1B, 9) + bytes(1)),
+        image(build_version(MACOS_11), kind=6),  # MH_DYLIB shared library
+        image(build_version(MACOS_11), kind=8),  # MH_BUNDLE loadable bundle
+        image(build_version(MACOS_11 + 1), kind=2),  # Exceeds macOS 11.0.0 tag.
+        image(legacy(0x0A0F00), kind=2),  # arm64 requires 11.0 or later.
+        image(build_version(0), kind=2),
+        image(kind=2),
+        image(struct.pack("<II", 0x1B, 24) + bytes(16), kind=2),
+        image(build_version(MACOS_11), build_version(MACOS_11), kind=2),
+        image(legacy(MACOS_11), build_version(MACOS_11), kind=2),
+        image(build_version(MACOS_11, platform=6), kind=2),  # Mac Catalyst
+        image(build_version(MACOS_11, platform=7), kind=2),  # iOS simulator
+        image(legacy(MACOS_11), legacy(MACOS_11, 0x25), kind=2),
+        image(legacy(MACOS_11, 0x2F), kind=2),
+        image(legacy(MACOS_11, 0x30), kind=2),
+        image(build_version(MACOS_11), size=40, kind=2),
+        image(legacy(MACOS_11), size=8, kind=2),
+        image(legacy(MACOS_11), count=0, kind=2),
+        image(legacy(MACOS_11), count=2, kind=2),
+        image(legacy(MACOS_11), count=3, kind=2),
+        image(struct.pack("<II", 0x24, 8), kind=2),
+        image(struct.pack("<II", 0x32, 16) + bytes(8), kind=2),
+        image(build_version(MACOS_11, tools=2), kind=2),
+        image(struct.pack("<II", 0x1B, 0), kind=2),
+        image(struct.pack("<II", 0x1B, 9) + bytes(1), kind=2),
     ],
 )
 def test_refuses_unverified_macos_member(tmp_path: Path, data: bytes) -> None:
     path = tmp_path / "member"
     path.write_bytes(data)
     with pytest.raises(ValueError, match="member"):
-        release_wheels.check_macos(path, "macosx_11_0_arm64", executable=False)
+        release_wheels.check_macos(path, "macosx_11_0_arm64")
 
 
 def test_refuses_haswell_only_executable_in_generic_intel_wheel(tmp_path: Path) -> None:
     path = tmp_path / "yaga"
     path.write_bytes(image(legacy(0x0A0F00), cpu=INTEL, subtype=8, kind=2))
     with pytest.raises(ValueError, match="wrong Mach-O CPU or subtype"):
-        release_wheels.check_macos(path, "macosx_11_0_x86_64", executable=True)
+        release_wheels.check_macos(path, "macosx_11_0_x86_64")
 
 
 def macos_wheel(directory: Path, arch: str, bad: str = "", extra_tag: str = "") -> Path:
@@ -137,6 +135,10 @@ def macos_wheel(directory: Path, arch: str, bad: str = "", extra_tag: str = "") 
         archive.writestr(
             "yaga_cli-1.2.3.dist-info/WHEEL",
             f"Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: py3-none-{tag}\n{extra_tag}",
+        )
+        archive.writestr(
+            "yaga_cli-1.2.3.dist-info/METADATA",
+            "Metadata-Version: 2.4\nName: yaga-cli\nVersion: 1.2.3\n",
         )
     return wheel
 
@@ -173,7 +175,7 @@ def test_collect_verifies_native_members_before_copying_the_release(tmp_path: Pa
         release_wheels.assemble(sdist, native, output, "1.2.3")
     assert not output.exists()
     macos_wheel(native, "x86_64")
-    for tag in ("win_arm64", "manylinux_2_28_x86_64"):
+    for tag in ("win_arm64", release_wheels.PLATFORMS["x86_64-unknown-linux-musl"]):
         wheel = native_wheel(native, tag, wrong="cli", other_cpu=True)
         with pytest.raises(ValueError, match="wrong (ELF|PE)"):
             release_wheels.assemble(sdist, native, output, "1.2.3")

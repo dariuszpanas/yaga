@@ -17,21 +17,22 @@ jobs:
   commit-policy:
     name: Commit Messages
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Cache Typos registry
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/registry
-          key: yaga-typos-${{ runner.os }}-1.49.0
-          restore-keys: yaga-typos-${{ runner.os }}-
-      - name: Install Typos CLI
-        run: cargo install typos-cli --version 1.49.0 --locked
+      - name: Install pinned Typos CLI
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/crate-ci/typos/releases/download/v1.50.2/typos-v1.50.2-x86_64-unknown-linux-musl.tar.gz \
+            --output "$RUNNER_TEMP/typos.tar.gz"
+          echo "abcb3e257c7c2abeff4d903f7fe68071357637605bdb283ce2251f44bc70dc09  $RUNNER_TEMP/typos.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/typos-bin"
+          tar -xzf "$RUNNER_TEMP/typos.tar.gz" -C "$RUNNER_TEMP/typos-bin" ./typos
+          echo "$RUNNER_TEMP/typos-bin" >> "$GITHUB_PATH"
       - name: Check pull-request commit policy
         uses: ./
       - name: Check pull-request description

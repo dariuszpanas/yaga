@@ -51,9 +51,18 @@ jobs:
             uv run --frozen python scripts/check_release.py --notes-file release-notes.md
           fi
       - name: Install pinned Typos CLI
-        run: cargo install typos-cli --version 1.49.0 --locked
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/crate-ci/typos/releases/download/v1.50.2/typos-v1.50.2-x86_64-unknown-linux-musl.tar.gz \
+            --output "$RUNNER_TEMP/typos.tar.gz"
+          echo "abcb3e257c7c2abeff4d903f7fe68071357637605bdb283ce2251f44bc70dc09  $RUNNER_TEMP/typos.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/typos-bin"
+          tar -xzf "$RUNNER_TEMP/typos.tar.gz" -C "$RUNNER_TEMP/typos-bin" ./typos
+          echo "$RUNNER_TEMP/typos-bin" >> "$GITHUB_PATH"
       - name: Run the full gate and retain its validated distributions
-        run: uv run --frozen make ci BUILD_ARGS="--output-dir dist"
+        env:
+          UV_FROZEN: "1"
+        run: uv run --frozen make ci BUILD_ARGS="--output-dir dist" CHANGE_RANGE=""
       - name: Verify crates.io workspace packages
         run: cargo package --workspace --locked
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

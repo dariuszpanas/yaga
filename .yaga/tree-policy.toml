@@ -9,6 +9,9 @@ required-paths = [
   ".yaga/path-policy.toml",
   ".yaga/size-policy.toml",
   ".yaga/tree-policy.toml",
+  ".yaga/triage-policy.toml",
+  "Cargo.lock",
+  "Cargo.toml",
   "LICENSE",
   "README.md",
   "SECURITY.md",
@@ -29,5 +32,6 @@ forbidden-patterns = [
   "build/**",
   "dist/**",
   "htmlcov/**",
+  "target/**",
   "**/.coverage",
 ]

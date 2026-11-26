@@ -1,8 +1,14 @@
 """Regressions for the description embedded in release artifacts."""
 
+from pathlib import Path
+
 import pytest
 
-from scripts.check_description import LOGO_URL, validate_description
+from scripts.check_description import (
+    LOGO_URL,
+    validate_description,
+    validate_repository_descriptions,
+)
 
 LOGO = f'<img src="{LOGO_URL}" alt="YAGA terminal Y logo" width="128" height="128">'
 
@@ -41,3 +47,17 @@ def test_missing_internal_anchor_is_rejected() -> None:
 
 def test_heading_links_resolve_after_rendering() -> None:
     validate_description(LOGO + "\n\n## Usage\n\n[Usage](#usage)")
+
+
+def test_crate_description_allows_missing_logo_but_enforces_https() -> None:
+    rendered = validate_description(
+        "# yaga-core\n\n[Docs](https://dariuszpanas.github.io/yaga/)",
+        require_logo=False,
+    )
+    assert "yaga-core" in rendered
+    with pytest.raises(SystemExit, match="absolute HTTPS"):
+        validate_description("# yaga-core\n\n[Docs](docs/index.md)", require_logo=False)
+
+
+def test_repository_descriptions_validate_root_and_crates() -> None:
+    validate_repository_descriptions(Path(__file__).resolve().parents[1])

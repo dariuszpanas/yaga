@@ -47,13 +47,15 @@ def run_smoke_git(git: str, consumer: Path, arguments: list[str]) -> str:
 def validate_wheel(wheel_path: Path) -> None:
     """Verify the wheel is a py3-none-<platform> zero-dependency binary launcher."""
     _, _, _, tags = parse_wheel_filename(wheel_path.name)
-    if len(tags) != 1:
-        raise SystemExit(f"expected single-tag platform wheel, got {wheel_path.name}")
-    tag = next(iter(tags))
-    if tag.interpreter != "py3" or tag.abi != "none" or tag.platform == "any":
-        raise SystemExit(f"expected py3-none-<platform> wheel tag, got {tag}")
-
-    windows = tag.platform.startswith("win")
+    if not tags:
+        raise SystemExit(f"expected platform wheel tag, got {wheel_path.name}")
+    for tag in tags:
+        if tag.interpreter != "py3" or tag.abi != "none" or tag.platform == "any":
+            raise SystemExit(f"expected py3-none-<platform> wheel tag, got {tag}")
+    windows_flags = {tag.platform.startswith("win") for tag in tags}
+    if len(windows_flags) != 1:
+        raise SystemExit(f"wheel mixes Windows and non-Windows platform tags: {wheel_path.name}")
+    windows = next(iter(windows_flags))
     binary_member = "yaga/_bin/yaga.exe" if windows else "yaga/_bin/yaga"
 
     with zipfile.ZipFile(wheel_path) as archive:
@@ -72,6 +74,15 @@ def validate_wheel(wheel_path: Path) -> None:
         if py_files != EXPECTED_WHEEL_PYTHON:
             raise SystemExit(
                 f"unexpected Python files in wheel: {sorted(py_files ^ EXPECTED_WHEEL_PYTHON)}"
+            )
+
+        (wheel_member,) = [n for n in names if n.endswith(".dist-info/WHEEL")]
+        wheel_headers = BytesParser().parsebytes(archive.read(wheel_member))
+        expected_tags = sorted(str(tag) for tag in tags)
+        actual_tags = sorted(wheel_headers.get_all("Tag") or [])
+        if wheel_headers.get_all("Root-Is-Purelib") != ["false"] or actual_tags != expected_tags:
+            raise SystemExit(
+                f"wheel metadata tags do not match filename: expected {expected_tags}, got {actual_tags}"
             )
 
         (metadata_member,) = [n for n in names if n.endswith(".dist-info/METADATA")]
@@ -201,6 +212,42 @@ def exercise_installed_wheel(uv: str, output: Path, wheel: Path) -> None:
         check=True,
         timeout=30,
     )
+
+    git = shutil.which("git")
+    if git is None:
+        raise SystemExit("git is required to smoke-test the installed wheel")
+    git_repo = output / "consumer-git"
+    git_repo.mkdir()
+    run_smoke_git(git, git_repo, ["init", "--initial-branch=main", "--template="])
+    run_smoke_git(git, git_repo, ["config", "user.name", "YAGA Smoke"])
+    run_smoke_git(git, git_repo, ["config", "user.email", "smoke@example.invalid"])
+    (git_repo / ".yaga.toml").write_text(
+        'config-version = 1\n[commit]\nbody-policy = "required"\n', encoding="utf-8"
+    )
+    (git_repo / "README.md").write_text("# Smoke fixture\n", encoding="utf-8")
+    run_smoke_git(git, git_repo, ["add", "--all"])
+    run_smoke_git(
+        git,
+        git_repo,
+        [
+            "commit",
+            "--no-verify",
+            "--no-gpg-sign",
+            "--message",
+            "feat(wheel): exercise git commit check\n\n"
+            "Confirm the bundled Rust executable inspects committed Git objects cleanly.",
+        ],
+    )
+    git_commit = subprocess.run(
+        [str(yaga_exe), "commit", "check", "--repo", str(git_repo), "--format", "json"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    if json.loads(git_commit.stdout).get("valid") is not True:
+        raise SystemExit("installed git commit check returned valid != true")
 
 
 def main() -> int:
