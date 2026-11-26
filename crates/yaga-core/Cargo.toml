@@ -39,7 +39,7 @@ quality-http = ["process", "dep:ureq"]
 
 [dependencies]
 aws-config = { version = "1.13", optional = true }
-aws-sdk-bedrockruntime = { version = "1.157", optional = true }
+aws-sdk-bedrockruntime = { version = "1.157", default-features = false, features = ["default-https-client", "rt-tokio"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "time"], optional = true }
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
