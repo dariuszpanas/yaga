@@ -43,7 +43,7 @@ impl Contained {
     }
 
     #[allow(unsafe_code)]
-    pub fn terminate(&mut self) -> io::Result<()> {
+    pub fn terminate(&mut self, _deadline: Instant) -> io::Result<()> {
         use windows_sys::Win32::System::JobObjects::TerminateJobObject;
         // SAFETY: job owns this live handle for the duration of the call.
         if unsafe { TerminateJobObject(self.job.handle() as _, 1) } == 0 {

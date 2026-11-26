@@ -1,6 +1,7 @@
-use super::process::{ProcessError, run_bounded};
+use super::process::{GroupKill, ProcessError, run_bounded, terminate_macos_group};
 use super::*;
-use std::io::{Read, Write};
+use std::cell::Cell;
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -127,8 +128,20 @@ fn fixture(kind: &str) -> Command {
 #[ignore = "launched as a controlled child process by bounded_process_limits"]
 fn pipe_fixture() {
     match std::env::var("YAGA_NATIVE_PIPE_FIXTURE").as_deref() {
-        Ok("stdout") => std::io::stdout().write_all(&vec![b'x'; 131072]).unwrap(),
-        Ok("stderr") => std::io::stderr().write_all(&vec![b'e'; 131072]).unwrap(),
+        Ok("stdout") => {
+            if let Err(error) = std::io::stdout().write_all(&vec![b'x'; 131072])
+                && error.kind() != io::ErrorKind::BrokenPipe
+            {
+                panic!("unexpected stdout fixture write error: {error}");
+            }
+        }
+        Ok("stderr") => {
+            if let Err(error) = std::io::stderr().write_all(&vec![b'e'; 131072])
+                && error.kind() != io::ErrorKind::BrokenPipe
+            {
+                panic!("unexpected stderr fixture write error: {error}");
+            }
+        }
         Ok("echo") => {
             let mut data = Vec::new();
             std::io::stdin().read_to_end(&mut data).unwrap();
@@ -152,10 +165,13 @@ fn bounded_process_limits() {
     for kind in ["stdout", "stderr"] {
         let error =
             run_bounded(fixture(kind), None, 1024, 1024, Duration::from_secs(5)).unwrap_err();
-        assert!(matches!(
-            (kind, error),
-            ("stdout", ProcessError::StdoutLimit) | ("stderr", ProcessError::StderrLimit)
-        ));
+        assert!(
+            matches!(
+                (kind, &error),
+                ("stdout", ProcessError::StdoutLimit) | ("stderr", ProcessError::StderrLimit)
+            ),
+            "{kind}: {error:?}"
+        );
     }
     let out = run_bounded(
         fixture("echo"),
@@ -177,6 +193,208 @@ fn bounded_process_limits() {
     );
     assert!(matches!(result, Err(ProcessError::Timeout)), "{result:?}");
     assert!(start.elapsed() < Duration::from_secs(4));
+}
+
+#[test]
+fn repeated_early_exit_pipe_limit_terminations() {
+    for iteration in 0..5 {
+        for kind in ["stdout", "stderr"] {
+            let error =
+                run_bounded(fixture(kind), None, 1024, 1024, Duration::from_secs(5)).unwrap_err();
+            assert!(
+                matches!(
+                    (kind, &error),
+                    ("stdout", ProcessError::StdoutLimit) | ("stderr", ProcessError::StderrLimit)
+                ),
+                "iteration {iteration} ({kind}): {error:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn macos_group_termination_retries_transient_eperm_and_fails_closed() {
+    let tick = Duration::from_millis(2);
+
+    // Immediate Done never polls exited() or sleeps.
+    let base = Instant::now();
+    let mut exited_calls = 0;
+    let mut sleeps = Vec::new();
+    terminate_macos_group(
+        base + Duration::from_millis(10),
+        tick,
+        || base,
+        || Ok(GroupKill::Done),
+        || {
+            exited_calls += 1;
+            Ok(false)
+        },
+        |duration| sleeps.push(duration),
+    )
+    .unwrap();
+    assert_eq!(exited_calls, 0);
+    assert!(sleeps.is_empty());
+
+    // Immediate EPERM when leader is already a zombie (SZOMB) completes without sleeping.
+    let mut exited_calls = 0;
+    let mut sleeps = Vec::new();
+    terminate_macos_group(
+        base + Duration::from_millis(10),
+        tick,
+        || base,
+        || Ok(GroupKill::PermissionDenied(io::Error::from_raw_os_error(1))),
+        || {
+            exited_calls += 1;
+            Ok(true)
+        },
+        |duration| sleeps.push(duration),
+    )
+    .unwrap();
+    assert_eq!(exited_calls, 1);
+    assert!(sleeps.is_empty());
+
+    // Transient EPERM while leader is in P_LEXIT retries until exited() reports true.
+    let clock = Cell::new(base);
+    let mut kill_calls = 0;
+    let mut exited_calls = 0;
+    let mut sleeps = Vec::new();
+    terminate_macos_group(
+        base + Duration::from_millis(10),
+        tick,
+        || clock.get(),
+        || {
+            kill_calls += 1;
+            Ok(GroupKill::PermissionDenied(io::Error::from_raw_os_error(1)))
+        },
+        || {
+            exited_calls += 1;
+            Ok(exited_calls >= 3)
+        },
+        |duration| {
+            sleeps.push(duration);
+            clock.set(clock.get() + duration);
+        },
+    )
+    .unwrap();
+    assert_eq!(kill_calls, 3);
+    assert_eq!(exited_calls, 3);
+    assert_eq!(sleeps, [tick, tick]);
+
+    // Transient EPERM resolves when a subsequent killpg returns Ok(()) or ESRCH (Done).
+    let clock = Cell::new(base);
+    let mut kill_calls = 0;
+    let mut exited_calls = 0;
+    let mut sleeps = Vec::new();
+    terminate_macos_group(
+        base + Duration::from_millis(10),
+        tick,
+        || clock.get(),
+        || {
+            kill_calls += 1;
+            if kill_calls == 1 {
+                Ok(GroupKill::PermissionDenied(io::Error::from_raw_os_error(1)))
+            } else {
+                Ok(GroupKill::Done)
+            }
+        },
+        || {
+            exited_calls += 1;
+            Ok(false)
+        },
+        |duration| {
+            sleeps.push(duration);
+            clock.set(clock.get() + duration);
+        },
+    )
+    .unwrap();
+    assert_eq!(kill_calls, 2);
+    assert_eq!(exited_calls, 1);
+    assert_eq!(sleeps, [tick]);
+
+    // Permanent EPERM stays fail-closed after the bounded deadline, clamping the final tick
+    // and preserving the raw OS error.
+    let clock = Cell::new(base);
+    let mut kill_calls = 0;
+    let mut exited_calls = 0;
+    let mut sleeps = Vec::new();
+    let error = terminate_macos_group(
+        base + Duration::from_millis(5),
+        tick,
+        || clock.get(),
+        || {
+            kill_calls += 1;
+            Ok(GroupKill::PermissionDenied(io::Error::from_raw_os_error(1)))
+        },
+        || {
+            exited_calls += 1;
+            Ok(false)
+        },
+        |duration| {
+            sleeps.push(duration);
+            clock.set(clock.get() + duration);
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.raw_os_error(), Some(1));
+    assert_eq!(sleeps, [tick, tick, Duration::from_millis(1)]);
+    assert_eq!(kill_calls, 4);
+    assert_eq!(exited_calls, 4);
+
+    // Zero-budget deadline (used by Drop) performs a single check without sleeping.
+    let mut kill_calls = 0;
+    let mut exited_calls = 0;
+    let mut sleeps = Vec::new();
+    let error = terminate_macos_group(
+        base,
+        tick,
+        || base,
+        || {
+            kill_calls += 1;
+            Ok(GroupKill::PermissionDenied(io::Error::from_raw_os_error(1)))
+        },
+        || {
+            exited_calls += 1;
+            Ok(false)
+        },
+        |duration| sleeps.push(duration),
+    )
+    .unwrap_err();
+    assert_eq!(error.raw_os_error(), Some(1));
+    assert_eq!(kill_calls, 1);
+    assert_eq!(exited_calls, 1);
+    assert!(sleeps.is_empty());
+
+    // Non-EPERM killpg errors and exited() errors fail closed immediately without sleeping.
+    let mut exited_calls = 0;
+    let mut sleeps = Vec::new();
+    let error = terminate_macos_group(
+        base + Duration::from_millis(10),
+        tick,
+        || base,
+        || Err(io::Error::new(io::ErrorKind::InvalidInput, "bad pgid")),
+        || {
+            exited_calls += 1;
+            Ok(false)
+        },
+        |duration| sleeps.push(duration),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    assert_eq!(exited_calls, 0);
+    assert!(sleeps.is_empty());
+
+    let mut sleeps = Vec::new();
+    let error = terminate_macos_group(
+        base + Duration::from_millis(10),
+        tick,
+        || base,
+        || Ok(GroupKill::PermissionDenied(io::Error::from_raw_os_error(1))),
+        || Err(io::Error::new(io::ErrorKind::NotFound, "waitid failed")),
+        |duration| sleeps.push(duration),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert!(sleeps.is_empty());
 }
 
 #[test]
