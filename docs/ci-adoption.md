@@ -16,6 +16,9 @@ want to catch, select the smallest useful check, and validate it locally before 
 | Permission and checkout rules | [Workflow security](workflow-checks.md) | Workflow paths and a selected security profile | None beyond the installed CLI |
 | Workflow syntax | [Workflow lint](workflow-checks.md) | Workflow paths | Docker with Linux containers and access to the pinned image |
 | One repeatable set of checks | [Repository plans](repository-plans.md) | A plan plus runtime commit/range/revision inputs | Requirements of every selected provider |
+| Valid policy schemas and version floors | [Policy schema audits](configuration.md#policy-initialization-and-schema-audits) | Repository root or explicit TOML policy paths | None beyond the installed CLI |
+| External-PR admission and duplicate trees | [Pull-request trust triage](pull-request-triage.md) | Trusted triage policy plus offline snapshot or live `--pr` | Authenticated `gh` and network for live `--pr` |
+| Deterministic selective test plans | [Test planning](test-planning.md) | Explicit test policy, profile, and range or revision | Git (complete history for ranges); no test execution |
 
 All of these are repository-quality checks. They do not request model reviews or need a GitHub
 write token. Pin the released `yaga-cli` version in your CI installation so upgrades are deliberate.
@@ -62,16 +65,17 @@ same selection; branch and change checks remain separate commands.
 For GitHub pull requests, choose between running `yaga` directly and the unified
 [`YAGA Checks` GitHub Action](github-actions.md) (`uses: dariuszpanas/yaga@...`), which supports
 event-aware `commit` validation (including PR titles) as well as `policy`, `pr-description`,
-`pr-review`, `repo`, `branch`, `change`, `workflow*`, `mode`, `path`, `size`, and `tree` checks.
+`pr-triage`, `pr-review`, `repo`, `branch`, `change`, `workflow*`, `mode`, `path`, `size`, and
+`tree` checks.
 Use an unprivileged PR workflow with read-only permissions for ordinary quality checks; reserve
-`pull_request_target` / `workflow_run` only when opting into trusted commit policy or
-`check: pr-review` review submission.
+`pull_request_target` / `workflow_run` only when opting into trusted commit policy,
+`check: pr-triage`, or `check: pr-review` review submission.
 After validation, configure your repository's branch protection to require the intended job.
 
 ## Optional capabilities are separate decisions
 
-[Commit quality](commit-quality.md) adds model-backed advice and its own dependency/cache or
-credential requirements. [Agent review checks and plans](agent-review-gate.md) inspect pull-request review state or
+[Commit quality](commit-quality.md) adds model-backed advice and requires an explicit hosted or
+OpenAI-compatible provider (plus its credentials or local server). [Agent review checks and plans](agent-review-gate.md) inspect pull-request review state or
 describe work for an external adapter. Neither is needed to adopt the deterministic checks above.
 
 The experimental [GitHub review adapter](github-review-adapter.md) writes comments and statuses

@@ -44,6 +44,7 @@ nav = [
     { "Troubleshooting" = "troubleshooting.md" },
     { "Security model" = "security.md" },
     { "Contributing" = "contributing.md" },
+    { "Commit policy direction" = "commit-policy-direction.md" },
     { "Minimum runtime qualification" = "minimum-runtime.md" },
     { "Test planning design" = "designs/test-planning.md" },
     { "Staged-check assessment" = "designs/staged-checks.md" },

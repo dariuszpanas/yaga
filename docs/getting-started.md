@@ -161,6 +161,8 @@ Use the same installer you chose originally:
 
 | Installer | Update | Uninstall |
 | --- | --- | --- |
+| Standalone installer | `yaga self update` | Delete `yaga` (`yaga.exe`) and `.yaga-native-receipt` |
+| Cargo | `cargo install --locked yaga-cli` | `cargo uninstall yaga-cli` |
 | uv | `uv tool upgrade yaga-cli` | `uv tool uninstall yaga-cli` |
 | pipx | `pipx upgrade yaga-cli` | `pipx uninstall yaga-cli` |
 | pip (active environment) | `python -m pip install --upgrade yaga-cli` | `python -m pip uninstall yaga-cli` |
@@ -251,26 +253,30 @@ on your `PATH` to use the installed command.
 
 ### Use yaga-core in a Rust project
 
-Add `yaga-core` from crates.io to your project's `Cargo.toml`:
+Add the published `0.6` release of `yaga-core` from crates.io to your project's `Cargo.toml`:
 
 ```toml
 [dependencies]
 yaga-core = "0.6"
 ```
 
-For pure in-memory consumers (such as virtual filesystems, object stores, or sandboxed services)
-that do not need filesystem loaders or subprocess runners, disable the default `process` feature:
+On unreleased `main` (planned for `0.7`; not available in published `0.6.0`), pure in-memory
+consumers (such as virtual filesystems, object stores, or sandboxed services) that do not need
+filesystem loaders or subprocess runners can disable the default `process` feature via a pinned
+`git` dependency:
 
 ```toml
 [dependencies]
-yaga-core = { version = "0.6", default-features = false }
+# Unreleased `main` (planned for 0.7; not present in published 0.6.0):
+yaga-core = { git = "https://github.com/dariuszpanas/yaga", default-features = false }
 ```
 
-Pure builds omit all process, filesystem, and OS-FFI crates while keeping the in-memory parsers,
-evaluators (`commits`, `branch`, `descriptions`, `paths`, `workflows`, `test_planning`, `triage`,
-`review`, `agent_review`), byte-slice policy auditing (`policies::classify_bytes`,
-`policies::audit_bytes`, `policies::audit_entries`), and non-filesystem plan helpers
-(`RepositoryPlan::relative_policy_paths`, `RepositoryPlan::relative_workflow_paths`).
+Pure `main` (`0.7`) builds omit all process, filesystem, and OS-FFI crates while keeping the
+in-memory parsers and evaluators (`commits`, `branch`, `descriptions`, `paths`, `workflows`,
+`test_planning`, `triage`, `review`, `agent_review`), plus the unreleased byte-slice policy
+auditing (`policies::classify_bytes`, `policies::audit_bytes`, `policies::audit_entries`) and
+non-filesystem plan helpers (`RepositoryPlan::relative_policy_paths`,
+`RepositoryPlan::relative_workflow_paths`).
 
 Or, against a local reviewed `yaga/` checkout next to your project, use a path dependency:
 

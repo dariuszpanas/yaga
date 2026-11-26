@@ -170,9 +170,9 @@ at the newer main SHA fails closed. This mode does not support older server beha
 `pull_request_target` from a non-default target branch.
 
 Retain a revision-aware concurrency group containing both PR number and head SHA, and subscribe
-to `edited` as well as commit lifecycle events so title and body edits are checked. For django-ray,
-retain the required job name `Commit Messages`. A successful message comparison alone does not
-establish safe event/checkout integration.
+to `edited` as well as commit lifecycle events so title and body edits are checked. Retain the
+required job name expected by your branch-protection rules (for example, `Commit Messages`). A
+successful message comparison alone does not establish safe event/checkout integration.
 
 In this trusted mode, `dependabot-pull-requests = "skip"` additionally requires the PR head
 repository to equal the base repository and its branch to start with `dependabot/`. The exact
@@ -269,14 +269,14 @@ exit `2`.
 | --- | --- |
 | `check` | Mode selector; `commit` (default), `policy`, `pr-review`, `pr-triage`, `pr-description`, `repo`, `branch`, `change`, `workflow`, `workflow-security`, `workflow-lint`, `mode`, `path`, `size`, `tree`, or `gate`. |
 | `trusted-config` | Optional literal repository-relative commit config path for `check=commit` on `pull_request_target`. |
-| `policy` | Explicit versioned TOML policy path for `policy`, `pr-review`, `pr-triage`, `pr-description`, `branch`, `change`, `mode`, `path`, `size`, or `tree`. |
+| `policy` | Explicit versioned TOML policy path for `pr-review`, `pr-triage`, `pr-description`, `branch`, `change`, `mode`, `path`, `size`, or `tree`; optional for `check=policy` (which defaults to scanning `repo` and always enforces `--strict`). |
 | `template` | Optional explicit Markdown heading template path for `check=pr-description`. |
 | `file` | Offline snapshot JSON path for `pr-review`/`pr-triage` or Markdown body file for `pr-description`. |
 | `pr` | Canonical HTTPS PR URL or positive PR number for live `pr-review`, `pr-triage`, or `pr-description` via `gh`. |
 | `repo` | `[HOST/]OWNER/REPO` for numeric `pr` in `pr-review`/`pr-triage`/`pr-description`, or repository root directory for `policy`, `change`, `workflow*`, `mode`, `path`, `size`, `tree`, or `repo`. |
 | `wait-seconds` | Bounded active-review poll budget (`0..600`) for live `check=pr-review`. |
 | `submit-review` | Commit-bound PR review mode (`none`, `approve`, `request-changes`, or `both`) for live `check=pr-review`. |
-| `triage-policy` | Explicit trusted maintainer admission policy for live `check=pr-review`; required before positive formal review publication. |
+| `triage-policy` | Explicit trusted maintainer admission policy for live `check=pr-review`; requires a non-`none` `submit-review` value (rejected when `submit-review` is empty or `none`) and is mandatory for `approve` or `both`. |
 | `publish-comment` | Lowercase `true`/`false` for owned comment publication in live `check=pr-triage`; omitted means false. |
 | `branch` | Exact short branch name for `check=branch`. |
 | `range` | Exact `A..B` or `A...B` Git range for `check=change` or `check=repo`. |

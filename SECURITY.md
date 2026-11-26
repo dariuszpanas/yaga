@@ -53,8 +53,9 @@ default-branch commit. Setup receives no GitHub token. See the
 
 The native gate receives its token through `GITHUB_TOKEN` for the selected Agent review
 operation. CLI check modes reject unused inputs and pass `GH_TOKEN` only to explicitly selected
-live `pr-review`, `pr-triage`, and `pr-description` checks. The portable Python package retains
-its isolated standard-library gate and tokenless commit entry points.
+live `pr-review`, `pr-triage`, and `pr-description` checks. The zero-dependency `yaga-cli`
+Python wheel is a thin launcher that locates and executes the bundled Rust `yaga` executable
+(`yaga.find_yaga_bin()`).
 
 The default commit Action runs without credentials, API calls, or Git fetches. The reference
 workflow grants only `contents: read`. The checker binds the event to the runner repository ID,

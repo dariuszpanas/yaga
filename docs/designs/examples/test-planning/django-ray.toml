@@ -4,7 +4,7 @@
 # Lease dependency mappings coordinated with django-ray release commit
 # 4e985b336162a1923de57160756c2ee5e30f1c0c; publication belongs to that release work.
 # Retained historical plans keep their original policy and selection identities.
-# Runnable mapping: examples/test-planning/fixed_handoff.py in the YAGA checkout.
+# Plan with yaga test plan and map fixed jobs via yaga_core::test_planning::handoff.
 # The five rules preserve every trigger from scripts/qualification_policy.json.
 # Full-on and unknown-path fallbacks deliberately make selection a conservative
 # superset of that snapshot, not a promise of parity or a validated migration.

@@ -3,7 +3,7 @@
 `yaga branch check` validates one explicit short branch name against one explicit versioned policy.
 It does not inspect the current checkout, invoke Git, discover configuration, read an event payload,
 or normalize remote and full-ref prefixes. That makes the same command deterministic in a local
-hook, a CI workflow, or a built-wheel smoke test:
+hook, a CI workflow, or a packaged CLI smoke test:
 
 ```toml
 # .yaga/branch-policy.toml
@@ -36,9 +36,10 @@ match, exit `1` for either finding, and exit `2` for invocation, input, or polic
 report includes a bounded terminal-safe rendering of the selected name, the ordered allowed
 patterns, and the first matching pattern.
 
-For Actions, copy the untrusted context value into an environment variable and quote it as one
-argument. Pull requests use `github.head_ref`; branch pushes use `github.ref_name`. Do not pass a
-pull request's synthetic `<number>/merge` ref name or infer a branch from checkout state:
+For Actions, use `check: branch` in the unified [YAGA Checks Action](github-actions.md) or copy
+the untrusted context value into an environment variable and quote it as one argument. Pull
+requests use `github.head_ref`; branch pushes use `github.ref_name`. Do not pass a pull request's
+synthetic `<number>/merge` ref name or infer a branch from checkout state:
 
 ```yaml
 - name: Check pull-request branch name
@@ -46,7 +47,7 @@ pull request's synthetic `<number>/merge` ref name or infer a branch from checko
   env:
     YAGA_BRANCH_NAME: ${{ github.head_ref }}
   run: >-
-    uv run yaga branch check
+    yaga branch check
     --policy .yaga/branch-policy.toml
     --name "$YAGA_BRANCH_NAME"
     --format github

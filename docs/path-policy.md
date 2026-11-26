@@ -59,17 +59,18 @@ Findings use `path.windows-character`, `path.windows-trailing`, `path.windows-re
 only the first 256 canonical diagnostics; text and escaped GitHub output show smaller bounded
 previews. Exit `0` means the selected tree passes, exit `1` means policy findings, and exit `2`
 means an input, policy, Git, malformed-tree, or resource-limit error. The policy is an explicit
-runtime input and carries no provenance claim. This installed provider is outside both Action
-import graphs and repository-plan v1.
+runtime input and carries no provenance claim. This provider is supported in repository plans
+(`plan-version = 2`; frozen `plan-version = 1` is unchanged) and in the unified
+[YAGA Checks Action](github-actions.md) via `check: path` or `check: repo`.
 
-CI should pass the exact checked-out commit through one quoted value:
+When invoking the CLI directly in CI, pass the exact checked-out commit through one quoted value:
 
 ```yaml
 - name: Check committed path portability
   env:
     YAGA_PATH_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
   run: >-
-    uv run yaga path check
+    yaga path check
     --policy .yaga/path-policy.toml
     --revision "$YAGA_PATH_REVISION"
     --format github

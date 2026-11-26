@@ -19,7 +19,7 @@ Start with an explicit `--staged` source for `tree`, `path`, `mode`, and `size`,
 with `--revision`. Require exactly one source and an explicit policy, retaining `--repo .` as the
 only repository default. Do not infer HEAD, merge staged and working files, include untracked
 files, discover policy, fetch objects, or write the caller's index. Repository-plan integration,
-change coupling, test planning, and both composite Actions remain separate decisions.
+change coupling, test planning, and the unified composite Action remain separate decisions.
 
 Reuse each provider's pure checker and policy version where its meaning stays identical. The
 adapter should provide the complete proposed index tree, not just changed entries, so required
@@ -86,7 +86,7 @@ Implementation is appropriate after a concrete local-hook/editor consumer confir
 the snapshot spike passes on Linux and Windows with supported Git versions. Acceptance must cover
 every row above, linked worktrees, subdirectory selection, hostile Git environment/configuration,
 malformed/bounded output, missing objects, race failures, and clean temporary-file ownership.
-Installed-wheel tests must compare staged versus committed results and verify that neither index
+Installed CLI and wheel tests must compare staged versus committed results and verify that neither index
 bytes nor repository history change. Required CI continues checking exact committed sources.
 
 This closes the design assessment for YAGA 0.4.0. Shipping staged execution requires a

@@ -65,15 +65,19 @@ errors may be plain text even when `--format json` was supplied; see
 [exit-aware capture](troubleshooting.md#read-the-exit-code-first).
 
 The standalone policy-check commands `commit check`, `branch check`, `change check`, `mode check`,
-`path check`, `size check`, `tree check`, and both pull-request description commands accept
-`--quiet` when a caller needs only the exit status. `commit quality` accepts the same option for
-advisory findings. Quiet mode suppresses policy or advisory reports on standard output;
-operational errors still use standard error and exit `2`. Use `--format json` when another
-program needs the versioned document.
-The same providers, plus `workflow check`, `workflow security`, `workflow lint`, and `repo check`,
-support `--format github` for escaped workflow annotations where documented. Configuration reports
-remain text/JSON; `commit quality` also supports GitHub warning/error annotations, while `gate
-agent-review policy evaluate` additionally supports GitHub output for adapter result evaluation.
+`path check`, `size check`, `tree check`, `policy check`, both pull-request description commands,
+`pull-request review check`, and `test policy check` / `test plan` / `test evaluate` accept
+`--quiet` when a caller needs only the exit status (`test evaluate` suppresses only successful
+output and retains failure reports). `commit quality` accepts the same option for advisory
+findings. Quiet mode suppresses policy or advisory reports on standard output; operational errors
+still use standard error and exit `2`. Use `--format json` when another program needs the
+versioned document.
+The same policy checkers (except `test *`), plus `github pull-request check`,
+`pull-request triage check`, `workflow check`, `workflow security`, `workflow lint`, and
+`repo check`, support `--format github` for escaped workflow annotations where documented.
+Configuration reports remain text/JSON; `commit quality` also supports GitHub warning/error
+annotations, while `gate agent-review policy evaluate` additionally supports GitHub output for
+adapter result evaluation.
 For multi-lens adapters, `agent-review policy template` emits a complete pending JSON receipt
 scaffold whose digest and lens entries can be filled as provider work completes.
 
@@ -126,9 +130,9 @@ through quoted environment variables:
     persist-credentials: false
 - name: Check the pull request range
   env:
-    YAGA_RANGE: ${{ format('{0}...{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) }}
+    YAGA_RANGE: ${{ format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) }}
   run: >-
-    uv run yaga commit check
+    yaga commit check
     --range "$YAGA_RANGE"
     --format github
 ```

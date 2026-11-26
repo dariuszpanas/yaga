@@ -1,5 +1,5 @@
 # Policy, CLI, and fixed-handoff fixture; no selective execution is enabled.
-# Runnable mapping: examples/test-planning/fixed_handoff.py in the YAGA checkout.
+# Plan with yaga test plan and map fixed jobs via yaga_core::test_planning::handoff.
 # Adapt every path and runner binding before a consumer shadow rollout.
 # This is an illustrative application layout, not YAGA's own test inventory.
 test-policy-version = 1

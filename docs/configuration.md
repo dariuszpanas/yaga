@@ -1,5 +1,9 @@
 # Configuration
 
+YAGA configuration is intentionally explicit and versioned. A configuration file is policy, not
+runtime input: it must not contain commands, environment interpolation, secrets, or provider
+selection side effects.
+
 ## Opt-in consumer commit constraints
 
 The following schema-v1 options leave existing defaults unchanged:
@@ -23,10 +27,6 @@ the described validation actually occurred. Footer and body rules never apply to
 
 These settings are individual policy controls, not a general commitlint compatibility mode.
 YAGA retains its own structural parser; qualify the complete consumer corpus before migration.
-
-YAGA configuration is intentionally explicit and versioned. A configuration file is policy, not
-runtime input: it must not contain commands, environment interpolation, secrets, or provider
-selection side effects.
 
 ## File discovery
 
@@ -56,10 +56,9 @@ duplicate normalized values, unsafe paths, and unsupported versions are errors.
 
 ### Global defaults and project isolation
 
-The standalone CLI and global Python installations (uv tool, pipx, or system Python) use a user
-configuration as a fallback when no project configuration exists. Its location is
-`%APPDATA%/yaga/config.toml` on Windows and `$XDG_CONFIG_HOME/yaga/config.toml`
-(default `~/.config/yaga/config.toml`) elsewhere.
+Local standalone and Python launcher installations fall back to a user configuration when no
+project configuration applies. Its location is `%APPDATA%/yaga/config.toml` on Windows and
+`$XDG_CONFIG_HOME/yaga/config.toml` (default `~/.config/yaga/config.toml`) elsewhere.
 It uses the standalone `.yaga.toml` shape. Create this file explicitly; installation does not
 create policy for you.
 
@@ -68,10 +67,9 @@ One file supplies the entire configuration: a project file never inherits omitte
 settings. An invalid project file fails instead of falling back to the global file.
 `yaga config show --repo .` displays the effective source and policy.
 
-Ordinary virtual environments, including project `.venv` installations, ignore global settings.
-uv and pipx tool environments are identified by their manager receipt in the environment root.
-Global fallback is also disabled when `CI`, `GITHUB_ACTIONS`, or either YAGA Action runtime
-indicator is nonempty. `config init` always creates project policy independently of user defaults.
+Global fallback is disabled when `CI`, `GITHUB_ACTIONS`, `YAGA_ACTION_RUNTIME`, or
+`YAGA_COMMIT_ACTION_RUNTIME` is nonempty. Pass `--config` when a local command must bypass user
+defaults explicitly. `config init` always creates project policy independently of user defaults.
 
 ### Required YAGA version
 
@@ -140,19 +138,25 @@ produces an upgrade hint and exits `2`.
 | `scope-policy-by-type` | Up to 128 type-to-presence overrides; each replaces the global scope policy. |
 | `allowed-scopes` | Optional unique scope tokens; an empty list allows only unscoped messages. |
 | `scope-case` | `any`, `lower`, or `upper`. |
+| `length-unit` | `codepoints` (default) or `utf16` for header, description, body, and line-length bounds. |
 | `header-max-length` | Positive bounded header length. |
-| `description-min-length` | Nonnegative lower bound. |
-| `description-max-length` | Optional nonnegative upper bound. |
-| `description-ending` | `allow`, `require`, or `forbid` `.`, `!`, and `?` endings. |
+| `description-min-length` | Positive lower bound from 1 through 10,000 (default 1). |
+| `description-max-length` | Optional positive upper bound from 1 through 100,000. |
+| `description-case` | `any` (default) or `forbid-initial-uppercase` to reject an initial Unicode uppercase letter. |
+| `description-ending` | `allow`, `require`, `forbid` (`.`, `!`, and `?`), or `forbid-period` (`.`). |
 | `breaking-markers` | `either` or `paired`; `paired` requires header and footer markers together. |
-| `required-footer-tokens` | Up to 128 combined required/forbidden ASCII tokens. |
+| `footer-syntax` | `conventional` (default) or `colon-whitespace` (one or more whitespace characters after `:`). |
+| `required-footer-tokens` | Up to 128 combined required/forbidden ASCII tokens (case-insensitive colon or hash). |
+| `required-colon-footer-tokens` | Case-sensitive nonempty colon trailers sharing the 128-entry footer budget. |
 | `forbidden-footer-tokens` | Exact case-insensitive presence prohibitions. |
+| `footer-max-line-length` | Optional positive footer line-length limit through 100,000, including continuations. |
 | `body-policy` | `optional`, `required`, or `forbidden`. |
 | `body-policy-by-type` | Empty-default mapping of up to 128 types to body presence overrides. |
 | `body-min-length` | Nonnegative prose-body character lower bound. |
 | `body-max-length` | Optional total prose-body limit from 1 through 100000; independent of line wrapping. |
 | `body-min-words` | Integer from 0 through 100000, counting prose tokens. |
 | `body-max-line-length` | Optional maximum body-line length; omitted means unlimited. |
+| `line-length-urls` | `check` (default) or `exempt` to exempt body/footer lines containing `http://` or `https://` URLs. |
 | `body-paragraph-splitting` | `skip` (default) or `check` for likely sentence splits across blank lines. |
 | `skip-pull-request-authors` | Empty-default list of up to 128 explicit GitHub PR author logins exempt from title and commit checks. |
 | `dependabot-pull-requests` | `check` (default) or a per-commit metadata/signature-filtered `skip` in eligible event-aware PR checks only. |
@@ -264,17 +268,24 @@ the `.yaga.toml` path that would be created and marks the result as `dry_run` in
 
 ## Standalone provider policies
 
-Branch, change, and committed-tree checks each use a separate schema-v1 policy file. Repository
-checks can select providers with a versioned plan. The table lists the corresponding CLI options.
+Branch, change, pull-request description, committed-tree, agent-review, test-planning, and
+pull-request triage checks each use a separate versioned TOML policy file. Repository checks can
+select providers with a versioned plan. The table lists the required root schema key and primary
+runtime selector for each standalone file (commit policy uses `.yaga.toml` or `pyproject.toml`
+above).
 
 | File | Required root | Runtime selection |
 | --- | --- | --- |
 | `.yaga/branch-policy.toml` | `branch-policy-version = 1` | explicit `--name` |
 | `.yaga/change-policy.toml` | `change-policy-version = 1` | exact `--range` |
+| `.yaga/description-policy.toml` | `description-policy-version = 1` | `--file`, `--stdin`, `--event-file`, or `--pr` |
 | `.yaga/tree-policy.toml` | `tree-policy-version = 1` | exact `--revision` |
 | `.yaga/path-policy.toml` | `path-policy-version = 1` | exact `--revision` |
 | `.yaga/mode-policy.toml` | `mode-policy-version = 1` | exact `--revision` |
 | `.yaga/size-policy.toml` | `size-policy-version = 1` | exact `--revision` |
+| `.yaga/agent-review-policy.toml` | `[agent-review]` with `version = 1` | `--file`, `--pr`, or `gate agent-review policy *` |
+| `.yaga/test-policy.toml` | `test-policy-version = 1` | `--profile` plus `--range` or `--revision` |
+| `.yaga/triage-policy.toml` | `triage-policy-version = 1` | `--file` or `--pr` |
 | `.yaga/checks/*.toml` | `plan-version = 1` or `plan-version = 2` | explicit `--plan` |
 
 These files are quality policy only. A pull-request-controlled plan or policy is never trusted

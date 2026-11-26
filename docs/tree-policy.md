@@ -61,15 +61,18 @@ resource-limit errors. Reports bound displayed diagnostics while retaining exact
 finding counts.
 
 The policy file is an explicit runtime input and may differ from the selected tree; the CLI does
-not claim policy provenance. CI should check out the exact source commit, keep the workflow
-unprivileged, and pass that same commit through a quoted environment variable:
+not claim policy provenance. This provider is supported in repository plans (`plan-version = 2`;
+frozen `plan-version = 1` is unchanged) and in the unified [YAGA Checks Action](github-actions.md)
+via `check: tree` or `check: repo`. When invoking the CLI directly in CI, check out the exact
+source commit, keep the workflow unprivileged, and pass that same commit through a quoted
+environment variable:
 
 ```yaml
 - name: Check committed-tree policy
   env:
     YAGA_TREE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
   run: >-
-    uv run yaga tree check
+    yaga tree check
     --policy .yaga/tree-policy.toml
     --revision "$YAGA_TREE_REVISION"
     --format github

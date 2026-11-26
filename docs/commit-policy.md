@@ -8,7 +8,7 @@ yaga commit check --file .git/COMMIT_EDITMSG
 printf 'fix: preserve stdin\n' | yaga commit check --stdin
 yaga commit check --commit HEAD~1
 yaga commit check --range origin/main..HEAD
-yaga commit quality --commit HEAD --offline
+yaga commit quality --provider openai-compatible --model llama3.2 --commit HEAD
 ```
 
 Optional model advice is covered by the [commit quality guide](commit-quality.md).
@@ -228,7 +228,7 @@ audited immutable commit that contains `.pre-commit-hooks.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/dariuszpanas/yaga
-    rev: cd02385e3216ac544e7783c7dd6929340e230e95
+    rev: <audited-40-character-commit-sha>
     hooks:
       - id: yaga-commit-check
 ```
@@ -239,9 +239,10 @@ Install the non-default hook type and its environment:
 pre-commit install --hook-type commit-msg --install-hooks
 ```
 
-The provider requires pre-commit 3.2 or newer and YAGA requires Python 3.12 or newer. If
-pre-commit's default interpreter is older, set `language_version: python3.12` (or another supported
-interpreter) on the hook.
+The provider requires pre-commit 3.2 or newer, Python 3.12 or newer, and a Rust toolchain (Cargo
+and `rustc`) because installing the `language: python` hook from a Git repository builds `yaga-cli`
+from source. If pre-commit's default interpreter is older, set `language_version: python3.12` (or
+another supported interpreter) on the hook.
 
 Repositories that want ordinary `pre-commit install` to include it can add
 `default_install_hook_types: [pre-commit, commit-msg]` to their configuration. Policy remains in

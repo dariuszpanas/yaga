@@ -29,7 +29,7 @@ preset = "codex"
 outcome = "review"
 
 [agent-review.agents.documentation]
-preset = "codex"
+preset = "docs"
 outcome = "advisory"
 publication = "comment"
 ```
@@ -131,6 +131,7 @@ The result contract is deliberately small:
   "plan_digest": "02ea06065a23a1b2baa7177f150f9f96548d3a1ee4e736437ebf037934fb5249",
   "results": [
     {"lens": "correctness", "outcome": "passed", "summary": "No findings."},
+    {"lens": "security", "outcome": "passed", "summary": "No security findings."},
     {"lens": "documentation", "outcome": "failed", "summary": "The setup example is stale."}
   ]
 }
@@ -147,8 +148,7 @@ adapter runs in a GitHub Actions step: it emits escaped error annotations for bl
 pending lenses, warning annotations for advisory findings, and one bounded notice summary. The
 format never prints the full untrusted result summary and keeps the same exit codes as text and
 JSON.
-An explicitly returned result without a summary is reported as `provider returned no summary`; the
-distinct `no result was returned` detail is reserved for internal incomplete-state rendering.
+An explicitly returned result without a summary is reported as `provider returned no summary`.
 
 ## End-to-end adapter example
 
@@ -196,7 +196,9 @@ known outcomes (`review` or `advisory`), publication modes, and a bounded
 preset label. The label is intentionally not a YAGA provider registry: an external adapter decides
 which service, model, or human workflow it represents. The validator does not contact an agent or
 read credentials. Run the installed `policy check`, `plan`, `template`, and `evaluate` commands in
-that adapter's trusted workflow. The fixed GitHub composite Action does not accept configured policies. PR-controlled policy or receipt content must
+that adapter's trusted workflow. The `check: gate` mode of the unified GitHub Action does not
+accept configured policies (use `check: pr-review` for live pull-request review checks against an
+`[agent-review]` policy). PR-controlled policy or receipt content must
 never be used as security authority.
 
 ## Pull-request review state
