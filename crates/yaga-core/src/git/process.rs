@@ -19,6 +19,38 @@ use platform::Contained;
 const TICK: Duration = Duration::from_millis(2);
 const CLEANUP: Duration = Duration::from_secs(1);
 
+#[cfg(any(target_os = "macos", test))]
+pub(super) enum GroupKill {
+    Done,
+    PermissionDenied(io::Error),
+}
+
+#[cfg(any(target_os = "macos", test))]
+pub(super) fn terminate_macos_group(
+    deadline: Instant,
+    tick: Duration,
+    mut now: impl FnMut() -> Instant,
+    mut kill_group: impl FnMut() -> io::Result<GroupKill>,
+    mut exited: impl FnMut() -> io::Result<bool>,
+    mut sleep: impl FnMut(Duration),
+) -> io::Result<()> {
+    loop {
+        match kill_group()? {
+            GroupKill::Done => return Ok(()),
+            GroupKill::PermissionDenied(error) => {
+                if exited()? {
+                    return Ok(());
+                }
+                let remaining = deadline.saturating_duration_since(now());
+                if remaining.is_zero() {
+                    return Err(error);
+                }
+                sleep(tick.min(remaining));
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ProcessError {
     Timeout,
@@ -255,18 +287,19 @@ pub(crate) fn run_observed(
 
 fn finish(group: &mut Contained, workers: Vec<JoinHandle<()>>) -> Result<ExitStatus, ProcessError> {
     // Kill descendants even when the leader exited cleanly and they closed all pipes.
-    group.terminate()?;
     let cleanup_deadline = Instant::now() + CLEANUP;
+    group.terminate(cleanup_deadline)?;
     let status = loop {
         if workers.iter().all(JoinHandle::is_finished)
             && let Some(status) = group.child.try_wait()?
         {
             break status;
         }
-        if Instant::now() >= cleanup_deadline {
+        let remaining = cleanup_deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
             return Err(io::Error::other("could not clean up the bounded process tree").into());
         }
-        thread::sleep(TICK);
+        thread::sleep(TICK.min(remaining));
     };
     for worker in workers {
         worker
