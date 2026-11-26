@@ -1,7 +1,7 @@
 # Contributing
 
-See the [commit policy direction for 0.2.0](commit-policy-direction.md) for the current
-problem-led development scope and customization principles.
+See the [commit policy direction for 0.2.0](commit-policy-direction.md) for the historical
+problem-led design rationale and customization principles behind YAGA's commit policy.
 
 The docs gate checks rendered local links and anchors, including README routes and the public
 logo, against the built site. Run `uv run make docs` after changing documentation or navigation.
@@ -11,7 +11,8 @@ diagnostic, or Action boundary they affect.
 
 ## Development loop
 
-Use Rust (1.99+ on Linux/macOS, 1.100+ on Windows), Python 3.12+, and uv 0.12.7+. The full gate
+Use Rust 1.99+ (1.100+ is used by CI and Windows releases for direct suspended-thread resumption),
+Python 3.12+, and uv 0.12.7+. The full gate
 also needs Git, GNU Make, Bash, a running Docker engine with Linux containers, and Typos CLI
 1.49.0. On Windows, put Git for Windows Bash on PATH before the WSL launcher. `uv sync` installs
 the Python development tools and builds the editable launcher wheel.

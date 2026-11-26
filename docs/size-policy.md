@@ -43,16 +43,17 @@ Per-path violations report `size.blob` in lexical path order; one aggregate viol
 errors. GitHub output attaches blob findings to files and emits the aggregate finding without a
 file annotation.
 
-The policy is an explicit runtime input and carries no provenance claim. This is an installed CLI
-provider, not part of either Action runtime or repository-plan v1. CI should use the exact checked
-out commit:
+The policy is an explicit runtime input and carries no provenance claim. This provider is supported
+in repository plans (`plan-version = 2`; frozen `plan-version = 1` is unchanged) and in the unified
+[YAGA Checks Action](github-actions.md) via `check: size` or `check: repo`. When invoking the CLI
+directly in CI, use the exact checked-out commit:
 
 ```yaml
 - name: Check committed blob sizes
   env:
     YAGA_SIZE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
   run: >-
-    uv run yaga size check
+    yaga size check
     --policy .yaga/size-policy.toml
     --revision "$YAGA_SIZE_REVISION"
     --format github

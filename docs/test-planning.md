@@ -60,7 +60,7 @@ Bindings are opaque IDs for a fixed executor mapping. They contain no commands o
 arguments, and YAGA never executes them. A variant names a required environment or scenario:
 selecting `backend` above selects both Python variants. Names alone do not pin tool versions.
 
-See the complete tested [polyglot configuration](designs/examples/test-planning/polyglot.toml)
+See the complete [polyglot configuration](designs/examples/test-planning/polyglot.toml)
 for backend, frontend, Docker, Chainsaw, and custom qualification suites with prerequisites.
 The [django-ray configuration](designs/examples/test-planning/django-ray.toml) models five existing
 long-running qualification groups; ordinary django-ray CI remains mandatory separately. These are
@@ -212,16 +212,17 @@ full selection of a PR-edited catalog cannot detect obligations that the contrib
 Policy and binding digests identify bytes, not authority, signatures, or successful execution.
 
 For executor handoff, pass `--bindings-sha256` with the lowercase 64-character SHA-256 of an
-immutable reviewed execution manifest. The Python `ExecutorRegistry` provides a canonical identity
-for a complete fixed job map and its definition hashes. Its definitions should cover the registry's
-revision and locked tools/images/configuration for every variant. The CLI treats the digest as
-opaque; the handoff API checks it against the supplied registry. Without it, `bindings_sha256` is
-null and the plan is a preview that cannot be handed off.
+immutable reviewed execution manifest. `yaga_core::test_planning::handoff::Registry` provides a
+canonical identity for a complete fixed job map and its definition hashes. Its definitions should
+cover the registry's revision and locked tools/images/configuration for every variant. The CLI treats
+the digest as opaque; the handoff API checks it against the supplied registry. Without it,
+`bindings_sha256` is null and the plan is a preview that cannot be handed off.
 
 Keep existing required CI running during initial comparison. Review the selected suites and
 variants against those jobs, then follow the [shadow pilot and activation plan](designs/test-planning.md#shadow-pilot-and-promotion-criteria).
-The [handoff and shadow guide](test-planning-handoff.md) includes a runnable adapter for both
-catalogs, fixed maps for all five execution categories, and the django-ray pilot protocol.
+The [handoff and shadow guide](test-planning-handoff.md) describes the Rust handoff API
+(`yaga_core::test_planning::handoff`), fixed maps for all five execution categories, and the
+django-ray pilot protocol.
 Conditional jobs alone are insufficient: an eventual required aggregate must detect failed,
 cancelled, missing, or unexpectedly skipped selected cells and failed cleanup. This release supplies
 planning, fixed-job handoff, and normalized receipt evaluation. Selective-execution activation

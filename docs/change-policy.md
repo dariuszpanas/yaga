@@ -56,14 +56,14 @@ shell source:
   env:
     YAGA_CHANGE_RANGE: ${{ format('{0}...{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) }}
   run: >-
-    uv run yaga change check
+    yaga change check
     --policy .yaga/change-policy.toml
     --range "$YAGA_CHANGE_RANGE"
     --format github
 ```
 
-This is an installed CLI check, not a privileged Action or merge-security authority. The caller is
-responsible for installing its pinned YAGA environment and must not run pull-request-controlled
-code from `pull_request_target` or `workflow_run` with trusted credentials.
+This check can also run via `check: change` in the unified [YAGA Checks Action](github-actions.md).
+Either way, it is an unprivileged quality check, not a merge-security authority: never run
+pull-request-controlled code from `pull_request_target` or `workflow_run` with trusted credentials.
 
 See [command index](commands.md) for other checks and [adoption recipes](recipes.md) for CI setup.

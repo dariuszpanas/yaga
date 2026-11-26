@@ -6,16 +6,16 @@ runtime selectors explicit as the repository grows.
 ## Start with local commit feedback
 
 ```bash
-uv run yaga config init --repo .
-uv run yaga config show --repo .
-uv run yaga commit check --message "docs: explain YAGA"
+yaga config init --repo .
+yaga config show --repo .
+yaga commit check --message "docs: explain YAGA"
 ```
 
 `config init` creates only a new standalone `.yaga.toml` and refuses to overwrite or shadow an
 existing discovered policy. For editor or tool integration, use JSON and rely on the exit code:
 
 ```bash
-uv run yaga commit check --message "docs: explain YAGA" --format json > yaga-report.json
+yaga commit check --message "docs: explain YAGA" --format json > yaga-report.json
 ```
 
 Exit `0` means pass, `1` means a valid input violated policy, and `2` means YAGA could not safely
@@ -52,7 +52,7 @@ complete-history CI check as the repository-side authority.
 ## Check a pull request's exact commits
 
 For ordinary unprivileged CI, check out the event head with complete history and pass the exact
-three-dot range through one quoted environment variable:
+two-dot range through one quoted environment variable:
 
 ```yaml
 - uses: actions/checkout@<audited-full-sha>
@@ -62,16 +62,16 @@ three-dot range through one quoted environment variable:
     persist-credentials: false
 - name: Check commit range
   env:
-    YAGA_RANGE: ${{ format('{0}...{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) }}
+    YAGA_RANGE: ${{ format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) }}
   run: >-
-    uv run yaga commit check
+    yaga commit check
     --range "$YAGA_RANGE"
     --format github
 ```
 
-The three-dot range compares the unique merge base to the pull-request head and is evaluated
-oldest first. YAGA does not fetch history. Pull-request CI is a quality signal, not trusted merge
-authority.
+The two-dot range selects branch-only commits reachable from the pull-request head and not from
+the base, evaluated oldest first. YAGA does not fetch history. Pull-request CI is a quality signal,
+not trusted merge authority.
 
 ## Require tests when source paths change
 

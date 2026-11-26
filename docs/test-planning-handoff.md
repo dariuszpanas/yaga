@@ -5,7 +5,8 @@ handoff. Existing executors still own setup, commands, runner permissions, timeo
 cancellation, and cleanup. The handoff contains job IDs and required cells; it contains no commands
 and reports no test outcomes.
 
-Phase 3 supplies this Python API, runnable examples, and a django-ray shadow-pilot adapter.
+Phase 3 supplies this Rust library API (`yaga_core::test_planning::handoff`), example policies,
+and a django-ray shadow-pilot protocol.
 Historical selection replay and one full same-source qualification run are recorded; actual
 selective feedback-time measurements and the adoption decision remain pending. Existing required
 CI checks remain enabled and authoritative.
@@ -14,39 +15,39 @@ Phase 4A adds pure selection diagnostics and reviewed application-test ownership
 
 ## Build a fixed registry
 
-The API is installed with YAGA and stays outside both composite Action runtimes:
+The API lives in `yaga_core::test_planning` and stays outside the unified composite Action:
 
-```python
-from yaga.test_planning.handoff import ExecutorRegistry, SuiteExecutor, create_handoff
-from yaga.test_planning.service import create_test_plan
+```rust
+use std::path::Path;
+use yaga_core::test_planning::{
+    create_plan,
+    handoff::{Executor, Registry, create_handoff},
+};
 
-# These values come from the consumer's reviewed execution manifest and source.
-registry = ExecutorRegistry(
-    (
-        SuiteExecutor(
-            suite="backend",
-            binding="backend-unit",
-            dispatch="backend",
-            variants=("py312", "py315"),
-            capabilities=("linux", "python"),
-            definition_sha256=backend_definition_sha256,
-        ),
-    )
-)
-planned = create_test_plan(
-    repository,
-    policy_path=policy_file,
-    profile="development",
-    revision_range=explicit_range,
-    bindings_sha256=registry.sha256,
-)
-handoff = create_handoff(
-    planned,
-    registry,
-    expected_policy_sha256=trusted_policy_sha256,
-    expected_execution_commit=expected_commit,
-    expected_execution_tree=expected_tree,
-)
+// These values come from the consumer's reviewed execution manifest and source.
+let registry = Registry::new(vec![Executor {
+    suite: "backend".into(),
+    binding: "backend-unit".into(),
+    dispatch: "backend".into(),
+    variants: vec!["py312".into(), "py315".into()],
+    capabilities: vec!["linux".into(), "python".into()],
+    definition_sha256: backend_definition_sha256.into(),
+}])?;
+let planned = create_plan(
+    Path::new(repository),
+    Path::new(policy_file),
+    "development",
+    Some(explicit_range),
+    None,
+    Some(registry.sha256()),
+)?;
+let handoff = create_handoff(
+    &planned,
+    &registry,
+    trusted_policy_sha256,
+    expected_commit,
+    expected_tree,
+)?;
 ```
 
 This skeleton assumes a single-suite catalog. A real registry must map the **entire** catalog
@@ -61,8 +62,8 @@ configuration and matrix definition, and setup/cleanup contract. The consumer co
 retains these bytes; YAGA does not fetch or authenticate them. A declared `docker` capability does
 not prove a Docker daemon exists: consumer preflight must check availability before dispatch.
 
-`ExecutorRegistry.document()` emits version 1 with complete, sorted executor definitions.
-`registry.sha256` hashes its canonical UTF-8 JSON (sorted keys, compact separators, no ASCII
+`Registry::document()` emits version 1 with complete, sorted executor definitions.
+`registry.sha256()` hashes its canonical UTF-8 JSON (sorted keys, compact separators, no ASCII
 escaping). Changing a definition, binding, variant, dispatch ID, or capability changes the manifest
 identity. Declaration order does not. Supply this identity when creating the plan.
 
@@ -73,33 +74,35 @@ shell interpolation. The separate evaluator imports retained plans and normalize
 
 ## Normalize and evaluate receipts
 
-The pure APIs live in `yaga.test_planning.results` and `yaga.test_planning.evaluation`:
+The pure APIs live in `yaga_core::test_planning::evaluation`:
 
-```python
-from yaga.test_planning.evaluation import encode_evaluation, evaluate_results
-from yaga.test_planning.results import parse_results_document
+```rust
+use yaga_core::test_planning::evaluation::{Expected, evaluate, parse_results};
 
-# The adapter has already performed bounded JSON acquisition, duplicate-key rejection,
-# provenance checks, and each executor's custom acceptance and cleanup validation.
-results = parse_results_document(normalized_document)
-evaluation = evaluate_results(
-    planned,
-    results,
-    expected_policy_sha256=trusted_policy_sha256,
-    expected_bindings_sha256=registry.sha256,
-    expected_execution_commit=expected_commit,
-    expected_execution_tree=expected_tree,
-    expected_run_id=expected_run_id,
-    expected_attempt=expected_attempt,
-)
-report_bytes = encode_evaluation(evaluation)
+// The adapter has already performed bounded JSON acquisition, duplicate-key rejection,
+// provenance checks, and each executor's custom acceptance and cleanup validation.
+let results = parse_results(normalized_document)?;
+let evaluation = evaluate(
+    &planned,
+    &results,
+    Expected {
+        policy_sha256: trusted_policy_sha256,
+        bindings_sha256: registry.sha256(),
+        execution_commit: expected_commit,
+        execution_tree: expected_tree,
+        run_id: expected_run_id,
+        attempt: expected_attempt,
+    },
+)?;
+let report_json = &evaluation.json;
 ```
 
-`CellResult`, `ResultOutcome`, and `TestResults` also support validated direct construction.
-`results_document` and `encode_results` produce canonical output sorted by suite and variant.
-The evaluation's `results_sha256` hashes that canonical result document without its trailing
-newline. Reordering received cells does not change the fingerprint. Input parsers and output
-encoders reject unsupported versions, malformed fields, and over-budget documents; see the
+`Cell`, `Outcome`, `Receipt`, and `Results` (`Results::try_from(receipt)`) also support validated
+direct construction. `Results::document()` and `Results::encode()` produce canonical output sorted
+by suite and variant. `Results::sha256()` (and the evaluation's `results_sha256`) hashes that
+canonical result document without its trailing newline. Reordering received cells does not change
+the fingerprint. Input parsers and output encoders reject unsupported versions, malformed fields,
+and over-budget documents; see the
 [complete CLI and wire contract](test-planning.md#evaluate-normalized-results).
 
 The generic evaluator checks only the normalized contract. Consumers must verify these conditions
@@ -127,8 +130,8 @@ informs regression fixtures, but is not evidence that a new source or adapter wa
 
 ## Version-one handoff
 
-`create_handoff` accepts a validated `PlannedTests` value and returns a complete JSON-compatible
-dictionary. It is bounded to 4 MiB without truncation.
+`create_handoff` accepts a validated `PlanDocument` value and returns a complete `serde_json::Value`
+JSON object. It is bounded to 4 MiB without truncation.
 
 | Field | Contract |
 | --- | --- |
@@ -201,16 +204,17 @@ workflows. This catalog does not cover ordinary django-ray CI, which remains req
 
 ## Explain selection without changing the plan
 
-The installed Python API emits a separate `test-selection-diagnostics-version: 1` document;
-plan, manifest, handoff, and consumer comparison version 1 remain unchanged:
+`yaga_core::test_planning::diagnostics::diagnose` emits a separate
+`test-selection-diagnostics-version: 1` document; plan, manifest, handoff, and consumer comparison
+version 1 remain unchanged:
 
-```python
-from yaga.test_planning.diagnostics import diagnose_selection, encode_diagnostics
+```rust
+use yaga_core::test_planning::diagnostics::diagnose;
 
-# planned is the PlannedTests returned by create_test_plan above.
-# Supply the current selector's catalog suite IDs, not executor dispatch IDs.
-diagnostics = diagnose_selection(planned, baseline_suites=("qualification.application",))
-payload = encode_diagnostics(diagnostics)
+// `planned` is the `PlanDocument` returned by `create_plan` or `parse_plan`.
+// Supply the current selector's catalog suite IDs, not executor dispatch IDs.
+let baseline = vec!["qualification.application".to_string()];
+let diagnostics = diagnose(&planned, Some(&baseline))?;
 ```
 
 The report retains the original plan digest, exact policy/binding hashes, source identities, profile,
@@ -218,7 +222,7 @@ and requested/effective modes. It adds these independently interpretable fields:
 
 | Field | Meaning |
 | --- | --- |
-| `selection_breadth` | `empty`, `partial`, or `all`, relative to the catalog; rules may select every suite while the effective mode stays selective |
+| `selection_breadth` | `empty`, `partial`, or `all`, relative to the catalog (`all` requires every catalog suite and every declared variant cell; rules selecting every suite with pruned variants report `partial`, and rules may select all suites and cells while the effective mode stays selective) |
 | `fallback_cause` | `profile-full`, `full-trigger`, `unknown-path`, or `selective`; the last means no full-mode decision was recorded |
 | `counts` | Catalog and selected suite/cell counts, plus changed-path count; a cell is one suite variant, not a workflow invocation |
 | `full_trigger_paths`, `unknown_paths`, `no_impact_paths` | Unique sorted paths attributed by the recorded reasons |
@@ -226,29 +230,31 @@ and requested/effective modes. It adds these independently interpretable fields:
 | `rules` | Matched rule IDs with unique sorted paths/suites and their counts |
 | `comparison` | Sorted baseline, selected, additional, and missing catalog suite IDs |
 
-Omit `baseline_suites` to report an unavailable comparison (`null`). An explicit empty tuple means
-the baseline selected nothing. Duplicate or unknown baseline IDs are errors. For revision-only
-plans, changed-path counts and path lists are `null`, since no range was collected.
+Pass `None` for `baseline` to report an unavailable comparison (`null`). An explicit empty slice
+(`Some(&[])`) means the baseline selected nothing. Duplicate or unknown baseline IDs are errors.
+For revision-only plans, changed-path counts and path lists are `null`, since no range was collected.
 
 These are summaries of recorded reasons, not a dependency coverage audit. An empty unknown-path
 list after a full trigger does not establish that every path has an owner. The API neither rematches
 policy nor reads Git/files/environment, runs tests, or infers runtime savings. Preview plans with no
 binding identity remain previews; a matching digest does not authenticate the report's origin.
 
-For an already decoded plan, `parse_plan_document(value)` reconstructs a validated `PlannedTests`
-and checks the closed version-one fields, canonical ordering, source/selection semantics, and digest.
-The caller must bound file reads and reject duplicate JSON keys before decoding. Both parsing and
-diagnostic encoding enforce a complete UTF-8 document within 4 MiB including its final newline;
-an oversized report fails without truncation. `encode_diagnostics` checks the versioned envelope and
-bounded JSON encoding; use `diagnose_selection` to establish its relationship to the plan.
+For an already decoded plan, `yaga_core::test_planning::parse_plan(value)` reconstructs a validated
+`PlanDocument` and checks the closed version-one fields, canonical ordering, source/selection
+semantics, and digest. The caller must bound file reads and reject duplicate JSON keys before
+decoding (`yaga_core::test_planning::load_json` enforces those bounds when the `process` feature is
+enabled). Both parsing and diagnostic generation enforce a complete UTF-8 document within 4 MiB
+including its final newline; an oversized report fails without truncation.
 
-The [historical replay runner](designs/experiments/django-ray-shadow-replay.md#reproduce-the-comparison)
-accepts `--diagnostics-output NEW_FILE`. It writes a separate
-`test-replay-diagnostics-version: 1` report with per-revision diagnostics, ranked path counts, suite
-additions/omissions, and a hash of the complete replay bytes. Every observation must agree with its
-exact cohort source, plan digest, comparison, catalog, and frozen policy/registry/adapter identities.
-Both outputs must fit their limits before writing. Existing files are never overwritten.
-The default replay output format and exit behavior are unchanged; neither output enables execution.
+The historical pre-0.6.0
+[replay runner](designs/experiments/django-ray-shadow-replay.md#reproduce-the-comparison) (archived
+at tag `v0.5.0`, commit `2648f832d4e61cf7f7fc721156fff02e54e01cc3`, before the 0.6.0 Rust rewrite)
+accepted
+`--diagnostics-output NEW_FILE` to write a separate `test-replay-diagnostics-version: 1` report
+with per-revision diagnostics, ranked path counts, suite additions/omissions, and a hash of the
+complete replay bytes. Every observation agreed with its exact cohort source, plan digest,
+comparison, catalog, and frozen policy/registry/adapter identities. Both outputs fit their limits
+before writing without overwriting existing files. Neither output enables execution.
 
 ## django-ray shadow pilot
 

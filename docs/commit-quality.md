@@ -79,8 +79,8 @@ checks, choose a provider, set its model and remove the local model revision, cl
 threshold and tokenizer settings from the quality table. The API returns a decision and
 a reason. Old classifier scores and thresholds have no equivalent in this mode.
 
-Existing install scripts can keep the Python extra `quality` or Cargo feature
-`quality-models` while migrating. These compatibility names install no model dependencies.
+Existing install scripts can keep the Python extras `quality` or `quality-bedrock`, or the Cargo
+feature `quality-models`, while migrating. These compatibility names install no model dependencies.
 
 For operations that require zero network calls, use `commit check`. The `--offline`
 flag prevents a quality API request, including one to a loopback server.

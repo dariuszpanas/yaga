@@ -24,8 +24,7 @@ as a CLI argument.
 The standalone CLI and platform wheels run the native gate. With `check: gate`, the composite
 Action verifies its bundled native executable or builds the pinned Action source with its locked
 Rust dependencies. Setup runs without the GitHub token. The gate receives the token when it runs
-the selected operation. Python callers can also use the separate standard-library gate entry
-point from source. See [Action runtimes and trust boundaries](github-actions.md#execution-runtimes-and-trust-split).
+the selected operation. See [Action runtimes and trust boundaries](github-actions.md#execution-runtimes-and-trust-split).
 
 ## Agent review Action: why the workflow is split
 

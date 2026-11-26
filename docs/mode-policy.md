@@ -50,16 +50,18 @@ This policy observes only Git's committed entry kinds and executable bit, as doc
 [data model](https://git-scm.com/docs/gitdatamodel.html). An allowed mode does not validate a
 shebang, content, ACLs, ownership, symlink-target safety, `.gitmodules` consistency, submodule
 provenance, or object availability. The explicit policy carries no provenance claim. This
-installed provider remains outside both Action import graphs and repository-plan v1.
+provider is supported in repository plans (`plan-version = 2`; frozen `plan-version = 1` is
+unchanged) and in the unified [YAGA Checks Action](github-actions.md) via `check: mode` or
+`check: repo`.
 
-CI should pass the exact checked-out commit through one quoted value:
+When invoking the CLI directly in CI, pass the exact checked-out commit through one quoted value:
 
 ```yaml
 - name: Check committed entry modes
   env:
     YAGA_MODE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
   run: >-
-    uv run yaga mode check
+    yaga mode check
     --policy .yaga/mode-policy.toml
     --revision "$YAGA_MODE_REVISION"
     --format github

@@ -4,9 +4,10 @@
 Phases 4C and 4D remain proposed. The version-one policy
 model, strict loader, pure selection planner, installed CLI, Git source binding, and versioned plan
 reports are available.
-Both example configurations are exercised by the test suite. See the
+See the
 [test planning guide](../test-planning.md) for current commands and the
-[handoff guide](../test-planning-handoff.md) for fixed executor preflight, runnable mappings, and
+[handoff guide](../test-planning-handoff.md) for the Rust executor preflight API
+(`yaga_core::test_planning::handoff`), fixed category maps, and
 the django-ray pilot. Historical selection replay and one full same-source observation are recorded;
 actual selective feedback-time measurements and the adoption decision remain pending;
 offline normalized receipt evaluation is available, and no consumer test skipping is enabled.
@@ -35,8 +36,8 @@ shell commands. Execution, isolation, cancellation, retries, and cleanup stay wi
 runner. Selection does not establish that two suites can safely run in parallel.
 
 Keep this domain separate from `change check`, which enforces changed-file coupling, and from
-repository-check plan v1/v2. Their schemas remain unchanged. The new domain stays outside both
-dependency-free composite Action import graphs. This proposal does not change the Agent Review
+repository-check plan v1/v2. Their schemas remain unchanged. The new domain stays outside the
+unified composite Action. This proposal does not change the Agent Review
 publisher or add merge-queue support to it; that publisher currently does not support merge queues.
 
 YAGA already has a useful architectural precedent: [Agent review plans and receipts](../agent-review-gate.md)
@@ -127,20 +128,25 @@ measured review. Never silently reduce a Git range or suite inventory to fit a l
 3. For a `full` profile, select every suite and every variant. `always` is redundant but legal.
    Bypass impact/unknown-path classification even when a range was supplied; an unmapped path
    cannot invalidate full selection. Policy validation and complete source validation still apply.
-4. For a `selective` profile, start with `always`; evaluate every matching rule and union its suite
-   IDs with all suites having any selected tag. Rules are additive, never first-match exclusions.
+4. For a `selective` profile, start with `always` (all declared variants) and optional
+   `always-variants`; evaluate every matching rule and union its suite IDs (`select`, all variants),
+   all suites having any selected tag (`select-tags`, all variants), and any explicitly targeted
+   variants (`select-variants`). Rules are additive, never first-match exclusions.
 5. In selective mode, any `full-on` match selects the complete catalog and bypasses unknown-path
    classification and impact-rule evaluation for the whole change. The implementation checks
    these triggers before expanding rule reasons. Otherwise every changed path must match a selection rule
    or `no-impact` pattern. An unmatched path applies `unknown-paths`: `full` selects the catalog;
    `error` produces exit `2` without a plan.
-6. Expand prerequisite closure, order deterministically, and expand all required variant cells.
+6. Expand prerequisite closure (`needs` adds all declared variants of every prerequisite
+   transitively), order deterministically, and keep each selected suite's sorted union of required
+   variant cells (whole-suite selections expand to all declared variants).
 7. Emit the source identities, effective mode, complete obligations, and reasons. Do not run them.
 
 `no-impact` only prevents unknown-path fallback. It cannot undo a rule, a full trigger, or a
 mandatory suite. A mixed documentation/code change still selects the code suites. An empty diff
-selects `always`; if that is empty, report an explicit zero-obligation plan rather than pretending
-tests passed. It may be a valid selective plan, but full profiles always retain the complete catalog.
+selects `always` and `always-variants`; if both are empty, report an explicit zero-obligation plan
+rather than pretending tests passed. It may be a valid selective plan, but full profiles always
+retain the complete catalog.
 
 Changes to fixtures, test files, runner configuration, lockfiles, images, and generated inputs
 must be represented in the policy. Unknown paths default to full. Renames appear as deletion plus
@@ -163,43 +169,36 @@ anything. Missing Docker, a cluster, credentials, or an interpreter leaves requi
 V1 intentionally has no advisory suites, cost-based omission, duration cutoff, or automatic reduced
 environment matrix. A full profile's obligations cannot shrink because the machine is too small.
 
-### Phase-one Python interface
+### Rust library interface
 
-The internal API takes an explicitly loaded policy and a complete tuple of changed paths:
+The original phase-one Python prototype (`yaga.test_planning.*`) was superseded in 0.6.0 by the
+standalone Rust library module `yaga_core::test_planning`. The pure selection API takes an
+explicitly parsed policy and an optional complete slice of changed paths:
 
-```python
-from pathlib import Path
+```rust
+use yaga_core::test_planning::{TestPolicy, plan_tests};
 
-from yaga.test_planning.planner import plan_tests
-from yaga.test_planning.policy import load_test_policy
-
-loaded = load_test_policy(Path("docs/designs/examples/test-planning/polyglot.toml"))
-selection = plan_tests(
-    loaded.policy,
-    profile="development",
-    changed_paths=("frontend/src/button.ts",),
-)
-assert tuple(item.suite for item in selection.selected) == (
-    "frontend.browser",
-    "frontend.unit",
-    "repository.smoke",
-)
+let policy = TestPolicy::parse(raw_toml_bytes)?;
+let paths = vec!["frontend/src/button.ts".to_string()];
+let selection = plan_tests(&policy, "development", Some(&paths))?;
+let suites: Vec<&str> = selection.selected.iter().map(|s| s.suite.as_str()).collect();
+assert_eq!(suites, vec!["frontend.browser", "frontend.unit", "repository.smoke"]);
 ```
 
-`parse_test_policy(raw_bytes)` provides the same strict validation without filesystem access.
-The frozen models validate direct construction too. The loader reads one bounded regular file
-and retains its resolved path and exact-byte SHA-256; that digest identifies input, not authority.
-The pure planner returns immutable `SelectionPlan`, `SelectedSuite`, and `SelectionReason` values
-from `test_planning.selection`. It performs no I/O or environment lookup. The full normalized
-inventory remains visible even when the selection is empty.
+`TestPolicy::parse(raw_bytes)` provides strict validation without filesystem access (available in
+pure `--no-default-features` builds); `load_policy(path)` (under the `process` feature) reads one
+bounded regular file and retains its exact-byte SHA-256. The pure planner returns `Selection`,
+`SelectedSuite`, and `Reason` values without I/O or environment lookup, keeping the full normalized
+inventory visible even when the selection is empty.
 
-`changed_paths=()` is an explicit empty change. `changed_paths=None` is accepted only by a full
-profile, indicating that no comparison was supplied. Invalid paths or duplicate entries fail
-even for a full profile. Invalid policy, unknown profile, configured unknown-path errors, and
-resource exhaustion raise `ConfigurationError`; invalid path input raises `InputError`.
-These errors never return a partial plan. The pure result carries no source identity,
-public wire-format version, execution receipt, or claim that tests passed. The installed CLI
-adds source-bound reports around this unchanged pure interface.
+`Some(&[])` is an explicit empty change; `None` is accepted only by a full profile, indicating that
+no comparison was supplied. Invalid paths or duplicate entries fail even for a full profile.
+Invalid policy, unknown profile, configured unknown-path errors, and resource exhaustion return
+`Error::Configuration`; invalid path input returns `Error::Input`. The higher-level `PlanDocument`,
+`create_plan`, `parse_plan`, `handoff::{Executor, Registry, create_handoff}`,
+`evaluation::{Receipt, Cell, Outcome, Results, Expected, parse_results, evaluate}`, and
+`diagnostics::diagnose` APIs build source-bound reports, fixed-registry handoffs, receipt
+evaluations, and selection diagnostics around this pure core.
 
 ## Source identity, policy authority, and CLI
 
@@ -273,10 +272,12 @@ The JSON envelope has exactly `test-plan-version = 1`, a deterministic `plan_dig
   prerequisites, and capabilities, so intentionally unselected suites remain visible.
 - `selected`: topologically ordered records with exactly `suite` and `variants`; variant IDs
   are sorted lexicographically.
-- `reasons`: records with exactly `code`, `suite`, `rule`, `path`, and `required_by`. All keys are
-  present; irrelevant values are null. A prerequisite reason names the added suite in `suite`
-  and its dependent in `required_by`. Global full reasons have a null suite. Order records by
-  those five fields, with null before strings, and remove exact duplicates.
+- `reasons`: records with the five base keys `code`, `suite`, `rule`, `path`, and `required_by`
+  (irrelevant values are null), plus an optional sorted nonempty `variants` array on `test.rule`
+  and `test.always` reasons created by `select-variants` or `always-variants` (`variants` is
+  omitted on whole-suite reasons so existing v1 plans stay byte-identical). A prerequisite reason
+  names the added suite in `suite` and its dependent in `required_by`. Global full reasons have a
+  null suite. Order records canonically with null before strings and remove exact duplicates.
 
 Reasons explain the performed selection: selective plans record matched rule/path/suite triples,
 mandatory suites, acknowledged no-impact paths, fallback causes, and prerequisite edges. Full
@@ -513,16 +514,21 @@ See the [installed command contract](../test-planning.md#evaluate-normalized-res
 ## Phased implementation plan
 
 Each phase should be delivered as focused Conventional Commit changes, with review/CI fixes folded
-into their owning logical commits. Every implementation push runs the existing `uv run make ci`.
-Do not weaken current required checks as part of adding the new feature.
+into their owning logical commits. Every implementation push runs the existing `make ci` gate
+(and Rust workspace checks). Do not weaken current required checks as part of adding the new
+feature.
 
-| Phase | Scope and likely modules | Acceptance criteria / activation boundary |
+Phases 1 through 4B were initially prototyped in Python and migrated to the standalone Rust engine
+in 0.6.0 (`crates/yaga-core/src/test_planning/`, `crates/yaga-core/src/policies/testing.rs`,
+`crates/yaga-core/src/paths/`, `crates/yaga-core/src/git/`, and `crates/yaga-cli/src/test.rs`):
+
+| Phase | Scope and modules | Acceptance criteria / activation boundary |
 | --- | --- | --- |
 | 0: design fixtures | This proposal, complete TOML examples, expected selection cases | Review schema, trust split, inventory semantics, and examples; no runtime behavior changes |
-| 1: policy and pure planning (implemented) | `src/yaga/test_planning/{models,policy,selection,planner}.py` and shared `src/yaga/path_patterns.py`; focused parser/selection tests | Closed schema and limits; additive tag/rule selection; unknown/full behavior; DAG closure; both examples load and produce tested selections; no executors |
-| 2: installed CLI and Git (implemented) | `src/yaga/commands/test.py`; `test_planning/{source,git,service,reports,reporting}.py`; shared `git/changes.py` | Exact source identities, stable JSON/digest and exits, bounded reports, fresh installed-wheel smoke, unchanged Action graphs; useful local/CI planning only |
-| 3: executor handoff and shadow pilot (implemented; one full observation passed) | `test_planning/handoff.py`, runnable fixed job maps, installed-wheel smoke, django-ray advisory comparison and manual full-shadow adapter | All five execution categories demonstrated; 31-revision comparison and one full same-source run recorded; no measured selective benefit or activation claim; existing gates remain authoritative |
-| 4: selection quality, receipts, and measured advisory feedback (4A/4B implemented; 4C/4D proposed) | `test_planning/{results,evaluation}.py`; evaluate command; adapter conformance, selection audit, and experiment reports | Correct dependency/ownership mappings; exact selected cells/attempt/source correlation; controlled feedback measurements and held-out validation; owner adoption decision; required CI remains unchanged |
+| 1: policy and pure planning (implemented) | `crates/yaga-core/src/policies/testing.rs`, `test_planning/selection.rs`, and shared `crates/yaga-core/src/paths/`; focused parser/selection tests | Closed schema and limits; additive tag/rule and per-variant selection; unknown/full behavior; DAG closure; no executors |
+| 2: installed CLI and Git (implemented) | `crates/yaga-cli/src/test.rs`; `test_planning/{mod,decode,report}.rs`; shared `crates/yaga-core/src/git/` | Exact source identities, stable JSON/digest and exits, bounded reports, standalone CLI/wheel smoke, unchanged Action boundaries; useful local/CI planning only |
+| 3: executor handoff and shadow pilot (implemented; one full observation passed) | `test_planning/handoff.rs`, fixed job-map registry API, django-ray advisory comparison and manual full-shadow protocol | All five execution categories demonstrated; 31-revision comparison and one full same-source run recorded; no measured selective benefit or activation claim; existing gates remain authoritative |
+| 4: selection quality, receipts, and measured advisory feedback (4A/4B implemented; 4C/4D proposed) | `test_planning/{diagnostics,evaluation}.rs`; `test evaluate` command; adapter conformance, selection audit, and experiment reports | Correct dependency/ownership mappings; exact selected cells/attempt/source correlation; controlled feedback measurements and held-out validation; owner adoption decision; required CI remains unchanged |
 | 5: optional impact providers | Independently versioned evidence format and optional collectors for Python/JS/build systems | Whole-suite fallback on absent/incompatible evidence; known-regression replay and seeded dependency changes; no removal of mandatory/full-profile obligations |
 
 Implementation dependencies are linear through phase 3. Receipt format work can proceed during
@@ -533,7 +539,7 @@ future proposals, not hidden tasks in these phases.
 
 ### Reuse and test strategy
 
-Use `src/yaga/git/` for all Git execution. Extract any genuinely shared changed-path/glob helpers
+Use `crates/yaga-core/src/git/` for all Git execution. Extract any genuinely shared changed-path/glob helpers
 into a neutral internal module with characterization tests; do not import private coupling-policy
 internals or duplicate subprocess logic. Follow existing explicit-config, bounded-read, sanitized
 reporting, and UTF-8 entrypoint patterns. Reuse digest conventions, not Agent Review domain types.
@@ -550,11 +556,11 @@ Required implementation checks:
 - Equivalent policy arrangements produce the same normalized selection/order. Identical policy
   bytes, binding identity, and source inputs produce identical digests across paths/platforms and
   repeat runs; comment/order edits intentionally change the policy hash. Preserve existing provider
-  results and Action import boundaries.
+  results and Action boundaries.
 - Adapter contract tests where selected work is missing, cancelled, blocked, unexpectedly skipped,
   run against another tree, missing one matrix cell, or fails cleanup after assertions pass.
-- Installed-wheel CLI qualification outside the checkout, documentation/link builds, and the full
-  existing Python/OS CI matrix before publishing the implementation.
+- Installed CLI and wheel qualification outside the checkout, documentation/link builds, and the
+  full Rust/Python/OS CI matrix before publishing the implementation.
 
 ### Shadow pilot and promotion criteria
 
@@ -696,7 +702,7 @@ execution-activation authority. Consumer adoption remains separate from the acti
 
 Deliver these as separate reviewable changes; do not combine policy narrowing with scheduler,
 concurrency, cleanup, or environment-matrix changes. Keep result evaluation installed-only and
-pure, outside both Action graphs. Use the receipt contract above: complete bounded
+pure, outside the unified composite Action. Use the receipt contract above: complete bounded
 documents, independent expected identities, no arbitrary command or credential inputs, and no
 cross-source or cross-attempt assembly of successful cells. Adapter normalizers validate each
 custom assertion/cleanup contract before emitting `passed`; an aggregate green badge is not

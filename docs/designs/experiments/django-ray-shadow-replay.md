@@ -78,12 +78,15 @@ files. Each observation retains the versioned plan, its digest, paths, reasons, 
 
 ## Reproduce the comparison
 
-Use the exact reviewed consumer checkout above, with its complete Git history already present,
-and the YAGA implementation installed. The runner does not fetch. The consumer path is trusted
-executable input because the runner imports that checkout's adapter and existing selector.
-The runner verifies the checkout root, HEAD, tree, and clean tracked/untracked state before import,
-after import, and after replay. Ignored local environments and bytecode are allowed. This correlates
-the recorded source in a trusted checkout; it does not isolate execution from host modifications.
+To reproduce the recorded comparison verbatim, check out the pre-0.6.0 YAGA release tag `v0.5.0`
+(commit `2648f832d4e61cf7f7fc721156fff02e54e01cc3`, which retains the Python replay runner
+`examples/test-planning/replay_django_ray.py` removed in the 0.6.0 Rust rewrite) together with
+the exact reviewed consumer checkout above and its complete Git history. The runner
+does not fetch. The consumer path is trusted executable input because the runner imports that
+checkout's adapter and existing selector. The runner verifies the checkout root, HEAD, tree, and
+clean tracked/untracked state before import, after import, and after replay. Ignored local
+environments and bytecode are allowed. This correlates the recorded source in a trusted checkout;
+it does not isolate execution from host modifications.
 
 ```bash
 uv run python examples/test-planning/replay_django_ray.py \
@@ -110,13 +113,13 @@ registry, or adapter identities. Each output is complete and bounded to 4 MiB in
 use distinct new files. The [API guide](../../test-planning-handoff.md#explain-selection-without-changing-the-plan)
 describes the fields and the distinction between recorded reasons and dependency coverage.
 
-Regression tests reassemble all six hash-verified observation files and confirm 17 full-trigger
-revisions, 11 unknown-path fallbacks, three empty selections, 50 baseline dispatches, 140 planned
-dispatches, and zero baseline omissions. This diagnoses the original policy; it does not replace
-its evidence with the new ownership mappings. The updated example maps eight exact application
-test files and corrects shared-helper latency selection. The five affected historical application
-revisions now select application alone in regression fixtures. Qualification runtime and failure
-coverage still require the later measured phases.
+Historical pre-0.6.0 regression tests against these archived observation files reassembled all six
+hash-verified files and confirmed 17 full-trigger revisions, 11 unknown-path fallbacks, three
+empty selections, 50 baseline dispatches, 140 planned dispatches, and zero baseline omissions. That
+evidence diagnoses the original policy and does not replace it with the new ownership mappings. The
+updated example maps eight exact application test files and corrects shared-helper latency
+selection so the five affected historical application revisions select application alone.
+Qualification runtime and failure coverage still require the later measured phases.
 
 ## Subsequent full-shadow observation
 

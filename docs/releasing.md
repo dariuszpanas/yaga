@@ -106,8 +106,9 @@ Download the artifacts to inspect the wheels, source distribution, standalone bi
 crates.io OIDC authorization works: trusted-publisher exchange happens on tag publication.
 
 Inspect the description embedded in the wheel, rendered with `readme_renderer.markdown`, in a
-browser. The build gate checks the Markdown content type, absolute HTTPS links, and preserved
-public logo markup; it deliberately does not make network requests. Before publication, verify
+browser. The docs and package-description gate (`scripts/check_docs.py` and
+`scripts/check_description.py`) checks the Markdown content type, absolute HTTPS links, and
+preserved public logo markup; it deliberately does not make network requests. Before publication, verify
 image and link URLs anonymously, including documentation fragments and the package's project
 URLs. The logo must load from the public documentation site. Repository and example links need
 the source repository to be public; authenticated maintainer access does not prove they work for

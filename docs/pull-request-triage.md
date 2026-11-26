@@ -117,8 +117,9 @@ yaga pull-request review check --policy .yaga/agent-review-policy.toml \
   --triage-policy .yaga/triage-policy.toml --pr 123 --repo OWNER/REPO --submit-review both
 ```
 
-The root Action exposes the same path as `triage-policy` for `check: pr-review`. Run the separate
-`check: pr-triage` step first to publish the useful comment automatically:
+The root Action exposes the same path as `triage-policy` for `check: pr-review` (requiring a live
+`pr` and an explicit non-`none` `submit-review` value; rejected when `submit-review` is omitted or
+`none`). Run the separate `check: pr-triage` step first to publish the useful comment automatically:
 
 ```yaml
 - name: Triage admission and publish review surfaces
@@ -175,8 +176,7 @@ Use trusted default-branch code and policy in privileged metadata jobs. Never ch
 import, or execute fork/PR code, or load PR-provided artifacts/cache as authorization. Give reads
 only read permissions; add `issues: write` for comments or `pull-requests: write` for reviews.
 Run untrusted tests separately without those credentials. The native Action routes triage,
-gate and tokenless commit checks through their respective dispatchers. The Python gate and
-commit compatibility adapters keep their imports independent of the triage package.
+gate, and tokenless commit checks through their respective isolated dispatchers.
 
 ## Bounds
 
